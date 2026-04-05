@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tenants - TableOS SuperAdmin</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed": "#c0e8ff",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary-fixed": "#1b1c1c",
+                        "surface-bright": "#3a3939",
+                        "surface": "#131313",
+                        "inverse-primary": "#b72028",
+                        "tertiary": "#83d0f6",
+                        "surface-container-highest": "#353534",
+                        "tertiary-fixed-dim": "#83d0f6",
+                        "on-secondary-container": "#b6b5b4",
+                        "secondary-fixed": "#e4e2e1",
+                        "inverse-on-surface": "#313030",
+                        "on-surface": "#e5e2e1",
+                        "on-tertiary-fixed-variant": "#004d66",
+                        "outline": "#aa8986",
+                        "inverse-surface": "#e5e2e1",
+                        "surface-dim": "#131313",
+                        "surface-container-high": "#2a2a2a",
+                        "surface-container": "#201f1f",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "on-primary-container": "#ffdad7",
+                        "on-tertiary": "#003547",
+                        "surface-container-lowest": "#0e0e0e",
+                        "on-secondary": "#303030",
+                        "on-error": "#690005",
+                        "secondary-container": "#474746",
+                        "surface-tint": "#ffb3ae",
+                        "primary-fixed": "#ffdad7",
+                        "surface-container-low": "#1c1b1b",
+                        "on-tertiary-container": "#c1e9ff",
+                        "on-secondary-fixed-variant": "#474746",
+                        "outline-variant": "#5a403e",
+                        "primary-fixed-dim": "#ffb3ae",
+                        "primary-container": "#c0272d",
+                        "on-primary": "#68000c",
+                        "primary": "#ffb3ae",
+                        "error": "#ffb4ab",
+                        "tertiary-container": "#006d8f",
+                        "background": "#131313",
+                        "secondary": "#c8c6c5",
+                        "on-primary-fixed-variant": "#930015",
+                        "surface-variant": "#353534",
+                        "on-surface-variant": "#e3bebb",
+                        "on-primary-fixed": "#410004",
+                        "error-container": "#93000a",
+                        "on-background": "#e5e2e1",
+                        "on-tertiary-fixed": "#001e2b"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "fontFamily": {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"],
+                        "mono": ["JetBrains Mono"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #131313;
+            background-image: radial-gradient(#1A1A1A 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body class="text-on-background font-body selection:bg-primary-container selection:text-on-primary-container">
+<!-- SideNavBar Shell -->
+<aside class="fixed left-0 top-0 h-full w-[240px] z-50 bg-[#0D0D0D] border-r border-[#2A2A2A] flex flex-col justify-between pb-6">
+<div class="flex flex-col">
+<div class="px-6 py-8">
+<div class="flex items-center gap-2">
+<span class="text-[20px] font-bold text-[#C0272D] tracking-tighter">TableOS</span>
+<span class="text-[10px] font-mono bg-surface-container-high px-1.5 py-0.5 rounded text-secondary">v.2.4</span>
+</div>
+<p class="text-[10px] font-mono text-[#555555] mt-1 tracking-widest uppercase">SuperAdmin</p>
+</div>
+<nav class="flex flex-col gap-1">
+<a class="flex items-center justify-between px-4 py-3 text-[#555555] hover:text-[#F5F5F5] transition-colors duration-200 hover:bg-[#1C1B1B]" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-medium text-sm tracking-tight">Dashboard</span>
+</div>
+<span class="w-1.5 h-1.5 rounded-full bg-[#C0272D] animate-pulse"></span>
+</a>
+<!-- Active Tab: Tenants -->
+<a class="flex items-center gap-3 px-4 py-3 text-[#F5F5F5] bg-[#C0272D08] border-l-[3px] border-[#C0272D] transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="store">store</span>
+<span class="font-medium text-sm tracking-tight">Tenants</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-[#555555] hover:text-[#F5F5F5] transition-colors duration-200 hover:bg-[#1C1B1B]" href="#">
+<span class="material-symbols-outlined" data-icon="add_box">add_box</span>
+<span class="font-medium text-sm tracking-tight">Onboard New</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-[#555555] hover:text-[#F5F5F5] transition-colors duration-200 hover:bg-[#1C1B1B]" href="#">
+<span class="material-symbols-outlined" data-icon="credit_card">credit_card</span>
+<span class="font-medium text-sm tracking-tight">Billing</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-[#555555] hover:text-[#F5F5F5] transition-colors duration-200 hover:bg-[#1C1B1B]" href="#">
+<span class="material-symbols-outlined" data-icon="campaign">campaign</span>
+<span class="font-medium text-sm tracking-tight">Broadcast</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-[#555555] hover:text-[#F5F5F5] transition-colors duration-200 hover:bg-[#1C1B1B]" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-medium text-sm tracking-tight">Settings</span>
+</a>
+</nav>
+</div>
+<div class="px-4">
+<div class="p-4 rounded-xl bg-surface-container-low mb-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-xs text-secondary" data-icon="shield_person">shield_person</span>
+</div>
+<div class="overflow-hidden">
+<p class="text-xs font-bold text-on-surface truncate">Admin User</p>
+<p class="text-[10px] font-mono text-[#555555]">ROOT_ACCESS</p>
+</div>
+</div>
+</div>
+<a class="flex items-center gap-3 px-4 py-3 text-[#555555] hover:text-[#F5F5F5] transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+<span class="font-medium text-sm tracking-tight">Logout</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-[240px] min-h-screen flex flex-col">
+<!-- TopNavBar Shell -->
+<header class="sticky top-0 z-40 bg-[#131313]/80 backdrop-blur-xl border-b border-[#2A2A2A]/50 flex justify-between items-center px-8 h-16 w-full">
+<div class="flex items-center gap-4">
+<h1 class="text-xl font-semibold font-headline">Tenants</h1>
+<span class="h-4 w-[1px] bg-surface-container-high"></span>
+<div class="flex gap-2">
+<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-surface-container text-secondary">ID: OS_ADMIN_99</span>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex flex-col items-end">
+<span class="font-mono text-xs text-[#555555]">Oct 24, 2023</span>
+<span class="font-mono text-[10px] text-[#C0272D] tracking-tighter">SERVER_STATUS: OPTIMAL</span>
+</div>
+<div class="relative">
+<span class="material-symbols-outlined text-secondary hover:text-on-surface cursor-pointer" data-icon="notifications">notifications</span>
+<span class="absolute -top-1 -right-1 w-2 h-2 bg-[#C0272D] rounded-full ring-2 ring-[#131313]"></span>
+</div>
+</div>
+</header>
+<!-- Content Canvas -->
+<div class="p-8 max-w-7xl w-full mx-auto space-y-8">
+<!-- Page Header Actions -->
+<div class="flex justify-between items-end">
+<div class="space-y-1">
+<h2 class="text-3xl font-bold tracking-tight text-on-surface">Tenants Management</h2>
+<p class="text-secondary text-sm">Orchestrate restaurant networks and ecosystem access.</p>
+</div>
+<button class="bg-primary-container hover:bg-[#A31D23] text-on-primary-container px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2 transition-transform active:scale-95">
+<span class="material-symbols-outlined text-lg" data-icon="add">add</span>
+                Onboard New Restaurant
+            </button>
+</div>
+<!-- Filter & Search Bar Cluster -->
+<div class="space-y-6">
+<div class="relative group">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-[#555555] group-focus-within:text-primary transition-colors" data-icon="search">search</span>
+<input class="w-full bg-[#141414] border border-[#2A2A2A] rounded-xl py-4 pl-12 pr-4 text-on-surface focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all font-body placeholder:text-[#555555]" placeholder="Search by restaurant name, ID, or owner..." type="text"/>
+<div class="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+<span class="text-[10px] font-mono text-[#555555] border border-[#2A2A2A] px-1.5 py-0.5 rounded">CMD + K</span>
+</div>
+</div>
+<div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+<button class="px-5 py-2 bg-[#C0272D] text-white rounded-full text-xs font-bold whitespace-nowrap">ALL <span class="ml-1 opacity-60 font-mono">12</span></button>
+<button class="px-5 py-2 bg-[#1A1A1A] text-[#888888] hover:text-on-surface rounded-full text-xs font-bold whitespace-nowrap transition-colors">ACTIVE <span class="ml-1 opacity-60 font-mono">9</span></button>
+<button class="px-5 py-2 bg-[#1A1A1A] text-[#888888] hover:text-on-surface rounded-full text-xs font-bold whitespace-nowrap transition-colors">TRIAL <span class="ml-1 opacity-60 font-mono">2</span></button>
+<button class="px-5 py-2 bg-[#1A1A1A] text-[#888888] hover:text-on-surface rounded-full text-xs font-bold whitespace-nowrap transition-colors">SUSPENDED <span class="ml-1 opacity-60 font-mono">1</span></button>
+<button class="px-5 py-2 bg-[#1A1A1A] text-[#888888] hover:text-on-surface rounded-full text-xs font-bold whitespace-nowrap transition-colors">PRO <span class="ml-1 opacity-60 font-mono">0</span></button>
+<button class="px-5 py-2 bg-[#1A1A1A] text-[#888888] hover:text-on-surface rounded-full text-xs font-bold whitespace-nowrap transition-colors">ENTERPRISE <span class="ml-1 opacity-60 font-mono">0</span></button>
+<div class="h-4 w-[1px] bg-surface-container-high mx-2"></div>
+<button class="px-4 py-2 hover:bg-surface-container-low text-secondary hover:text-on-surface rounded-full text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="filter_list">filter_list</span>
+                    Advanced Filters
+                </button>
+</div>
+</div>
+<!-- Tenant Grid -->
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+<!-- Card 1 -->
+<div class="bg-[#141414] border border-[#2A2A2A] rounded-[12px] p-6 hover:border-primary/40 transition-all duration-300 group relative overflow-hidden">
+<div class="absolute top-0 left-0 w-[3px] h-0 bg-primary group-hover:h-full transition-all duration-300"></div>
+<div class="flex justify-between items-start mb-6">
+<div class="flex gap-4">
+<div class="w-14 h-14 rounded-full bg-primary-container flex items-center justify-center text-xl font-bold text-white shadow-lg shadow-primary-container/10">
+                            MB
+                        </div>
+<div class="space-y-1">
+<h3 class="text-xl font-bold text-white">Mistral Bistro</h3>
+<div class="flex items-center gap-2 text-[#555555] text-xs">
+<span class="material-symbols-outlined text-sm" data-icon="location_on">location_on</span>
+                                Downtown District, NY
+                            </div>
+<span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-[#C0272D15] text-primary border border-primary/20 mt-1">PLATINUM PLAN</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="flex items-center gap-1.5 text-[10px] font-bold text-emerald-500 uppercase tracking-wider">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            Active
+                        </span>
+</div>
+</div>
+<div class="grid grid-cols-3 gap-4 py-6 border-y border-[#2A2A2A]/50">
+<div class="space-y-1">
+<p class="text-[10px] text-[#555555] uppercase tracking-tighter font-semibold">Orders Today</p>
+<p class="font-mono text-lg font-bold text-on-surface">142</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] text-[#555555] uppercase tracking-tighter font-semibold">MRR</p>
+<p class="font-mono text-lg font-bold text-emerald-400">$1,240.00</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] text-[#555555] uppercase tracking-tighter font-semibold">Tables</p>
+<p class="font-mono text-lg font-bold text-on-surface">24/30</p>
+</div>
+</div>
+<div class="mt-6 flex justify-between items-center">
+<div class="flex gap-2">
+<button class="px-4 py-2 text-xs font-bold text-secondary hover:text-white transition-colors">View Details</button>
+<button class="px-5 py-2 text-xs font-bold border border-primary text-primary rounded-lg hover:bg-primary/10 transition-colors">Manage</button>
+</div>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-high text-[#555555]">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="bg-[#141414] border border-[#2A2A2A] rounded-[12px] p-6 hover:border-primary/40 transition-all duration-300 group relative overflow-hidden">
+<div class="absolute top-0 left-0 w-[3px] h-0 bg-primary group-hover:h-full transition-all duration-300"></div>
+<div class="flex justify-between items-start mb-6">
+<div class="flex gap-4">
+<div class="w-14 h-14 rounded-full bg-surface-container-highest flex items-center justify-center text-xl font-bold text-secondary">
+                            VK
+                        </div>
+<div class="space-y-1">
+<h3 class="text-xl font-bold text-white">Velo Kitchen</h3>
+<div class="flex items-center gap-2 text-[#555555] text-xs">
+<span class="material-symbols-outlined text-sm" data-icon="location_on">location_on</span>
+                                Brooklyn Arts, NY
+                            </div>
+<span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-surface-container-high text-secondary border border-[#2A2A2A] mt-1">STANDARD PLAN</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="flex items-center gap-1.5 text-[10px] font-bold text-yellow-500 uppercase tracking-wider">
+<span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
+                            Trial
+                        </span>
+</div>
+</div>
+<div class="grid grid-cols-3 gap-4 py-6 border-y border-[#2A2A2A]/50">
+<div class="space-y-1">
+<p class="text-[10px] text-[#555555] uppercase tracking-tighter font-semibold">Orders Today</p>
+<p class="font-mono text-lg font-bold text-on-surface">31</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] text-[#555555] uppercase tracking-tighter font-semibold">MRR</p>
+<p class="font-mono text-lg font-bold text-emerald-400">$0.00</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] text-[#555555] uppercase tracking-tighter font-semibold">Tables</p>
+<p class="font-mono text-lg font-bold text-on-surface">08/12</p>
+</div>
+</div>
+<div class="mt-6 flex justify-between items-center">
+<div class="flex gap-2">
+<button class="px-4 py-2 text-xs font-bold text-secondary hover:text-white transition-colors">View Details</button>
+<button class="px-5 py-2 text-xs font-bold border border-primary text-primary rounded-lg hover:bg-primary/10 transition-colors">Manage</button>
+</div>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-high text-[#555555]">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="bg-[#141414] border border-[#2A2A2A] rounded-[12px] p-6 hover:border-primary/40 transition-all duration-300 group relative overflow-hidden">
+<div class="absolute top-0 left-0 w-[3px] h-0 bg-primary group-hover:h-full transition-all duration-300"></div>
+<div class="flex justify-between items-start mb-6">
+<div class="flex gap-4">
+<div class="w-14 h-14 rounded-full bg-primary-container flex items-center justify-center text-xl font-bold text-white shadow-lg shadow-primary-container/10">
+                            SA
+                        </div>
+<div class="space-y-1">
+<h3 class="text-xl font-bold text-white">Sakura Artisans</h3>
+<div class="flex items-center gap-2 text-[#555555] text-xs">
+<span class="material-symbols-outlined text-sm" data-icon="location_on">location_on</span>
+                                Little Tokyo, LA
+                            </div>
+<span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-[#C0272D15] text-primary border border-primary/20 mt-1">PLATINUM PLAN</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="flex items-center gap-1.5 text-[10px] font-bold text-emerald-500 uppercase tracking-wider">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            Active
+                        </span>
+</div>
+</div>
+<div class="grid grid-cols-3 gap-4 py-6 border-y border-[#2A2A2A]/50">
+<div class="space-y-1">
+<p class="text-[10px] text-[#555555] uppercase tracking-tighter font-semibold">Orders Today</p>
+<p class="font-mono text-lg font-bold text-on-surface">208</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] text-[#555555] uppercase tracking-tighter font-semibold">MRR</p>
+<p class="font-mono text-lg font-bold text-emerald-400">$3,450.00</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] text-[#555555] uppercase tracking-tighter font-semibold">Tables</p>
+<p class="font-mono text-lg font-bold text-on-surface">45/45</p>
+</div>
+</div>
+<div class="mt-6 flex justify-between items-center">
+<div class="flex gap-2">
+<button class="px-4 py-2 text-xs font-bold text-secondary hover:text-white transition-colors">View Details</button>
+<button class="px-5 py-2 text-xs font-bold border border-primary text-primary rounded-lg hover:bg-primary/10 transition-colors">Manage</button>
+</div>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-high text-[#555555]">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Card 4 -->
+<div class="bg-[#141414] border border-[#2A2A2A] rounded-[12px] p-6 hover:border-primary/40 transition-all duration-300 group relative overflow-hidden">
+<div class="absolute top-0 left-0 w-[3px] h-0 bg-primary group-hover:h-full transition-all duration-300"></div>
+<div class="flex justify-between items-start mb-6">
+<div class="flex gap-4">
+<div class="w-14 h-14 rounded-full bg-surface-container-highest flex items-center justify-center text-xl font-bold text-secondary">
+                            UF
+                        </div>
+<div class="space-y-1">
+<h3 class="text-xl font-bold text-white">Urban Forge</h3>
+<div class="flex items-center gap-2 text-[#555555] text-xs">
+<span class="material-symbols-outlined text-sm" data-icon="location_on">location_on</span>
+                                Industrial Loop, CHI
+                            </div>
+<span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-surface-container-high text-secondary border border-[#2A2A2A] mt-1">BASIC PLAN</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="flex items-center gap-1.5 text-[10px] font-bold text-red-500 uppercase tracking-wider">
+<span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                            Suspended
+                        </span>
+</div>
+</div>
+<div class="grid grid-cols-3 gap-4 py-6 border-y border-[#2A2A2A]/50">
+<div class="space-y-1">
+<p class="text-[10px] text-[#555555] uppercase tracking-tighter font-semibold">Orders Today</p>
+<p class="font-mono text-lg font-bold text-[#555555]">0</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] text-[#555555] uppercase tracking-tighter font-semibold">MRR</p>
+<p class="font-mono text-lg font-bold text-red-400">$450.00</p>
+</div>
+<div class="space-y-1">
+<p class="text-[10px] text-[#555555] uppercase tracking-tighter font-semibold">Tables</p>
+<p class="font-mono text-lg font-bold text-on-surface">12/12</p>
+</div>
+</div>
+<div class="mt-6 flex justify-between items-center">
+<div class="flex gap-2">
+<button class="px-4 py-2 text-xs font-bold text-secondary hover:text-white transition-colors">View Details</button>
+<button class="px-5 py-2 text-xs font-bold border border-primary text-primary rounded-lg hover:bg-primary/10 transition-colors">Manage</button>
+</div>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-high text-[#555555]">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Pagination/Footer Stats -->
+<div class="flex justify-between items-center pt-8 border-t border-[#2A2A2A]/50">
+<p class="text-xs font-mono text-[#555555]">SHOWING 4 OF 12 TENANTS</p>
+<div class="flex gap-2">
+<button class="p-2 rounded bg-surface-container text-[#555555] hover:text-white transition-colors"><span class="material-symbols-outlined" data-icon="chevron_left">chevron_left</span></button>
+<button class="p-2 rounded bg-surface-container-highest text-white font-mono text-xs px-4">1</button>
+<button class="p-2 rounded bg-surface-container text-[#555555] hover:text-white transition-colors font-mono text-xs px-4">2</button>
+<button class="p-2 rounded bg-surface-container text-[#555555] hover:text-white transition-colors font-mono text-xs px-4">3</button>
+<button class="p-2 rounded bg-surface-container text-[#555555] hover:text-white transition-colors"><span class="material-symbols-outlined" data-icon="chevron_right">chevron_right</span></button>
+</div>
+</div>
+</div>
+</main>
+<!-- FAB Suppression Rule: FAB not required on Tenant List Detail page as primary action is in header -->
+</body></html>
