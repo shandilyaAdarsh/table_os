@@ -1,16 +1,60 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  /* Core Brand Colors from "The Elevated Heritage" */
+  --primary: #002045;
+  --primary-container: #1A365D;
+  --secondary: #904D00;
+  --secondary-container: #FE932C;
+  --surface: #F8F9FA;
+  --surface-container-low: #F3F4F5;
+  --surface-container-lowest: #FFFFFF;
+}
 
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
-body {
-  font-family: 'Inter', sans-serif;
+html, body {
+  height: 100%;
+  background-color: var(--surface);
+  color: var(--primary);
+  /* Primary body font */
+  font-family: 'Manrope', 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
+}
+
+/* Headings use Epilogue */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Epilogue', system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Material Symbols specific adjustment */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  vertical-align: middle;
+}
+
+/* Scrollbar styling for a premium feel */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 32, 69, 0.1);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 32, 69, 0.2);
 }
