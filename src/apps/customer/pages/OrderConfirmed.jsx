@@ -5,7 +5,8 @@ import { supabase } from '../../../lib/supabase'
 import { motion } from 'framer-motion'
 
 export default function OrderConfirmed() {
-  const { id } = useParams() // main.jsx uses path="/menu/confirmed/:id"
+  const { orderId } = useParams()
+  console.log('OrderConfirmed orderId:', orderId)
   const navigate = useNavigate()
   
   const [order, setOrder] = useState(null)
@@ -19,8 +20,8 @@ export default function OrderConfirmed() {
         const { data, error: fetchErr } = await supabase
           .from('orders')
           .select('*, order_items(*)')
-          .eq('id', id)
-          .eq('tenant_id', import.meta.env.VITE_TENANT_ID)
+          .eq('id', orderId)
+          .eq('tenant_id', '11111111-1111-1111-1111-111111111111')
           .single()
 
         if (fetchErr || !data) throw new Error('Not found')
@@ -49,7 +50,7 @@ export default function OrderConfirmed() {
     }
 
     fetchOrder()
-  }, [id])
+  }, [orderId])
 
   if (loading) {
     return (
@@ -150,7 +151,7 @@ export default function OrderConfirmed() {
 
       {/* 7. TRACK MY ORDER BUTTON */}
       <button 
-        onClick={() => navigate(id ? `/customer/track/${id}` : '/customer/browse')}
+        onClick={() => navigate(orderId ? `/customer/track/${orderId}` : '/customer/browse')}
         className="w-full bg-[#1B2B4B] text-white h-[52px] rounded-[14px] font-[700] text-[16px]"
       >
         Track My Order
