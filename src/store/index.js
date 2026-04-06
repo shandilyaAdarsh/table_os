@@ -137,3 +137,30 @@ export const useSessionStore = create((set) => ({
     set({ session_id: null, name: '', phone: '', table_num: 'T03' })
   }
 }))
+
+export const useStaffStore = create((set, get) => ({
+  staff_user: null,
+  isAuthenticated: false,
+
+  login: (staffMember) => {
+    localStorage.setItem('staff_user', JSON.stringify(staffMember))
+    set({ staff_user: staffMember, isAuthenticated: true })
+  },
+
+  logout: () => {
+    localStorage.removeItem('staff_user')
+    set({ staff_user: null, isAuthenticated: false })
+  },
+
+  init: () => {
+    const stored = localStorage.getItem('staff_user')
+    if (stored) {
+      try {
+        const staffMember = JSON.parse(stored)
+        set({ staff_user: staffMember, isAuthenticated: true })
+      } catch {
+        localStorage.removeItem('staff_user')
+      }
+    }
+  }
+}))
