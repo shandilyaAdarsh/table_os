@@ -30,6 +30,8 @@ function calculateMRR(plan: string, billingCycle: string): number {
 // POST /api/onboard
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
+  let createdTenantId: string | null = null
+
   try {
     const body = await req.json()
 
@@ -55,7 +57,7 @@ export async function POST(req: NextRequest) {
     const slug = generateSlug(restaurantName)
     const mrr = calculateMRR(plan, billingCycle)
 
-    // ── 3. Create Tenant ─────────────────────────────────────────────────
+    // ── 3. Create Tenant (with Trial Metadata) ───────────────────────────
     const { data: tenant, error: tenantError } = await supabaseAdmin
       .from('tenants')
       .insert({
@@ -63,8 +65,10 @@ export async function POST(req: NextRequest) {
         slug,
         location,
         plan: plan.toLowerCase(),
-        status: 'active',
+        status: 'trial',
         mrr,
+        plan_started_at: new Date().toISOString(),
+        next_billing_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       })
       .select('id')
       .single()
@@ -76,6 +80,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    createdTenantId = tenant.id
     const tenant_id = tenant.id
 
     // ── 4. Default Tables ────────────────────────────────────────────────
@@ -91,7 +96,7 @@ export async function POST(req: NextRequest) {
       .from('restaurant_tables')
       .insert(tableRows)
 
-    if (tablesError) console.error('[onboard] tables insert failed:', tablesError)
+    if (tablesError) throw new Error(`Tables insert failed: ${tablesError.message}`)
 
     // ── 5. Staff / Owner Record ──────────────────────────────────────────
     const { error: staffError } = await supabaseAdmin.from('staff').insert({
@@ -102,17 +107,9 @@ export async function POST(req: NextRequest) {
       is_active: true,
     })
 
-    if (staffError) console.error('[onboard] staff insert failed:', staffError)
+    if (staffError) throw new Error(`Staff insert failed: ${staffError.message}`)
 
-    // ── 6. Safety Check ──────────────────────────────────────────────────
-    if (!tenant_id || !ownerEmail) {
-      return NextResponse.json(
-        { error: 'tenant_id or email missing before edge fn call', tenant_id, ownerEmail },
-        { status: 500 }
-      )
-    }
-
-    // ── 7. Trigger Edge Function (Now we have tenant_id) ─────────────────
+    // ── 6. Trigger Edge Function ─────────────────────────────────────────
     const edgeFnUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/onboard-admin`
 
     const edgeRes = await fetch(edgeFnUrl, {
@@ -123,32 +120,27 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         email: ownerEmail,
-        tenant_id: tenant_id,
         restaurant_name: restaurantName,
+        tenant_id: tenant_id,
         admin_name: ownerName,
       }),
     })
 
     const edgeData = await edgeRes.json()
-    const newUserId = edgeData?.user_id
 
     // Handle 409 Conflict (Email already exists)
     if (edgeRes.status === 409 || (edgeData.error && edgeData.error.includes('already exists'))) {
-      return NextResponse.json(
-        { error: 'An admin account for this email already exists.' },
-        { status: 409 }
-      )
+      throw new Error('An admin account for this email already exists.')
     }
 
-    if (!edgeRes.ok || edgeData.success !== true || !newUserId) {
+    if (!edgeRes.ok || edgeData.success !== true || !edgeData.user_id) {
       console.error('[onboard] edge function failed:', edgeData)
-      return NextResponse.json(
-        { error: edgeData?.message || edgeData?.error || 'Edge function failed to create user or send credentials', details: edgeData },
-        { status: 500 }
-      )
+      throw new Error(edgeData?.message || edgeData?.error || 'Edge function failed to create user or send credentials')
     }
 
-    // ── 7. Admin Profile (Using ID from Edge Function) ───────────────────
+    const newUserId = edgeData.user_id
+
+    // ── 7. Admin Profile ─────────────────────────────────────────────────
     const { error: profileError } = await supabaseAdmin.from('profiles').insert({
       id: newUserId,
       tenant_id,
@@ -157,7 +149,7 @@ export async function POST(req: NextRequest) {
       is_active: true,
     })
 
-    if (profileError) console.error('[onboard] profile insert failed:', profileError)
+    if (profileError) throw new Error(`Profile insert failed: ${profileError.message}`)
 
     // ── 8. Success ───────────────────────────────────────────────────────
     return NextResponse.json({
@@ -169,6 +161,20 @@ export async function POST(req: NextRequest) {
       email_sent: edgeData.email_sent !== false
     })
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 })
+    console.error('[onboard] critical error:', err.message)
+    
+    // ROLLBACK: Delete tenant if it was created
+    if (createdTenantId) {
+      console.log(`[onboard] rolling back tenant: ${createdTenantId}`)
+      await supabaseAdmin.from('tenants').delete().eq('id', createdTenantId)
+    }
+
+    // Return the specific error message if it's one of ours, otherwise generic
+    const isConflict = err.message.includes('already exists')
+    return NextResponse.json(
+      { error: err.message || 'Internal server error' }, 
+      { status: isConflict ? 409 : 500 }
+    )
   }
 }
+
