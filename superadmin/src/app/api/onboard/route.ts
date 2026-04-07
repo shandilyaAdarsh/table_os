@@ -140,16 +140,16 @@ export async function POST(req: NextRequest) {
 
     const newUserId = edgeData.user_id
 
-    // ── 7. Admin Profile ─────────────────────────────────────────────────
-    const { error: profileError } = await supabaseAdmin.from('profiles').insert({
+    // ── 7. Admin Profile (Idempotent) ────────────────────────────────────
+    const { error: profileError } = await supabaseAdmin.from('profiles').upsert({
       id: newUserId,
       tenant_id,
       full_name: ownerName,
       role: 'owner',
       is_active: true,
-    })
+    }, { onConflict: 'id' })
 
-    if (profileError) throw new Error(`Profile insert failed: ${profileError.message}`)
+    if (profileError) throw new Error(`Profile upsert failed: ${profileError.message}`)
 
     // ── 8. Success ───────────────────────────────────────────────────────
     return NextResponse.json({
