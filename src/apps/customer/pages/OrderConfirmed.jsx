@@ -6,7 +6,6 @@ import { motion } from 'framer-motion'
 
 export default function OrderConfirmed() {
   const { orderId } = useParams()
-  console.log('OrderConfirmed orderId:', orderId)
   const navigate = useNavigate()
   
   const [order, setOrder] = useState(null)
@@ -15,6 +14,8 @@ export default function OrderConfirmed() {
   const [showCheck, setShowCheck] = useState(false)
 
   useEffect(() => {
+    if (!orderId) return
+
     const fetchOrder = async () => {
       try {
         const { data, error: fetchErr } = await supabase
@@ -122,25 +123,57 @@ export default function OrderConfirmed() {
 
       {/* 5. ITEM LIST CARD */}
       <div className="w-full bg-white rounded-[16px] p-4 mb-4" style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
-        <div className="flex flex-col gap-3">
-          {order.order_items?.map((item, idx) => (
-            <div key={item.id}>
-              <div className="flex justify-between items-center text-[14px]">
-                <div className="flex items-center gap-2">
-                  <span className="font-[600] text-[#111827]">{item.name}</span>
-                  <span className="text-[#6B7280]">x{item.qty}</span>
-                </div>
-                <span className="font-[700] text-[#F97316]">₹{item.unit_price * item.qty}</span>
+        {(() => {
+          const orderItems = order.order_items || []
+          const subtotal = orderItems.reduce((sum, item) =>
+            sum + ((item.unit_price || 0) * (item.qty || 0)), 0)
+          const gst = Math.round(subtotal * 0.05)
+          const total = subtotal + gst
+          return (
+            <>
+              {/* Item list */}
+              <div style={{ width: '100%', marginBottom: '12px' }}>
+                {orderItems.map((item, index) => (
+                  <div key={index} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    paddingTop: '10px', paddingBottom: '10px',
+                    borderBottom: '0.5px solid #F3F4F6'
+                  }}>
+                    <span style={{ fontSize: '14px', color: '#374151', fontWeight: '400' }}>
+                      {item.name}
+                      <span style={{ color: '#9CA3AF', fontSize: '13px' }}> x{item.qty}</span>
+                    </span>
+                    <span style={{ fontSize: '14px', color: '#D97706', fontWeight: '500' }}>
+                      ₹{item.unit_price * item.qty}
+                    </span>
+                  </div>
+                ))}
               </div>
-              {idx < order.order_items.length - 1 && <div className="h-[1px] bg-[#F3F4F6] w-full mt-3" />}
-            </div>
-          ))}
-          <div className="h-[1px] bg-[#F3F4F6] w-full my-1" />
-          <div className="flex justify-between items-center">
-            <span className="font-[700] text-[#111827]">Total</span>
-            <span className="font-[700] text-[#F97316] text-[18px]">₹{order.total_amount}</span>
-          </div>
-        </div>
+
+              {/* Bill breakdown */}
+              <div style={{
+                width: '100%', background: '#F9FAFB', borderRadius: '12px',
+                padding: '12px 16px', marginBottom: '4px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '13px', color: '#6B7280' }}>Subtotal</span>
+                  <span style={{ fontSize: '13px', color: '#6B7280' }}>₹{subtotal}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <span style={{ fontSize: '13px', color: '#6B7280' }}>GST (5%)</span>
+                  <span style={{ fontSize: '13px', color: '#6B7280' }}>₹{gst}</span>
+                </div>
+                <div style={{
+                  display: 'flex', justifyContent: 'space-between',
+                  borderTop: '0.5px solid #E5E7EB', paddingTop: '10px'
+                }}>
+                  <span style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>Total</span>
+                  <span style={{ fontSize: '16px', fontWeight: '700', color: '#D97706' }}>₹{total}</span>
+                </div>
+              </div>
+            </>
+          )
+        })()}
       </div>
 
       {/* 6. GREEN TIMER BADGE */}

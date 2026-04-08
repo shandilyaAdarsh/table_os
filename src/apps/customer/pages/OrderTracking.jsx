@@ -6,10 +6,11 @@ import { playBeep } from '../../../utils/beep'
 import { BottomNav } from '../components/BottomNav'
 
 const STATUS_MAP = {
-  pending: { step: 1 },
-  cooking: { step: 2 },
-  ready:   { step: 3 },
-  served:  { step: 4 }
+  pending:  { step: 1 },
+  cooking:  { step: 2 },
+  ready:    { step: 3 },
+  served:   { step: 4 },
+  rejected: { step: 1 }
 }
 
 const STEPS = [
@@ -25,37 +26,56 @@ export default function OrderTracking() {
   
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [elapsed, setElapsed] = useState({ min: 0, sec: 0 })
+  const [orderStatus, setOrderStatus] = useState('pending')
+  const [localElapsed, setLocalElapsed] = useState(0)
+  const [paymentLoading, setPaymentLoading] = useState(false)
+  const [paymentDone, setPaymentDone] = useState(false)
 
   useEffect(() => {
-    let sub = null
+    if (!orderId) return
 
     const fetchOrder = async () => {
       const { data, error } = await supabase
         .from('orders')
-        .select('*, order_items(*)')
+        .select(`
+          *,
+          order_items (
+            *,
+            menu_items (
+              name,
+              image_url,
+              is_veg
+            )
+          )
+        `)
         .eq('id', orderId)
         .single()
         
       if (!error && data) {
         setOrder(data)
-        
-        sub = supabase.channel(`tracking_${orderId}`)
-          .on('postgres_changes', {
-            event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}`
-          }, (payload) => {
-             setOrder(prev => ({ ...prev, ...payload.new }))
-             playBeep()
-          })
-          .subscribe()
+        setOrderStatus(data.status || 'pending')
       }
       setLoading(false)
     }
     
     fetchOrder()
+
+    const channel = supabase
+      .channel('track-order-' + orderId)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'orders',
+        filter: 'id=eq.' + orderId
+      }, (payload) => {
+        setOrderStatus(payload.new.status)
+        setOrder(prev => ({ ...prev, ...payload.new }))
+        playBeep()
+      })
+      .subscribe()
     
     return () => {
-      if (sub) supabase.removeChannel(sub)
+      supabase.removeChannel(channel)
     }
   }, [orderId])
 
@@ -70,37 +90,29 @@ export default function OrderTracking() {
     return () => window.removeEventListener('touchstart', unlock);
   }, []);
 
-  // Live Timer (Countdown to ends_at)
+  // Live elapsed ticker — counts up from order.created_at
   useEffect(() => {
-    if (!order || order.status === 'ready' || order.status === 'served') return
-    
-    const updateTime = () => {
-      // Countdown from ends_at
-      const diff = new Date(order.ends_at || new Date(Date.now() + 25*60000)) - new Date()
-      if (diff > 0) {
-        setElapsed({
-          min: Math.floor(diff / 60000),
-          sec: Math.floor((diff % 60000) / 1000)
-        })
-      } else {
-        setElapsed({ min: 0, sec: 0 })
-      }
+    if (!order?.created_at) return
+    const start = new Date(order.created_at).getTime()
+    const tick = () => {
+      setLocalElapsed(Math.floor((Date.now() - start) / 1000))
     }
-
-    updateTime()
-    const interval = setInterval(updateTime, 1000)
+    tick()
+    const interval = setInterval(tick, 1000)
     return () => clearInterval(interval)
-  }, [order?.ends_at, order?.status])
+  }, [order?.created_at])
 
   // Auto-redirect on served
   useEffect(() => {
-    if (order?.status === 'served') {
+    if (orderStatus === 'served') {
       const t = setTimeout(() => {
         navigate(`/customer/pay/${orderId}`)
       }, 3000)
       return () => clearTimeout(t)
     }
-  }, [order?.status, orderId, navigate])
+  }, [orderStatus, orderId, navigate])
+
+  // Stop on rejected — no redirect
 
   if (!order) {
     return (
@@ -128,7 +140,120 @@ export default function OrderTracking() {
     );
   }
 
-  const currentStep = STATUS_MAP[order?.status]?.step || 1
+  const stepIndex = { pending: 1, cooking: 2, ready: 3, served: 4, rejected: -1, payment_pending: 2, paid: 3 }
+  const currentStep = stepIndex[orderStatus] ?? 1
+
+  // ETA calculation from localElapsed
+  const etaSeconds = Math.max(0, 20 * 60 - localElapsed)
+  const etaMinutes = Math.ceil(etaSeconds / 60)
+
+  // Bill totals
+  const subtotal = (order?.order_items || []).reduce((sum, item) =>
+    sum + ((item.unit_price || 0) * (item.qty || 0)), 0)
+  const gst = Math.round(subtotal * 0.05)
+  const total = subtotal + gst
+
+  // Load Razorpay SDK dynamically
+  const loadRazorpay = () => {
+    return new Promise((resolve) => {
+      if (window.Razorpay) return resolve(true)
+      const script = document.createElement('script')
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+      script.onload = () => resolve(true)
+      script.onerror = () => resolve(false)
+      document.body.appendChild(script)
+    })
+  }
+
+  // Handle Razorpay online payment
+  const handlePayment = async () => {
+    try {
+      setPaymentLoading(true)
+      const loaded = await loadRazorpay()
+      if (!loaded) {
+        alert('Payment service failed to load. Please try again.')
+        setPaymentLoading(false)
+        return
+      }
+
+      const options = {
+        key: 'rzp_test_Sb2Ab0QBXjj4KE',
+        amount: total * 100,
+        currency: 'INR',
+        name: 'The Grand Spice',
+        description: `Order #${String(orderId).slice(-6).toUpperCase()}`,
+        image: 'https://i.imgur.com/n5tjHFD.png',
+        handler: async (response) => {
+          const paymentId = response.razorpay_payment_id
+
+          await supabase
+            .from('orders')
+            .update({ status: 'paid' })
+            .eq('id', orderId)
+
+          await supabase
+            .from('restaurant_tables')
+            .update({ status: 'paid' })
+            .eq('table_num', order?.table_num)
+            .eq('tenant_id', '11111111-1111-1111-1111-111111111111')
+
+          setPaymentDone(true)
+          setPaymentLoading(false)
+        },
+        prefill: {
+          name: 'Guest',
+          contact: '9999999999'
+        },
+        theme: {
+          color: '#D69E2E'
+        },
+        modal: {
+          ondismiss: () => {
+            setPaymentLoading(false)
+          }
+        }
+      }
+
+      const razorpay = new window.Razorpay(options)
+      razorpay.open()
+    } catch (err) {
+      console.error('Payment error:', err)
+      alert('Something went wrong. Please try again.')
+      setPaymentLoading(false)
+    }
+  }
+
+  // Download plain-text invoice
+  const handleDownloadInvoice = () => {
+    const lines = [
+      '===================================',
+      '       THE GRAND SPICE',
+      '       A Rooftop Kitchen, Mumbai',
+      '===================================',
+      `Table: ${order?.table_num || 'T03'}`,
+      `Order: #${String(orderId).slice(-6).toUpperCase()}`,
+      `Date: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
+      '-----------------------------------',
+      'ITEMS:',
+      ...(order?.order_items || []).map(item =>
+        `${(item.name || '').padEnd(20)} x${item.qty}   \u20b9${(item.unit_price || 0) * (item.qty || 0)}`
+      ),
+      '-----------------------------------',
+      `Subtotal:              \u20b9${subtotal}`,
+      `GST (5%):              \u20b9${gst}`,
+      `TOTAL:                 \u20b9${total}`,
+      '===================================',
+      '     Thank you for dining with us!',
+      '===================================',
+    ]
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Invoice_${String(orderId).slice(-6).toUpperCase()}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: '#F8F8F8', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', position: 'relative', margin: '0 auto', maxWidth: '430px' }}>
@@ -149,19 +274,34 @@ export default function OrderTracking() {
 
       <main style={{ flex: 1, paddingBottom: 96 }}>
         
-        {/* 2. GREEN STATUS BAR */}
-        <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 12, margin: 16, padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+        {/* 2. STATUS BAR */}
+        <div style={{
+          background: orderStatus === 'rejected' ? '#FEF2F2' : '#F0FDF4',
+          border: orderStatus === 'rejected' ? '1px solid #FECACA' : '1px solid #BBF7D0',
+          borderRadius: 12, margin: 16, padding: '10px 16px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div className="current-step" style={{ width: 10, height: 10, background: '#22C55E', borderRadius: '50%' }} />
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#16A34A' }}>
-              {order?.status === 'served' ? 'Enjoy your meal!' : 
-               order?.status === 'ready' ? 'Your order is ready!' : 
-               'Your order is being prepared'}
+            <div style={{ width: 10, height: 10, background: orderStatus === 'rejected' ? '#EF4444' : orderStatus === 'ready' ? '#22C55E' : '#F97316', borderRadius: '50%' }} />
+            <span style={{ fontSize: 14, fontWeight: 600, color: orderStatus === 'rejected' ? '#DC2626' : '#16A34A' }}>
+              {orderStatus === 'rejected' ? '✕ Order was rejected by kitchen'
+               : orderStatus === 'served'  ? 'Enjoy your meal!'
+               : orderStatus === 'paid'    ? 'Payment received ✅ Thank you!'
+               : orderStatus === 'ready'   ? 'Your order is ready! ✅'
+               : orderStatus === 'cooking' ? 'Kitchen is cooking your order 🍳'
+               : orderStatus === 'payment_pending' ? 'Payment requested — waiter is on the way 🙏'
+               : '🟡 Waiting for kitchen to confirm'}
             </span>
           </div>
-          <div style={{ background: '#DCFCE7', borderRadius: 999, padding: '2px 10px', color: '#16A34A', fontSize: 12, fontWeight: 500 }}>
-            {(elapsed?.min ?? 0)}:{(elapsed?.sec ?? 0) < 10 ? '0'+(elapsed?.sec ?? 0) : (elapsed?.sec ?? 0)} elapsed
-          </div>
+          {orderStatus !== 'rejected' && orderStatus !== 'served' && (
+            <div style={{ background: '#DCFCE7', borderRadius: 999, padding: '2px 10px', color: '#16A34A', fontSize: 12, fontWeight: 500 }}>
+              {orderStatus === 'ready' ? 'Ready to serve! ✅'
+               : orderStatus === 'cooking' && etaMinutes > 1 ? `~${etaMinutes} min remaining`
+               : orderStatus === 'cooking' ? 'Almost ready! 🍳'
+               : 'Waiting for kitchen...'}
+            </div>
+          )}
         </div>
 
         {/* 3. RESTAURANT BANNER */}
@@ -233,7 +373,7 @@ export default function OrderTracking() {
               <div key={item?.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <img 
-                    src={item?.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&q=80'} 
+                    src={item?.menu_items?.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&q=80'} 
                     alt={item?.name}
                     style={{ width: 48, height: 48, borderRadius: 10, objectFit: 'cover' }}
                     onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&q=80' }}
@@ -245,11 +385,19 @@ export default function OrderTracking() {
                 </div>
                 <div>
                   {item?.status === 'out_of_stock' ? (
-                    <span style={{ background: '#EF4444', color: 'white', fontSize: 11, fontWeight: 700, padding: '4px 8px', borderRadius: 999 }}>Out of Stock</span>
-                  ) : item?.status === 'cooking' ? (
-                    <span className="material-symbols-outlined" style={{ color: '#F97316', fontSize: 20, animation: 'spin 2s linear infinite' }}>autorenew</span>
+                    <span style={{
+                      background: '#FEE2E2',
+                      color: '#EF4444',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      padding: '2px 8px',
+                      borderRadius: '20px',
+                      marginLeft: '8px'
+                    }}>Out of Stock</span>
+                  ) : item?.status === 'accepted' || item?.done === true ? (
+                    <span style={{ color: '#22C55E', fontSize: '13px' }}>✅ Accepted</span>
                   ) : (
-                    <span className="material-symbols-outlined" style={{ color: '#22C55E', fontSize: 20 }}>check_circle</span>
+                    <span style={{ color: '#F97316', fontSize: '13px' }}>🔄 Preparing</span>
                   )}
                 </div>
               </div>
@@ -257,7 +405,110 @@ export default function OrderTracking() {
           </div>
         </div>
 
-        {/* 6. ADD MORE ITEMS BUTTON */}
+        {/* 6. BILL SUMMARY + PAY BUTTON */}
+        {(orderStatus === 'pending' || orderStatus === 'cooking' || orderStatus === 'ready') && (
+          <div style={{
+            background: 'white',
+            borderRadius: '16px',
+            border: '0.5px solid #E5E7EB',
+            padding: '16px',
+            margin: '0 16px 16px'
+          }}>
+            <p style={{ fontSize: '14px', fontWeight: '600', color: '#111827', marginBottom: '12px' }}>
+              Bill Summary
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <span style={{ fontSize: '13px', color: '#6B7280' }}>Subtotal</span>
+              <span style={{ fontSize: '13px', color: '#6B7280' }}>₹{subtotal}</span>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <span style={{ fontSize: '13px', color: '#6B7280' }}>GST (5%)</span>
+              <span style={{ fontSize: '13px', color: '#6B7280' }}>₹{gst}</span>
+            </div>
+
+            <div style={{
+              display: 'flex', justifyContent: 'space-between',
+              borderTop: '0.5px solid #E5E7EB',
+              paddingTop: '10px', marginBottom: '16px'
+            }}>
+              <span style={{ fontSize: '15px', fontWeight: '600', color: '#111827' }}>Total</span>
+              <span style={{ fontSize: '15px', fontWeight: '600', color: '#111827' }}>₹{total}</span>
+            </div>
+
+            {/* Pay button — shows when not yet paid */}
+            {!paymentDone && (
+              <button
+                onClick={handlePayment}
+                disabled={paymentLoading}
+                style={{
+                  width: '100%',
+                  background: paymentLoading ? '#9CA3AF' : '#D69E2E',
+                  border: 'none',
+                  borderRadius: '14px',
+                  padding: '15px',
+                  color: 'white',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  cursor: paymentLoading ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  marginBottom: '10px'
+                }}
+              >
+                {paymentLoading ? 'Opening payment...' : `Pay ₹${total} Online`}
+              </button>
+            )}
+
+            {/* Payment success state */}
+            {paymentDone && (
+              <div style={{
+                background: '#F0FDF4',
+                border: '1px solid #86EFAC',
+                borderRadius: '12px',
+                padding: '12px 16px',
+                textAlign: 'center',
+                marginBottom: '10px'
+              }}>
+                <p style={{ fontSize: '15px', fontWeight: '600', color: '#16A34A', margin: 0 }}>
+                  ✅ Payment Successful!
+                </p>
+                <p style={{ fontSize: '12px', color: '#4B5563', marginTop: '4px' }}>
+                  Thank you for dining with us 🙏
+                </p>
+              </div>
+            )}
+
+            {/* Download invoice — only after payment */}
+            {paymentDone && (
+              <button
+                onClick={handleDownloadInvoice}
+                style={{
+                  width: '100%',
+                  background: 'white',
+                  border: '1.5px solid #1A365D',
+                  borderRadius: '14px',
+                  padding: '13px',
+                  color: '#1A365D',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+              >
+                ⬇ Download Invoice
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* 7. ADD MORE ITEMS BUTTON */}
         <div style={{ padding: '0 16px', marginBottom: 8 }}>
           <button 
             onClick={() => navigate('/customer/browse')}

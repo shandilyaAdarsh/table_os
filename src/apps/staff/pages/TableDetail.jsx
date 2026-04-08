@@ -4,7 +4,7 @@ import { supabase } from '../../../lib/supabase'
 import { useStaffStore } from '../../../store/index'
 
 export default function TableDetail() {
-  const { id } = useParams()
+  const { tableId } = useParams()
   const { staff_user } = useStaffStore()
   const navigate = useNavigate()
 
@@ -20,10 +20,22 @@ export default function TableDetail() {
     }
 
     const fetchData = async () => {
+      const tenantId = '11111111-1111-1111-1111-111111111111'
+      
       const [tRes, oRes, aRes] = await Promise.all([
-        supabase.from('restaurant_tables').select('*').eq('id', id).single(),
-        supabase.from('orders').select('*, order_items(*, menu_items(name, price))').eq('table_id', id).neq('status', 'served').neq('status', 'cancelled'),
-        supabase.from('assistance_requests').select('*').eq('table_id', id).neq('status', 'resolved')
+        supabase.from('restaurant_tables').select('*').eq('id', tableId).single(),
+        supabase.from('orders')
+          .select('*, order_items(*, menu_items(name, price))')
+          .eq('table_id', tableId)
+          .eq('tenant_id', tenantId)
+          .in('status', ['pending', 'cooking', 'ready'])
+          .order('created_at', { ascending: true }),
+        supabase.from('assistance_requests')
+          .select('*')
+          .eq('table_id', tableId)
+          .eq('tenant_id', tenantId)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: true })
       ])
 
       setTable(tRes.data)
@@ -34,14 +46,22 @@ export default function TableDetail() {
 
     fetchData()
 
-    const channel = supabase.channel(`table_detail_${id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `table_id=eq.${id}` }, (payload) => {
+    const channel = supabase.channel(`table_detail_${tableId}`)
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'orders', 
+        filter: 'table_id=eq.' + tableId 
+      }, (payload) => {
         if (payload.eventType === 'INSERT') {
-           supabase.from('orders').select('*, order_items(*, menu_items(name, price))').eq('id', payload.new.id).single()
+           supabase.from('orders')
+             .select('*, order_items(*, menu_items(name, price))')
+             .eq('id', payload.new.id)
+             .single()
              .then(({ data }) => setOrders(prev => [...prev, data]))
         } else if (payload.eventType === 'UPDATE') {
           setOrders(prev => {
-            if (payload.new.status === 'served' || payload.new.status === 'cancelled') {
+            if (payload.new.status === 'served' || payload.new.status === 'cancelled' || payload.new.status === 'rejected') {
               return prev.filter(o => o.id !== payload.new.id)
             }
             return prev.find(o => o.id === payload.new.id)
@@ -50,7 +70,12 @@ export default function TableDetail() {
           })
         }
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'assistance_requests', filter: `table_id=eq.${id}` }, (payload) => {
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'assistance_requests', 
+        filter: 'table_id=eq.' + tableId 
+      }, (payload) => {
         if (payload.eventType === 'INSERT') {
           setRequests(prev => [...prev, payload.new])
         } else if (payload.eventType === 'UPDATE') {
@@ -63,7 +88,7 @@ export default function TableDetail() {
       .subscribe()
 
     return () => supabase.removeChannel(channel)
-  }, [id, staff_user, navigate])
+  }, [tableId, staff_user, navigate])
 
   const resolveRequest = async (requestId) => {
     try {
@@ -130,149 +155,177 @@ export default function TableDetail() {
     }
   }
 
-  if (loading) return <div style={{ background: '#0F172A', minHeight: '100vh' }} />
+  const acknowledgeRequest = async (requestId) => {
+    try {
+      await supabase.from('assistance_requests').update({ status: 'acknowledged' }).eq('id', requestId)
+    } catch (err) {
+      console.error('Failed to acknowledge request', err)
+    }
+  }
+
+  if (loading) return <div style={{ background: '#0D1117', minHeight: '100vh' }} />
 
   return (
-    <div className="min-h-screen bg-[#0F172A] w-full overflow-x-hidden" style={{ fontFamily: 'Manrope, sans-serif' }}>
-      <header className="bg-[#1E293B] px-4 md:px-8 py-4 flex flex-wrap md:flex-nowrap justify-between items-center border-b border-[#334155] gap-4">
-        <div className="flex items-center gap-4 md:gap-6">
+    <div style={{ minHeight: '100vh', background: '#0D1117', color: '#E6EDF3', fontFamily: 'Manrope, sans-serif', paddingBottom: 80 }}>
+      {/* HEADER */}
+      <header style={{ background: '#0D1117', padding: '16px 20px', borderBottom: '1px solid #30363D', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button 
             onClick={() => navigate('/staff/tables')}
-            className="bg-[#334155] border-none text-white w-10 h-10 rounded-full flex items-center justify-center cursor-pointer flex-shrink-0"
+            style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
           >
-            <span className="material-symbols-outlined">arrow_back</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 24 }}>arrow_back</span>
           </button>
           <div>
-            <h1 className="text-white text-xl md:text-2xl font-extrabold m-0 pb-1" style={{ fontFamily: 'Epilogue, sans-serif' }}>Table {table?.table_num}</h1>
-            <p className="text-[#94A3B8] text-xs md:text-[13px] font-semibold m-0">Manage orders and requests</p>
+            <h1 style={{ color: 'white', fontSize: 16, fontWeight: 700, margin: 0 }}>Table {table?.table_num}</h1>
+            <p style={{ color: '#8B949E', fontSize: 12, margin: 0 }}>• SHIFT: 04:22:15</p>
           </div>
         </div>
         
         <button 
           onClick={handleCheckout}
-          disabled={orders.length === 0 && requests.length === 0}
-          className={`border-none text-white px-4 md:px-6 py-2.5 md:py-3 rounded-xl font-bold transition-all flex items-center gap-2 ${
-             (orders.length === 0 && requests.length === 0) ? 'bg-[#334155] cursor-not-allowed' : 'bg-[#10B981] cursor-pointer'
-          }`}
+          style={{ background: 'transparent', border: '1px solid #F85149', color: '#F85149', padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
         >
-          <span className="material-symbols-outlined text-[18px] md:text-[20px]">done_all</span>
-          Clear Table
+          CLEAR TABLE
         </button>
       </header>
 
-      <main className="p-4 md:p-8 max-w-[1200px] mx-auto grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-8">
-        
-        {/* Left Col: Requests */}
-        <section>
-          <h2 style={{ color: '#F87171', fontFamily: 'Epilogue, sans-serif', fontSize: 20, marginTop: 0, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span className="material-symbols-outlined">notifications_active</span>
-            Active Requests {requests.length > 0 && <span style={{ background: '#F87171', color: '#450A0A', padding: '2px 8px', borderRadius: 99, fontSize: 13 }}>{requests.length}</span>}
+      {/* AUDIO ALERT BADGE */}
+      <div style={{ padding: '12px 20px' }}>
+        <div style={{ background: '#161B22', borderRadius: 8, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#2EA043' }} />
+          <span style={{ color: '#8B949E', fontSize: 12 }}>🔊 Audio Alerts Enabled</span>
+        </div>
+      </div>
+
+      <main style={{ padding: '0 20px' }}>
+        {/* ACTIVE REQUESTS */}
+        <section style={{ marginBottom: 32 }}>
+          <h2 style={{ color: '#F85149', fontSize: 12, fontWeight: 700, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+            ACTIVE REQUESTS
           </h2>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {requests.length === 0 ? (
-              <p style={{ color: '#64748B', fontSize: 15 }}>No pending requests.</p>
+              <p style={{ color: '#8B949E', fontSize: 13, margin: 0 }}>No pending requests.</p>
             ) : (
               requests.map(req => (
-                <div key={req.id} style={{ background: '#450A0A', border: '1px solid #7F1D1D', padding: 20, borderRadius: 16 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                <div key={req.id} style={{ background: '#1C2128', borderRadius: 10, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ fontSize: 20 }}>{req.request_type === 'drinks' ? '🍹' : req.request_type === 'bill' ? '💳' : '👋'}</span>
                     <div>
-                      <p style={{ color: 'white', fontWeight: 800, margin: '0 0 4px', fontSize: 18, textTransform: 'capitalize' }}>
+                      <p style={{ color: 'white', fontSize: 13, fontWeight: 700, margin: 0, textTransform: 'capitalize' }}>
                         {req.request_type.replace('_', ' ')}
                       </p>
-                      {req.message && <p style={{ color: '#FECACA', fontSize: 14, margin: '0 0 8px', fontStyle: 'italic' }}>"{req.message}"</p>}
-                      <p style={{ color: '#991B1B', fontSize: 12, margin: 0 }}>ID: {req.table_session_id.substring(0,8)}</p>
+                      <p style={{ color: '#8B949E', fontSize: 11, margin: 0 }}>2m ago</p>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => resolveRequest(req.id)}
-                    style={{ background: '#DC2626', border: 'none', color: 'white', padding: '10px', width: '100%', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    Resolve Request
-                  </button>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {req.status !== 'acknowledged' && (
+                       <button 
+                        onClick={() => acknowledgeRequest(req.id)}
+                        style={{ background: 'transparent', border: '1px solid #8B949E', color: '#8B949E', padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        Acknowledge
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => resolveRequest(req.id)}
+                      style={{ background: '#2EA043', border: 'none', color: 'white', padding: '6px 12px', borderRadius: 999, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      Resolve
+                    </button>
+                  </div>
                 </div>
               ))
             )}
           </div>
         </section>
 
-        {/* Right Col: Orders */}
+        {/* ACTIVE ORDERS */}
         <section>
-          <h2 style={{ color: '#38BDF8', fontFamily: 'Epilogue, sans-serif', fontSize: 20, marginTop: 0, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span className="material-symbols-outlined">restaurant_menu</span>
-            Active Orders {orders.length > 0 && <span style={{ background: '#38BDF8', color: '#082F49', padding: '2px 8px', borderRadius: 99, fontSize: 13 }}>{orders.length}</span>}
+          <h2 style={{ color: '#8B949E', fontSize: 12, fontWeight: 700, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+            ACTIVE ORDERS
           </h2>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {orders.length === 0 ? (
-              <p style={{ color: '#64748B', fontSize: 15 }}>No active orders.</p>
+              <p style={{ color: '#8B949E', fontSize: 13, margin: 0 }}>No active orders.</p>
             ) : (
               orders.map(order => (
-                <div key={order.id} style={{ background: '#1E293B', border: '1px solid #334155', padding: 24, borderRadius: 16 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, borderBottom: '1px solid #334155', paddingBottom: 16 }}>
-                    <div>
-                      <p style={{ color: '#94A3B8', fontSize: 12, fontWeight: 800, margin: '0 0 4px', letterSpacing: 1 }}>ORDER #{order.id.split('-')[0].toUpperCase()}</p>
-                      <span style={{ 
-                        background: order.status === 'ready' ? '#059669' : '#0284C7', 
-                        color: 'white', padding: '4px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, textTransform: 'uppercase'
-                      }}>
-                        {order.status}
-                      </span>
+                <div key={order.id} style={{ background: '#161B22', borderRadius: 12, padding: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <span style={{ color: '#8B949E', fontSize: 12, fontWeight: 600 }}>ORDER #{order.id.split('-')[0].toUpperCase()}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {order.status === 'ready' ? (
+                        <span style={{ color: '#2EA043', fontSize: 11, fontWeight: 800 }}>● READY</span>
+                      ) : (
+                        <span style={{ color: order.status === 'cooking' ? '#F0883E' : '#8B949E', fontSize: 11, fontWeight: 800 }}>
+                          {order.status === 'cooking' ? 'PREPARING' : 'PREPARING'}
+                        </span>
+                      )}
                     </div>
-                    <p style={{ color: 'white', fontSize: 24, fontWeight: 800, margin: 0 }}>₹{order.total_amount}</p>
                   </div>
 
-                  <div style={{ marginBottom: 24 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
                     {order.order_items?.map(item => (
-                      <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, color: '#E2E8F0', fontSize: 15 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <button 
                             onClick={() => toggleItemStatus(item.id, item.status)}
                             style={{ 
-                              width: 24, height: 24, borderRadius: 6, border: '2px solid #334155',
-                              background: item.status === 'accepted' ? '#EAB308' : 'transparent',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0
+                              width: 20, height: 20, borderRadius: '50%', padding: 0, cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              background: item.status === 'accepted' ? '#2EA043' : 'transparent',
+                              border: item.status === 'accepted' ? 'none' : '1px solid #8B949E'
                             }}
                           >
-                            {item.status === 'accepted' && <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#002045', fontWeight: 800 }}>check</span>}
+                            {item.status === 'accepted' && <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'white' }}>check</span>}
                           </button>
-                          <span><span style={{ color: '#94A3B8', marginRight: 8 }}>{item.qty}x</span> {item.name}</span>
+                          <div>
+                            <p style={{ color: 'white', fontSize: 14, margin: 0 }}>{item.qty} × {item.name}</p>
+                            {/* Assuming modifiers exist or based on item details */}
+                            <p style={{ color: '#8B949E', fontSize: 12, margin: 0, fontStyle: 'italic' }}>no special note</p>
+                          </div>
                         </div>
-                        {item.status === 'out_of_stock' && (
-                          <span style={{
-                            background: '#FF3B30',
-                            color: 'white',
-                            fontSize: '11px',
-                            fontWeight: '700',
-                            padding: '2px 8px',
-                            borderRadius: '20px'
-                          }}>
-                            Out of Stock
-                          </span>
-                        )}
+                        <span style={{ color: '#8B949E', fontSize: 12 }}>₹{item.price}</span>
                       </div>
                     ))}
                   </div>
 
-                  <button 
-                    onClick={() => serveOrder(order.id)}
-                    style={{ 
-                      background: (order.status === 'ready' || order.status === 'pending' || order.status === 'cooking') ? '#10B981' : '#334155', 
-                      color: 'white', 
-                      border: 'none', padding: '14px', width: '100%', borderRadius: 12, fontWeight: 700, fontSize: 15,
-                      cursor: 'pointer', transition: 'all 0.2s', display: 'flex', justifyContent: 'center', gap: 8
-                    }}
-                  >
-                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>room_service</span>
-                    {order.status === 'served' ? 'Served' : 'Confirm & Mark Served'}
-                  </button>
+                  {order.status === 'ready' && (
+                    <button 
+                      onClick={() => serveOrder(order.id)}
+                      style={{ background: '#2EA043', border: 'none', color: 'white', padding: '12px', width: '100%', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: 6 }}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>check</span>
+                      MARK AS SERVED
+                    </button>
+                  )}
                 </div>
               ))
             )}
           </div>
         </section>
-
       </main>
+
+      {/* BOTTOM NAV */}
+      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, height: 60, background: '#161B22', borderTop: '1px solid #30363D', display: 'flex', justifyContent: 'space-around', alignItems: 'center', zIndex: 100 }}>
+        <div onClick={() => navigate('/staff/tables')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, color: 'white', cursor: 'pointer' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 24 }}>grid_view</span>
+          <span style={{ fontSize: 10, fontWeight: 600 }}>Floor</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, color: '#8B949E' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 24 }}>close</span>
+          <span style={{ fontSize: 10, fontWeight: 600 }}>Orders</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, color: '#8B949E' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 24 }}>person</span>
+          <span style={{ fontSize: 10, fontWeight: 600 }}>Service</span>
+        </div>
+      </nav>
     </div>
   )
 }

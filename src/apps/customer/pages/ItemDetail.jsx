@@ -6,17 +6,46 @@
 
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { supabase } from '../../../lib/supabase'
 import { useMenuStore, useCartStore } from '../../../store/index'
 import { motion } from 'framer-motion'
 
 export default function ItemDetail() {
-  const { id }    = useParams()
-  const navigate  = useNavigate()
-  const items     = useMenuStore(s => s.items)
-  const item      = items.find(i => i.id === id)
+  const { itemId } = useParams()
+  const navigate = useNavigate()
+  const [item, setItem] = useState(null)
+  const [loading, setLoading] = useState(true)
 
   const [selected, setSelected] = useState({})  // { [groupId]: { id, name, priceDelta } }
   const [note,     setNote]     = useState('')
+
+  useEffect(() => {
+    if (!itemId) return
+    const fetchItem = async () => {
+      setLoading(true)
+      try {
+        const { data, error } = await supabase
+          .from('menu_items')
+          .select('*')
+          .eq('id', itemId)
+          .eq('tenant_id', '11111111-1111-1111-1111-111111111111')
+          .single()
+        
+        if (error) {
+          console.error('Error fetching item:', error)
+          setItem(null)
+        } else {
+          setItem(data)
+        }
+      } catch (err) {
+        console.error('Fetch catch:', err)
+        setItem(null)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchItem()
+  }, [itemId])
 
   // Scroll top on mount & lock body scroll
   useEffect(() => {
@@ -25,14 +54,29 @@ export default function ItemDetail() {
     return () => { document.body.style.overflow = '' }
   }, [])
 
-  if (!item) {
-    return (
-      <div style={{ maxWidth: 430, margin: '0 auto', minHeight: '100vh', background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
-        <p style={{ fontFamily: 'Inter, sans-serif', color: '#6B7280' }}>Item not found</p>
-        <button onClick={() => navigate('/customer/browse')} style={{ padding: '12px 24px', background: '#1B2B4B', color: 'white', border: 'none', borderRadius: 12, cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontWeight: 700 }}>Back to Menu</button>
-      </div>
-    )
-  }
+  if (loading) return <div>Loading...</div>
+  if (!item) return (
+    <div style={{ 
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      minHeight: '100dvh', gap: '16px'
+    }}>
+      <p style={{ color: '#6B7280', fontSize: '16px' }}>
+        Item not found
+      </p>
+      <button 
+        onClick={() => navigate('/customer/browse')}
+        style={{
+          background: '#1B2B4B', color: 'white',
+          border: 'none', padding: '12px 24px',
+          borderRadius: '12px', cursor: 'pointer',
+          fontSize: '15px', fontWeight: '600'
+        }}
+      >
+        Back to Menu
+      </button>
+    </div>
+  )
 
   const modifierGroups = item.modifierGroups || []
   const extraCost = Object.values(selected).reduce((sum, o) => sum + (o.priceDelta || 0), 0)

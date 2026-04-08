@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../../lib/supabase'
 import { useSessionStore } from '../../../store/index'
 import { BottomNav } from '../components/BottomNav'
@@ -90,6 +91,7 @@ export default function OrdersPage() {
 }
 
 function OrderCard({ order }) {
+  const navigate = useNavigate()
   const [timeRemaining, setTimeRemaining] = useState('')
   const isActive = ['pending', 'cooking', 'ready'].includes(order.status)
   
@@ -114,24 +116,32 @@ function OrderCard({ order }) {
   }, [order.ends_at, isActive])
 
   const statusMap = {
-    pending: { bg: 'rgba(27,43,75,0.05)', color: '#1B2B4B', label: 'Placed', icon: 'check_circle' },
-    cooking: { bg: 'rgba(249,115,22,0.1)', color: '#F97316', label: 'Preparing', icon: 'skillet' },
-    ready:   { bg: 'rgba(34,197,94,0.1)', color: '#16A34A', label: 'Ready!', icon: 'shopping_bag' },
-    served:  { bg: '#F3F4F6', color: '#6B7280', label: 'Served', icon: 'done_all' },
-    cancelled: { bg: '#FEF2F2', color: '#EF4444', label: 'Cancelled', icon: 'cancel' }
+    pending:  { bg: 'rgba(27,43,75,0.05)', color: '#1B2B4B', label: 'Placed', icon: 'check_circle' },
+    cooking:  { bg: 'rgba(249,115,22,0.1)', color: '#F97316', label: 'Preparing', icon: 'skillet' },
+    ready:    { bg: 'rgba(34,197,94,0.1)', color: '#16A34A', label: 'Ready!', icon: 'shopping_bag' },
+    served:   { bg: '#F3F4F6', color: '#6B7280', label: 'Served', icon: 'done_all' },
+    cancelled:{ bg: '#FEF2F2', color: '#EF4444', label: 'Cancelled', icon: 'cancel' },
+    rejected: { bg: '#FEE2E2', color: '#EF4444', label: 'Rejected', icon: 'cancel' }
   }
 
   const s = statusMap[order.status] || statusMap.pending
 
   return (
-    <div style={{ 
-      background: 'white', 
-      borderRadius: 16, 
-      border: isActive ? '1.5px solid #1B2B4B' : '1px solid #F3F4F6', 
-      padding: 16, 
-      boxShadow: isActive ? '0 8px 24px rgba(27,43,75,0.06)' : 'none',
-      position: 'relative'
-    }}>
+    <div
+      onClick={isActive ? () => navigate('/customer/track/' + order.id) : undefined}
+      onTouchStart={isActive ? e => e.currentTarget.style.transform = 'scale(0.97)' : undefined}
+      onTouchEnd={isActive ? e => e.currentTarget.style.transform = 'scale(1)' : undefined}
+      style={{ 
+        background: 'white', 
+        borderRadius: 16, 
+        border: isActive ? '1.5px solid #1B2B4B' : '1px solid #F3F4F6', 
+        padding: 16, 
+        boxShadow: isActive ? '0 8px 24px rgba(27,43,75,0.06)' : 'none',
+        position: 'relative',
+        cursor: isActive ? 'pointer' : 'default',
+        transition: 'transform 0.15s ease',
+      }}
+    >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
         <div>
           <span style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Order #{order.id.split('-')[0].toUpperCase()}</span>
@@ -166,7 +176,12 @@ function OrderCard({ order }) {
                 <span style={{ fontSize: 13, color: '#1B2B4B', fontWeight: 700 }}>{item.qty}x</span>
                 <span style={{ fontSize: 13, color: '#4B5563', fontWeight: 500 }}>{item.name}</span>
                 {item.status === 'out_of_stock' && (
-                  <span style={{ background: '#EF4444', color: 'white', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 20 }}>SOLD OUT</span>
+                  <span style={{
+                    background: '#FEE2E2', color: '#EF4444',
+                    fontSize: '10px', fontWeight: '700',
+                    padding: '2px 6px', borderRadius: '12px',
+                    marginLeft: '6px'
+                  }}>Out of Stock</span>
                 )}
               </div>
               <span style={{ fontSize: 13, fontWeight: 700, color: '#1B2B4B' }}>₹{item.unit_price * item.qty}</span>

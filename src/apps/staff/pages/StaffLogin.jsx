@@ -57,12 +57,12 @@ export default function StaffLogin() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Manrope, sans-serif' }}>
-      <div style={{ width: '100%', maxWidth: 400, padding: 32, background: '#1E293B', borderRadius: 24, boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+    <div style={{ minHeight: '100vh', background: '#0D1117', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Manrope, sans-serif' }}>
+      <div style={{ width: '100%', maxWidth: 400, padding: 32, background: '#161B22', borderRadius: 16, boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
         
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <h1 style={{ color: 'white', fontFamily: 'Epilogue, sans-serif', fontSize: 28, margin: '0 0 8px' }}>TableOS Staff</h1>
-          <p style={{ color: '#94A3B8', fontSize: 15, margin: 0 }}>Enter your PIN to log in</p>
+          <h1 style={{ color: 'white', fontFamily: 'Epilogue, sans-serif', fontSize: 24, margin: '0 0 8px', fontWeight: 800, letterSpacing: '0.05em' }}>TABLEOS</h1>
+          <p style={{ color: '#8B949E', fontSize: 14, margin: 0 }}>Staff Login</p>
         </div>
 
         {/* PIN Dots Display */}
@@ -83,66 +83,72 @@ export default function StaffLogin() {
             <div 
               key={i} 
               style={{
-                width: 20, height: 20, borderRadius: '50%',
-                background: error ? '#EF4444' : (i < pin.length ? '#38BDF8' : '#334155'),
+                width: 14, height: 14, borderRadius: '50%',
+                background: i < pin.length ? 'white' : 'transparent',
+                border: i < pin.length ? 'none' : '2px solid #30363D',
                 transition: 'all 0.2s',
-                boxShadow: (i < pin.length && !error) ? '0 0 12px rgba(56, 189, 248, 0.5)' : 'none'
               }}
             />
           ))}
         </div>
 
         {/* Numpad */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+              <button
+                key={num}
+                onClick={() => handlePress(num.toString())}
+                disabled={loading}
+                style={{
+                  background: '#1C2128', border: 'none', borderRadius: 12, 
+                  width: 64, height: 64,
+                  color: 'white', fontSize: 22, fontWeight: 700, fontFamily: 'Epilogue, sans-serif',
+                  cursor: loading ? 'default' : 'pointer', transition: 'background 0.1s'
+                }}
+                onPointerDown={e => e.currentTarget.style.background = '#30363D'}
+                onPointerUp={e => e.currentTarget.style.background = '#1C2128'}
+                onPointerLeave={e => e.currentTarget.style.background = '#1C2128'}
+              >
+                {num}
+              </button>
+            ))}
+            
+            <div /> {/* Empty spacer */}
+            
             <button
-              key={num}
-              onClick={() => handlePress(num.toString())}
+              onClick={() => handlePress('0')}
               disabled={loading}
               style={{
-                background: '#334155', border: 'none', borderRadius: 16, padding: '24px 0',
-                color: 'white', fontSize: 28, fontWeight: 600, fontFamily: 'Epilogue, sans-serif',
+                background: '#1C2128', border: 'none', borderRadius: 12,
+                width: 64, height: 64,
+                color: 'white', fontSize: 22, fontWeight: 700, fontFamily: 'Epilogue, sans-serif',
                 cursor: loading ? 'default' : 'pointer', transition: 'background 0.1s'
               }}
-              onPointerDown={e => e.currentTarget.style.background = '#475569'}
-              onPointerUp={e => e.currentTarget.style.background = '#334155'}
-              onPointerLeave={e => e.currentTarget.style.background = '#334155'}
+              onPointerDown={e => e.currentTarget.style.background = '#30363D'}
+              onPointerUp={e => e.currentTarget.style.background = '#1C2128'}
+              onPointerLeave={e => e.currentTarget.style.background = '#1C2128'}
             >
-              {num}
+              0
             </button>
-          ))}
-          
-          <div /> {/* Empty spacer */}
-          
-          <button
-            onClick={() => handlePress('0')}
-            disabled={loading}
-            style={{
-              background: '#334155', border: 'none', borderRadius: 16, padding: '24px 0',
-              color: 'white', fontSize: 28, fontWeight: 600, fontFamily: 'Epilogue, sans-serif',
-              cursor: loading ? 'default' : 'pointer', transition: 'background 0.1s'
-            }}
-            onPointerDown={e => e.currentTarget.style.background = '#475569'}
-            onPointerUp={e => e.currentTarget.style.background = '#334155'}
-            onPointerLeave={e => e.currentTarget.style.background = '#334155'}
-          >
-            0
-          </button>
-          
-          <button
-            onClick={handleDelete}
-            disabled={loading || pin.length === 0}
-            style={{
-              background: 'transparent', border: 'none', borderRadius: 16, padding: '24px 0',
-              color: '#94A3B8', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: (loading || pin.length === 0) ? 'default' : 'pointer'
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 32 }}>backspace</span>
-          </button>
+            
+            <button
+              onClick={handleDelete}
+              disabled={loading || pin.length === 0}
+              style={{
+                background: 'transparent', border: 'none', borderRadius: 12,
+                width: 64, height: 64,
+                color: '#8B949E', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: (loading || pin.length === 0) ? 'default' : 'pointer'
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 28 }}>backspace</span>
+            </button>
+          </div>
         </div>
         
-        {loading && <div style={{ color: '#38BDF8', textAlign: 'center', marginTop: 24, fontSize: 13, fontWeight: 600, letterSpacing: 1 }}>VERIFYING...</div>}
+        {error && <div style={{ color: '#F85149', textAlign: 'center', marginTop: 24, fontSize: 13, fontWeight: 600 }}>Invalid PIN</div>}
+        {loading && !error && <div style={{ color: '#white', textAlign: 'center', marginTop: 24, fontSize: 13, fontWeight: 600, letterSpacing: 1 }}>VERIFYING...</div>}
       </div>
     </div>
   )

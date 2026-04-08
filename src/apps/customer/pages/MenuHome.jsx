@@ -89,8 +89,10 @@ function AddButton({ item, onAdd, onCustomize, onAnimate }) {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function MenuHome() {
   const navigate    = useNavigate()
-  const { items, loading, init } = useMenuStore()
   const cartItems   = useCartStore(s => s.items)
+
+  const [items,           setItems]           = useState(null)  // null = loading, [] = loaded
+  const [itemsLoading,    setItemsLoading]    = useState(true)
 
   const [searchQuery,     setSearchQuery]     = useState('')
   const [vegOnly,       setVegOnly]         = useState(false)
@@ -107,10 +109,25 @@ export default function MenuHome() {
 
   const recognitionRef = useRef(null)
 
-  // Init menu store (Supabase fetch + realtime)
+  // Direct Supabase fetch — bypasses store initialization guard
   useEffect(() => {
-    init(TENANT_ID)
-    return () => useMenuStore.getState().destroy()
+    const fetchItems = async () => {
+      setItemsLoading(true)
+      const { data, error } = await supabase
+        .from('menu_items')
+        .select('*')
+        .eq('tenant_id', TENANT_ID)
+        .order('sort_order', { ascending: true })
+      if (error) {
+        console.error('Menu fetch error:', error)
+        setItems([])
+      } else {
+        console.log('Fetched items:', data?.length, data)
+        setItems(data || [])
+      }
+      setItemsLoading(false)
+    }
+    fetchItems()
   }, [])
 
   // Scroll tracking — hide/show nav + sticky overlay (ported from MenuClient.tsx)
@@ -171,21 +188,24 @@ export default function MenuHome() {
   // Categories derived from fetched items
   const categories = useMemo(() => [
     { id: 'all', name: 'All' },
-    ...Array.from(new Set(items.map(i => i.category))).map(c => ({ id: c, name: c })),
+    ...Array.from(new Set((items || []).map(i => i.category).filter(Boolean))).map(c => ({ id: c, name: c })),
   ], [items])
 
-  // Filtered items
-  const filteredItems = useMemo(() => {
-    let result = items.filter(item => {
-      const matchSearch = !searchQuery ||
+  // Filtered items — single computed array, all filters applied together
+  const displayedItems = useMemo(() => {
+    if (!items || items.length === 0) return []
+    return items.filter(item => {
+      const matchesCategory =
+        !activeCategory ||
+        activeCategory === 'all' ||
+        item.category === activeCategory
+      const matchesVeg = !vegOnly || !!item.is_veg
+      const matchesSearch = !searchQuery ||
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (item.description || '').toLowerCase().includes(searchQuery.toLowerCase())
-      const matchVeg  = !vegOnly || item.is_veg === true
-      const matchCat  = activeCategory === 'all' || item.category === activeCategory
-      return matchSearch && matchVeg && matchCat
+      return matchesCategory && matchesVeg && matchesSearch
     })
-    return result
-  }, [items, searchQuery, vegOnly, activeCategory])
+  }, [items, activeCategory, vegOnly, searchQuery])
 
   // ── JSX ───────────────────────────────────────────────────────────────────
   return (
@@ -264,9 +284,6 @@ export default function MenuHome() {
               fontWeight: 500
             }}
           />
-          <button onClick={startVoiceSearch} style={{ border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', color: isRecording ? '#EF4444' : '#6B7280' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>{isRecording ? 'graphic_eq' : 'mic'}</span>
-          </button>
         </div>
 
         {/* Veg toggle — right side of search row */}
@@ -303,13 +320,13 @@ export default function MenuHome() {
 
       {/* ── ITEM LIST ── */}
       <main style={{ padding: '4px 16px 200px' }}>
-        {loading ? (
+        {itemsLoading || items === null ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {Array.from({ length: 4 }).map((_, i) => (
               <SkeletonCard key={i} />
             ))}
           </div>
-        ) : filteredItems.length === 0 ? (
+        ) : displayedItems.length === 0 && items.length > 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>
             <span style={{ fontSize: '48px' }}>🔍</span>
             <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#1B2B4B', marginTop: '16px' }}>No items found</h3>
@@ -318,7 +335,7 @@ export default function MenuHome() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {filteredItems.map((item, idx) => (
+            {displayedItems.map((item, idx) => (
               <motion.div
                 key={item.id}
                 initial={{ opacity: 0, y: 12 }}
