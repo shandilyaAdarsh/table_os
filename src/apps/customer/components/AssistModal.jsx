@@ -2,6 +2,12 @@ import { useState, useEffect } from 'react'
 import { useSessionStore } from '../../../store/index'
 import { supabase } from '../../../lib/supabase'
 
+// Read table from URL — works on localhost AND Vercel
+const getTableFromUrl = () => {
+  const params = new URLSearchParams(window.location.search)
+  return params.get('table') || 'T03'
+}
+
 export default function AssistModal({ open, onClose }) {
   const { session_id, table_num } = useSessionStore()
   const [loading, setLoading] = useState(false)
@@ -28,7 +34,7 @@ export default function AssistModal({ open, onClose }) {
         .insert({
           tenant_id: '11111111-1111-1111-1111-111111111111',
           table_id: 'e719f4e5-b0f1-4c71-8e31-197041d71956',
-          table_num: table_num || 'T03',
+          table_num: table_num || getTableFromUrl(),
           table_session_id: session_id || '',
           request_type: requestType,
           status: 'pending'
@@ -39,7 +45,8 @@ export default function AssistModal({ open, onClose }) {
         throw error
       }
 
-      onClose()
+      setSuccess('Request sent! Someone will be with you shortly.')
+      setTimeout(() => { setSuccess(''); onClose() }, 2000)
 
     } catch (err) {
       setError('Failed to send request. Try again.')

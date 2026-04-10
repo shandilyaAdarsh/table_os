@@ -98,7 +98,7 @@ export default function CartDrawer({ open, onClose }) {
 
       clear()
       onClose()
-      navigate(`/customer/confirmed/${order.id}`)
+      navigate(`/customer/confirmed/${order.id}`, { state: { orderId: order.id } })
     } catch (err) {
       console.error('[CartDrawer] placeOrder failed:', err.message)
       const mockId = `mock-${Date.now()}`

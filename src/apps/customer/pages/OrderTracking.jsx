@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../../../lib/supabase'
 import { motion } from 'framer-motion'
 import { playBeep } from '../../../utils/beep'
@@ -23,6 +23,8 @@ const STEPS = [
 export default function OrderTracking() {
   const { orderId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  const resolvedOrderId = orderId || location?.state?.orderId
   
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -32,7 +34,7 @@ export default function OrderTracking() {
   const [paymentDone, setPaymentDone] = useState(false)
 
   useEffect(() => {
-    if (!orderId) return
+    if (!resolvedOrderId) return
 
     const fetchOrder = async () => {
       const { data, error } = await supabase
@@ -48,7 +50,7 @@ export default function OrderTracking() {
             )
           )
         `)
-        .eq('id', orderId)
+        .eq('id', resolvedOrderId)
         .single()
         
       if (!error && data) {
@@ -60,24 +62,32 @@ export default function OrderTracking() {
     
     fetchOrder()
 
-    const channel = supabase
-      .channel('track-order-' + orderId)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'orders',
-        filter: 'id=eq.' + orderId
-      }, (payload) => {
-        setOrderStatus(payload.new.status)
-        setOrder(prev => ({ ...prev, ...payload.new }))
-        playBeep()
-      })
-      .subscribe()
+    let channel
+    const subscribe = () => {
+      channel = supabase
+        .channel('track-order-' + resolvedOrderId)
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+          filter: 'id=eq.' + resolvedOrderId
+        }, (payload) => {
+          setOrderStatus(payload.new.status)
+          setOrder(prev => ({ ...prev, ...payload.new }))
+          playBeep()
+        })
+        .subscribe((status) => {
+          if (status === 'CLOSED') {
+            setTimeout(subscribe, 2000)
+          }
+        })
+    }
+    subscribe()
     
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) supabase.removeChannel(channel)
     }
-  }, [orderId])
+  }, [resolvedOrderId])
 
   // Unlock audio on first tap (iOS requirement)
   useEffect(() => {
@@ -106,11 +116,11 @@ export default function OrderTracking() {
   useEffect(() => {
     if (orderStatus === 'served') {
       const t = setTimeout(() => {
-        navigate(`/customer/pay/${orderId}`)
+        navigate(`/customer/pay/${resolvedOrderId}`)
       }, 3000)
       return () => clearTimeout(t)
     }
-  }, [orderStatus, orderId, navigate])
+  }, [orderStatus, resolvedOrderId, navigate])
 
   // Stop on rejected — no redirect
 
@@ -181,7 +191,7 @@ export default function OrderTracking() {
         amount: total * 100,
         currency: 'INR',
         name: 'The Grand Spice',
-        description: `Order #${String(orderId).slice(-6).toUpperCase()}`,
+        description: `Order #${String(resolvedOrderId).slice(-6).toUpperCase()}`,
         image: 'https://i.imgur.com/n5tjHFD.png',
         handler: async (response) => {
           const paymentId = response.razorpay_payment_id
@@ -189,7 +199,7 @@ export default function OrderTracking() {
           await supabase
             .from('orders')
             .update({ status: 'paid' })
-            .eq('id', orderId)
+            .eq('id', resolvedOrderId)
 
           await supabase
             .from('restaurant_tables')
@@ -231,7 +241,7 @@ export default function OrderTracking() {
       '       A Rooftop Kitchen, Mumbai',
       '===================================',
       `Table: ${order?.table_num || 'T03'}`,
-      `Order: #${String(orderId).slice(-6).toUpperCase()}`,
+      `Order: #${String(resolvedOrderId).slice(-6).toUpperCase()}`,
       `Date: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
       '-----------------------------------',
       'ITEMS:',
@@ -250,7 +260,7 @@ export default function OrderTracking() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `Invoice_${String(orderId).slice(-6).toUpperCase()}.txt`
+    a.download = `Invoice_${String(resolvedOrderId).slice(-6).toUpperCase()}.txt`
     a.click()
     URL.revokeObjectURL(url)
   }
