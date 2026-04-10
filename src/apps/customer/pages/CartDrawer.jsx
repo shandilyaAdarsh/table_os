@@ -11,8 +11,16 @@ import { supabase } from '../../../lib/supabase'
 import { AnimatePresence, motion } from 'framer-motion'
 
 const TENANT_ID  = import.meta.env.VITE_TENANT_ID
-const TABLE_NUM  = import.meta.env.VITE_DEMO_TABLE_NUM
 const TABLE_ID   = import.meta.env.VITE_DEMO_TABLE_ID
+
+// Read table number from URL (?table=T03) — works on localhost AND Vercel
+// Falls back to env var, then to 'T03' for demo
+const getTableFromUrl = () => {
+  const params = new URLSearchParams(window.location.search)
+  const fromUrl = params.get('table')
+  const fromEnv = import.meta.env.VITE_DEMO_TABLE_NUM
+  return fromUrl || fromEnv || 'T03'
+}
 
 const UPSELL = [
   { id: 'm14', name: 'Garlic Naan x2',  price: 160, image_url: 'https://images.unsplash.com/photo-1601050638917-3606f5095b4e?w=200&q=80' },
@@ -47,13 +55,22 @@ export default function CartDrawer({ open, onClose }) {
     if (cartItems.length === 0 || isPlacing) return
     setIsPlacing(true)
     try {
+      const tableNum = getTableFromUrl()
+      console.log('[CartDrawer] table_num being sent:', tableNum)
+
+      if (!tableNum) {
+        console.error('[CartDrawer] table_num is missing — cannot place order')
+        setIsPlacing(false)
+        return
+      }
+
       const { data: order, error } = await supabase
         .from('orders')
         .insert({
           tenant_id: TENANT_ID,
           table_id: TABLE_ID,
           table_session_id: useSessionStore.getState().session_id,
-          table_num: TABLE_NUM,
+          table_num: tableNum,
           status: 'pending',
           note,
           total_amount: Math.round(grandTotal),
