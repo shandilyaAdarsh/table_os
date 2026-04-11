@@ -11,8 +11,9 @@ import { supabase } from '../../../lib/supabase'
 import { AnimatePresence, motion } from 'framer-motion'
 import { getTableNum } from '../utils/tableNum'
 
-const TENANT_ID  = import.meta.env.VITE_TENANT_ID
-const TABLE_ID   = import.meta.env.VITE_DEMO_TABLE_ID
+// Hardcoded — env vars are NOT reliably set on Vercel for this demo build
+const TENANT_ID = import.meta.env.VITE_TENANT_ID || '11111111-1111-1111-1111-111111111111'
+const TABLE_ID  = import.meta.env.VITE_DEMO_TABLE_ID || null
 
 
 const UPSELL = [
@@ -63,9 +64,9 @@ export default function CartDrawer({ open, onClose }) {
         .from('orders')
         .insert({
           tenant_id: TENANT_ID,
-          table_id: TABLE_ID,
+          ...(TABLE_ID ? { table_id: TABLE_ID } : {}),
           table_session_id: useSessionStore.getState().session_id,
-          table_num: resolvedTableNum,
+          table_num: resolvedTableNum || 'T03',  // absolute final fallback
           status: 'pending',
           note,
           total_amount: Math.round(grandTotal),
