@@ -9,22 +9,11 @@ import { useNavigate } from 'react-router-dom'
 import { useCartStore, useSessionStore } from '../../../store/index'
 import { supabase } from '../../../lib/supabase'
 import { AnimatePresence, motion } from 'framer-motion'
+import { getTableNum } from '../utils/tableNum'
 
 const TENANT_ID  = import.meta.env.VITE_TENANT_ID
 const TABLE_ID   = import.meta.env.VITE_DEMO_TABLE_ID
 
-// Read table number — priority: URL param → sessionStorage → env var → 'T03'
-const getTableFromUrl = () => {
-  const params = new URLSearchParams(window.location.search)
-  const fromUrl = params.get('table')
-  if (fromUrl) return fromUrl
-
-  const fromSession = sessionStorage.getItem('tableNum')
-  if (fromSession) return fromSession
-
-  const fromEnv = import.meta.env.VITE_DEMO_TABLE_NUM
-  return fromEnv || 'T03'
-}
 
 const UPSELL = [
   { id: 'm14', name: 'Garlic Naan x2',  price: 160, image_url: 'https://images.unsplash.com/photo-1601050638917-3606f5095b4e?w=200&q=80' },
@@ -59,14 +48,12 @@ export default function CartDrawer({ open, onClose }) {
     if (cartItems.length === 0 || isPlacing) return
     setIsPlacing(true)
     try {
-      const tableNum = getTableFromUrl()
-      // DEBUG — visible in browser console
-      console.log('[CartDrawer] DEBUG tableNum:', tableNum)
-      console.log('[CartDrawer] DEBUG window.location.search:', window.location.search)
-      console.log('[CartDrawer] DEBUG URLSearchParams table:', new URLSearchParams(window.location.search).get('table'))
-      console.log('[CartDrawer] DEBUG sessionStorage tableNum:', sessionStorage.getItem('tableNum'))
+      const resolvedTableNum = getTableNum()
+      console.log('[CartDrawer] tableNum resolved:', resolvedTableNum)
+      console.log('[CartDrawer] window.location.search:', window.location.search)
+      console.log('[CartDrawer] localStorage tableNum:', localStorage.getItem('tableNum'))
 
-      if (!tableNum) {
+      if (!resolvedTableNum) {
         console.error('[CartDrawer] table_num is missing — cannot place order')
         setIsPlacing(false)
         return
@@ -78,7 +65,7 @@ export default function CartDrawer({ open, onClose }) {
           tenant_id: TENANT_ID,
           table_id: TABLE_ID,
           table_session_id: useSessionStore.getState().session_id,
-          table_num: tableNum,
+          table_num: resolvedTableNum,
           status: 'pending',
           note,
           total_amount: Math.round(grandTotal),

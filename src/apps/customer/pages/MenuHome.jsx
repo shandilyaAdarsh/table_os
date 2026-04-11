@@ -109,17 +109,6 @@ export default function MenuHome() {
 
   const recognitionRef = useRef(null)
 
-  // Save table number to sessionStorage on first load
-  // This preserves it across React Router navigations that drop ?table=
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const table = params.get('table')
-    if (table) {
-      sessionStorage.setItem('tableNum', table)
-      console.log('[MenuHome] Saved tableNum to sessionStorage:', table)
-    }
-  }, [])
-
   // Direct Supabase fetch — bypasses store initialization guard
   useEffect(() => {
     const fetchItems = async () => {

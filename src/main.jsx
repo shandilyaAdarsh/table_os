@@ -1,7 +1,8 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './index.css'
+import { saveTableNum } from './apps/customer/utils/tableNum'
 
 import MenuHome from './apps/customer/pages/MenuHome'
 import ItemDetail from './apps/customer/pages/ItemDetail'
@@ -17,6 +18,10 @@ import TableOverview from './apps/staff/pages/TableOverview'
 import TableDetail from './apps/staff/pages/TableDetail'
 
 function CustomerApp() {
+  // Save ?table= param from URL to localStorage on first load.
+  // This survives React Router navigation that strips the query param.
+  useEffect(() => { saveTableNum() }, [])
+
   return (
     <Routes>
       <Route index element={<Splash />} />

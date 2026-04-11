@@ -4,6 +4,7 @@ import { supabase } from '../../../lib/supabase'
 import { motion } from 'framer-motion'
 import { playBeep } from '../../../utils/beep'
 import { BottomNav } from '../components/BottomNav'
+import { getTableNum } from '../utils/tableNum'
 
 const STATUS_MAP = {
   pending:  { step: 1 },
@@ -204,7 +205,7 @@ export default function OrderTracking() {
           await supabase
             .from('restaurant_tables')
             .update({ status: 'paid' })
-            .eq('table_num', order?.table_num)
+            .eq('table_num', order?.table_num || getTableNum())
             .eq('tenant_id', '11111111-1111-1111-1111-111111111111')
 
           setPaymentDone(true)
