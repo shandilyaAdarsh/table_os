@@ -13,13 +13,17 @@ import { AnimatePresence, motion } from 'framer-motion'
 const TENANT_ID  = import.meta.env.VITE_TENANT_ID
 const TABLE_ID   = import.meta.env.VITE_DEMO_TABLE_ID
 
-// Read table number from URL (?table=T03) — works on localhost AND Vercel
-// Falls back to env var, then to 'T03' for demo
+// Read table number — priority: URL param → sessionStorage → env var → 'T03'
 const getTableFromUrl = () => {
   const params = new URLSearchParams(window.location.search)
   const fromUrl = params.get('table')
+  if (fromUrl) return fromUrl
+
+  const fromSession = sessionStorage.getItem('tableNum')
+  if (fromSession) return fromSession
+
   const fromEnv = import.meta.env.VITE_DEMO_TABLE_NUM
-  return fromUrl || fromEnv || 'T03'
+  return fromEnv || 'T03'
 }
 
 const UPSELL = [
@@ -56,7 +60,11 @@ export default function CartDrawer({ open, onClose }) {
     setIsPlacing(true)
     try {
       const tableNum = getTableFromUrl()
-      console.log('[CartDrawer] table_num being sent:', tableNum)
+      // DEBUG — visible in browser console
+      console.log('[CartDrawer] DEBUG tableNum:', tableNum)
+      console.log('[CartDrawer] DEBUG window.location.search:', window.location.search)
+      console.log('[CartDrawer] DEBUG URLSearchParams table:', new URLSearchParams(window.location.search).get('table'))
+      console.log('[CartDrawer] DEBUG sessionStorage tableNum:', sessionStorage.getItem('tableNum'))
 
       if (!tableNum) {
         console.error('[CartDrawer] table_num is missing — cannot place order')
