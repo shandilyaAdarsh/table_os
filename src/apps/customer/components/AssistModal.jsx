@@ -83,11 +83,6 @@ export default function AssistModal({ open, onClose }) {
             </button>
           </div>
 
-          {!session_id && (
-             <div style={{ padding: '16px', background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#B91C1C', borderRadius: 12, marginBottom: 20, fontSize: 14, fontFamily: 'Manrope, sans-serif' }}>
-               Please go to the Profile tab and start a session to request assistance.
-             </div>
-          )}
 
           {error && <div style={{ color: '#EF4444', marginBottom: 16, fontSize: 14 }}>{error}</div>}
           
@@ -101,7 +96,7 @@ export default function AssistModal({ open, onClose }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <button 
                 onClick={() => sendAssistRequest('waiter')}
-                disabled={loading || !session_id}
+                disabled={loading}
                 style={btnStyle}
               >
                 <span className="material-symbols-outlined" style={{ color: '#FE932C' }}>pan_tool</span>
@@ -110,7 +105,7 @@ export default function AssistModal({ open, onClose }) {
 
               <button 
                 onClick={() => sendAssistRequest('water')}
-                disabled={loading || !session_id}
+                disabled={loading}
                 style={btnStyle}
               >
                 <span className="material-symbols-outlined" style={{ color: '#3B82F6' }}>water_drop</span>
@@ -119,7 +114,7 @@ export default function AssistModal({ open, onClose }) {
 
               <button 
                 onClick={() => sendAssistRequest('bill')}
-                disabled={loading || !session_id}
+                disabled={loading}
                 style={btnStyle}
               >
                 <span className="material-symbols-outlined" style={{ color: '#10B981' }}>receipt_long</span>
@@ -128,7 +123,7 @@ export default function AssistModal({ open, onClose }) {
 
               <button 
                 onClick={() => sendAssistRequest('special')}
-                disabled={loading || !session_id}
+                disabled={loading}
                 style={btnStyle}
               >
                 <span className="material-symbols-outlined" style={{ color: '#8B5CF6' }}>support_agent</span>
