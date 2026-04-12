@@ -45,20 +45,37 @@ export default function CartDrawer({ open, onClose }) {
     return () => { document.body.style.overflow = '' }
   }, [open])
 
+  // 5-tier table number resolver — survives React Router navigation dropping ?table=
+  const resolveTableNum = () => {
+    // Priority 1: Zustand session store
+    const store = useSessionStore.getState()
+    const fromStore = store.table_num || store.tableNum || store.currentTable
+    if (fromStore && fromStore !== 'undefined' && fromStore !== 'null') return fromStore
+
+    // Priority 2: Current URL
+    const fromUrl = new URLSearchParams(window.location.search).get('table')
+    if (fromUrl) return fromUrl
+
+    // Priority 3: localStorage
+    const fromLocal = localStorage.getItem('tableNum') || localStorage.getItem('table_num')
+    if (fromLocal && fromLocal !== 'undefined' && fromLocal !== 'null') return fromLocal
+
+    // Priority 4: sessionStorage
+    const fromSession = sessionStorage.getItem('tableNum') || sessionStorage.getItem('table_num')
+    if (fromSession && fromSession !== 'undefined' && fromSession !== 'null') return fromSession
+
+    // Priority 5: Absolute demo fallback
+    return 'T03'
+  }
+
   const handlePlaceOrder = async () => {
     if (cartItems.length === 0 || isPlacing) return
     setIsPlacing(true)
     try {
-      const resolvedTableNum = getTableNum()
-      console.log('[CartDrawer] tableNum resolved:', resolvedTableNum)
+      const resolvedTableNum = resolveTableNum()
+      console.log('[CartDrawer] resolvedTableNum:', resolvedTableNum)
       console.log('[CartDrawer] window.location.search:', window.location.search)
       console.log('[CartDrawer] localStorage tableNum:', localStorage.getItem('tableNum'))
-
-      if (!resolvedTableNum) {
-        console.error('[CartDrawer] table_num is missing — cannot place order')
-        setIsPlacing(false)
-        return
-      }
 
       const { data: order, error } = await supabase
         .from('orders')
@@ -66,7 +83,7 @@ export default function CartDrawer({ open, onClose }) {
           tenant_id: TENANT_ID,
           ...(TABLE_ID ? { table_id: TABLE_ID } : {}),
           table_session_id: useSessionStore.getState().session_id,
-          table_num: resolvedTableNum || 'T03',  // absolute final fallback
+          table_num: resolvedTableNum,
           status: 'pending',
           note,
           total_amount: Math.round(grandTotal),
@@ -76,7 +93,10 @@ export default function CartDrawer({ open, onClose }) {
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('[CartDrawer] order insert error:', error)
+        throw error
+      }
 
       await supabase.from('order_items').insert(
         cartItems.map(item => ({
@@ -92,15 +112,14 @@ export default function CartDrawer({ open, onClose }) {
         }))
       )
 
+      const newOrderId = order.id
       clear()
       onClose()
-      navigate(`/customer/confirmed/${order.id}`, { state: { orderId: order.id } })
+      navigate(`/customer/confirmed/${newOrderId}`, { state: { orderId: newOrderId } })
     } catch (err) {
       console.error('[CartDrawer] placeOrder failed:', err.message)
-      const mockId = `mock-${Date.now()}`
-      clear()
-      onClose()
-      navigate(`/customer/confirmed/${mockId}`)
+      setIsPlacing(false)
+      alert('Could not place order. Please try again.')
     } finally {
       setIsPlacing(false)
     }
