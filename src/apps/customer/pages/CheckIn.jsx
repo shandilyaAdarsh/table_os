@@ -18,7 +18,9 @@ const t = {
     tagline: 'A Rooftop Kitchen',
     welcome: 'Welcome!',
     welcomeBack: (name) => `Welcome back, ${name}! 👋`,
-    lastVisit: (n) => `You've dined with us ${n} times`,
+    welcomeBackLabel: 'Welcome back,',
+    lastVisit: (n) => `You've dined with us ${n} time${n > 1 ? 's' : ''}`,
+    visitLabel: (n) => `You've dined with us ${n} time${n > 1 ? 's' : ''}`,
     continueAs: (name) => `Continue as ${name}`,
     notYou: 'Not you? Start fresh',
     subtitle: 'Enter your details to start your dining experience',
@@ -32,12 +34,19 @@ const t = {
     privacy: 'Your data is private and secure',
     nameError: 'Please enter your name to continue',
     table: 'TABLE',
+    verifiedGuest: 'Verified Guest',
+    authenticatedProfile: 'AUTHENTICATED PROFILE',
+    verifiedContact: 'VERIFIED CONTACT',
+    chefsNote: "Chef's Note",
+    chefsNoteMsg: "Welcome back! We hope you enjoy today's specials.",
   },
   HI: {
     tagline: 'एक रूफटॉप रेस्टोरेंट',
     welcome: 'स्वागत है!',
     welcomeBack: (name) => `वापसी पर स्वागत, ${name}! 👋`,
+    welcomeBackLabel: 'वापसी पर स्वागत,',
     lastVisit: (n) => `आप ${n} बार हमारे यहाँ आ चुके हैं`,
+    visitLabel: (n) => `आप ${n} बार हमारे यहाँ आ चुके हैं`,
     continueAs: (name) => `${name} के रूप में जारी रखें`,
     notYou: 'आप नहीं? नए सिरे से शुरू करें',
     subtitle: 'अपना डाइनिंग अनुभव शुरू करने के लिए विवरण दर्ज करें',
@@ -51,6 +60,11 @@ const t = {
     privacy: 'आपका डेटा निजी और सुरक्षित है',
     nameError: 'कृपया जारी रखने के लिए अपना नाम दर्ज करें',
     table: 'टेबल',
+    verifiedGuest: 'सत्यापित अतिथि',
+    authenticatedProfile: 'प्रमाणित प्रोफ़ाइल',
+    verifiedContact: 'सत्यापित संपर्क',
+    chefsNote: 'शेफ़ की टिप्पणी',
+    chefsNoteMsg: 'वापसी पर स्वागत! हम आशा करते हैं कि आप आज के विशेष व्यंजनों का आनंद लेंगे।',
   }
 }
 
@@ -142,16 +156,16 @@ function ReturningScreen({ guest, T, lang, setLang, guestCount, setGuestCount, o
           {initials(guest.name)}
         </div>
         <div style={{ color: '#4ADE80', fontSize: 12, marginTop: 8, fontWeight: 600 }}>
-          ● Verified Guest
+          ● {T.verifiedGuest}
         </div>
       </div>
 
       {/* Welcome */}
       <div style={{ textAlign: 'center', marginTop: 16 }}>
-        <div style={{ color: '#94A3B8', fontSize: 16 }}>Welcome back,</div>
+        <div style={{ color: '#94A3B8', fontSize: 16 }}>{T.welcomeBackLabel}</div>
         <div style={{ color: 'white', fontSize: 28, fontWeight: 600, lineHeight: 1.2 }}>{guest.name}</div>
         <div style={{ color: '#94A3B8', fontSize: 13, marginTop: 4 }}>
-          {T.lastVisit(guest.visit_count || 1)}
+          {T.visitLabel(guest.visit_count || 1)}
         </div>
       </div>
 
@@ -164,7 +178,7 @@ function ReturningScreen({ guest, T, lang, setLang, guestCount, setGuestCount, o
         border: '1px solid rgba(217,119,6,0.2)',
       }}>
         <div style={{ color: '#D97706', fontSize: 10, letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: 12 }}>
-          AUTHENTICATED PROFILE
+          {T.authenticatedProfile}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
           <span style={{ fontSize: 16 }}>👤</span>
@@ -175,7 +189,7 @@ function ReturningScreen({ guest, T, lang, setLang, guestCount, setGuestCount, o
           <span style={{ color: '#94A3B8', fontSize: 14 }}>{maskPhone(guest.phone)}</span>
         </div>
         <div style={{ color: '#4ADE80', fontSize: 10, letterSpacing: '1px', textTransform: 'uppercase' }}>
-          VERIFIED CONTACT
+          {T.verifiedContact}
         </div>
       </div>
 
@@ -217,9 +231,9 @@ function ReturningScreen({ guest, T, lang, setLang, guestCount, setGuestCount, o
         }}>
           <span style={{ fontSize: 18 }}>🍽️</span>
           <div>
-            <div style={{ color: '#D97706', fontSize: 12, fontWeight: 700 }}>Chef's Note</div>
+            <div style={{ color: '#D97706', fontSize: 12, fontWeight: 700 }}>{T.chefsNote}</div>
             <div style={{ color: '#94A3B8', fontSize: 12, fontStyle: 'italic', marginTop: 2 }}>
-              Welcome back! We hope you enjoy today's specials.
+              {T.chefsNoteMsg}
             </div>
           </div>
         </div>
