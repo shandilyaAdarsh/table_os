@@ -18,24 +18,15 @@ import StaffLogin from './apps/staff/pages/StaffLogin'
 import TableOverview from './apps/staff/pages/TableOverview'
 import TableDetail from './apps/staff/pages/TableDetail'
 
-// Returns a valid session from localStorage, or null if missing/expired (>6h)
-const getExistingSession = () => {
-  try {
-    const raw = localStorage.getItem('customerSession')
-    if (!raw) return null
-    const s = JSON.parse(raw)
-    const hours = (Date.now() - new Date(s.checkedInAt)) / 3600000
-    if (hours > 6) { localStorage.removeItem('customerSession'); return null }
-    return s
-  } catch { return null }
-}
 
 function CustomerApp() {
   // Save ?table= param from URL to localStorage on first load.
   // This survives React Router navigation that strips the query param.
   useEffect(() => { saveTableNum() }, [])
 
-  const [session, setSession] = useState(getExistingSession)
+  // session lives only in React state — resets on page reload so CheckIn always shows.
+  // This is correct for a restaurant: each new customer scans fresh and checks in.
+  const [session, setSession] = useState(null)
 
   if (!session) {
     return <CheckIn onComplete={(s) => setSession(s)} />

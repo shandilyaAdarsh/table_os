@@ -5,7 +5,7 @@
  *   Screen B (Warm Card)    — new guest form
  */
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { getTableNum } from '../utils/tableNum'
@@ -441,11 +441,33 @@ export default function CheckIn({ onComplete }) {
   const T = t[lang]
   const tableNum = getTableNum()
 
+  // On mount: check localStorage for a previously saved guest profile
+  // This is the reliable local fallback when Supabase RLS blocks anonymous inserts
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('guestProfile')
+      if (!raw) return
+      const profile = JSON.parse(raw)
+      if (profile?.phone && profile?.name) {
+        console.log('[CheckIn] Found local guest profile:', profile.name)
+        setPhone(profile.phone)
+        setName(profile.name)
+        // Auto-show returning screen from local data (no network needed)
+        setReturningGuest({
+          name: profile.name,
+          phone: profile.phone,
+          visit_count: profile.visit_count || 1,
+        })
+      }
+    } catch { /* ignore */ }
+  }, [])
+
   const checkReturningGuest = async (phoneVal) => {
     const digits = phoneVal.replace(/\D/g, '')
     if (digits.length < 10) return
     setCheckingPhone(true)
     try {
+      // 1. Try Supabase first
       const { data } = await supabase
         .from('guest_sessions')
         .select('name, phone, visit_count')
@@ -454,16 +476,37 @@ export default function CheckIn({ onComplete }) {
         .single()
 
       if (data) {
+        console.log('[CheckIn] Returning guest found in Supabase:', data.name)
         setReturningGuest(data)
         setName(data.name)
-      } else {
-        setReturningGuest(false)
+        setCheckingPhone(false)
+        return
       }
-    } catch {
-      setReturningGuest(false)
-    } finally {
-      setCheckingPhone(false)
-    }
+    } catch { /* no Supabase record — try localStorage */ }
+
+    // 2. Fallback: check localStorage guestProfile
+    try {
+      const raw = localStorage.getItem('guestProfile')
+      if (raw) {
+        const profile = JSON.parse(raw)
+        const stored = profile?.phone?.replace(/\D/g, '')
+        const entered = phoneVal.replace(/\D/g, '')
+        if (stored && stored === entered) {
+          console.log('[CheckIn] Returning guest found in localStorage:', profile.name)
+          setReturningGuest({
+            name: profile.name,
+            phone: profile.phone,
+            visit_count: profile.visit_count || 1,
+          })
+          setName(profile.name)
+          setCheckingPhone(false)
+          return
+        }
+      }
+    } catch { /* ignore */ }
+
+    setReturningGuest(false)
+    setCheckingPhone(false)
   }
 
   const handleCheckIn = async (overrideName) => {
@@ -508,6 +551,20 @@ export default function CheckIn({ onComplete }) {
     } catch (err) {
       console.warn('[CheckIn] guest_sessions upsert failed (non-fatal):', err.message)
     }
+
+    // Save guest profile to localStorage for reliable local returning-guest detection
+    // This works even if Supabase RLS blocks anonymous inserts
+    try {
+      const existingRaw = localStorage.getItem('guestProfile')
+      const existingProfile = existingRaw ? JSON.parse(existingRaw) : {}
+      const newVisitCount = (existingProfile.visit_count || 0) + 1
+      localStorage.setItem('guestProfile', JSON.stringify({
+        name: finalName,
+        phone: phone.trim(),
+        visit_count: newVisitCount,
+        lastVisitAt: new Date().toISOString(),
+      }))
+    } catch { /* ignore */ }
 
     const session = {
       name: finalName,
