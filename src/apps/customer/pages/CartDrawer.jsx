@@ -77,6 +77,9 @@ export default function CartDrawer({ open, onClose }) {
       console.log('[CartDrawer] window.location.search:', window.location.search)
       console.log('[CartDrawer] localStorage tableNum:', localStorage.getItem('tableNum'))
 
+      // Read guest session saved by CheckIn screen
+      const guestSession = JSON.parse(localStorage.getItem('customerSession') || '{}')
+
       const { data: order, error } = await supabase
         .from('orders')
         .insert({
@@ -85,10 +88,13 @@ export default function CartDrawer({ open, onClose }) {
           table_session_id: useSessionStore.getState().session_id,
           table_num: resolvedTableNum,
           status: 'pending',
-          note,
+          note: note || `Order by ${guestSession.name || 'Guest'} · Party of ${guestSession.guestCount || 1}`,
           total_amount: Math.round(grandTotal),
           is_new: true,
           ends_at: new Date(Date.now() + 25 * 60000).toISOString(),
+          guest_name: guestSession.name || 'Guest',
+          guest_phone: guestSession.phone || null,
+          guest_count: guestSession.guestCount || 1,
         })
         .select()
         .single()

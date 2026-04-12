@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './index.css'
 import { saveTableNum } from './apps/customer/utils/tableNum'
+import CheckIn from './apps/customer/pages/CheckIn'
 
 import MenuHome from './apps/customer/pages/MenuHome'
 import ItemDetail from './apps/customer/pages/ItemDetail'
@@ -17,10 +18,28 @@ import StaffLogin from './apps/staff/pages/StaffLogin'
 import TableOverview from './apps/staff/pages/TableOverview'
 import TableDetail from './apps/staff/pages/TableDetail'
 
+// Returns a valid session from localStorage, or null if missing/expired (>6h)
+const getExistingSession = () => {
+  try {
+    const raw = localStorage.getItem('customerSession')
+    if (!raw) return null
+    const s = JSON.parse(raw)
+    const hours = (Date.now() - new Date(s.checkedInAt)) / 3600000
+    if (hours > 6) { localStorage.removeItem('customerSession'); return null }
+    return s
+  } catch { return null }
+}
+
 function CustomerApp() {
   // Save ?table= param from URL to localStorage on first load.
   // This survives React Router navigation that strips the query param.
   useEffect(() => { saveTableNum() }, [])
+
+  const [session, setSession] = useState(getExistingSession)
+
+  if (!session) {
+    return <CheckIn onComplete={(s) => setSession(s)} />
+  }
 
   return (
     <Routes>

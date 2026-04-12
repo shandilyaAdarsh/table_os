@@ -15,6 +15,7 @@ import { BottomNav } from '../components/BottomNav'
 import { SkeletonCard } from '../components/SkeletonCard'
 import CartDrawer from './CartDrawer'
 import { motion } from 'framer-motion'
+import { getTableNum } from '../utils/tableNum'
 
 const TENANT_ID  = '11111111-1111-1111-1111-111111111111'
 const STICKY_TRIGGER = 280
@@ -90,6 +91,9 @@ function AddButton({ item, onAdd, onCustomize, onAnimate }) {
 export default function MenuHome() {
   const navigate    = useNavigate()
   const cartItems   = useCartStore(s => s.items)
+
+  // Read checked-in session for personalised header
+  const session = (() => { try { return JSON.parse(localStorage.getItem('customerSession') || '{}') } catch { return {} } })()
 
   const [items,           setItems]           = useState(null)  // null = loading, [] = loaded
   const [itemsLoading,    setItemsLoading]    = useState(true)
@@ -219,7 +223,9 @@ export default function MenuHome() {
       <header style={{ position: 'sticky', top: 0, zIndex: 30, backgroundColor: '#1B2B4B', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <div style={{ fontWeight: 800, fontSize: 18, color: 'white', lineHeight: 1.2, letterSpacing: '-0.02em' }}>The Grand Spice</div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 2 }}>Table 03 · Dine-in</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 2 }}>
+            {session.name ? `Hi, ${session.name} · TABLE ${getTableNum()}` : 'Table 03 · Dine-in'}
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {/* Voice mic */}
