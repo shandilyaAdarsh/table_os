@@ -87,6 +87,79 @@ function AddButton({ item, onAdd, onCustomize, onAnimate }) {
   )
 }
 
+// ── Issue 7: MenuItemCard with flying dot animation ───────────────────────────
+function MenuItemCard({ item, idx, navigate, handleItemAdd, spawnParticle }) {
+  const [flying, setFlying] = useState(false)
+
+  const handleAdd = (e) => {
+    e.stopPropagation()
+    setFlying(true)
+    setTimeout(() => setFlying(false), 600)
+    spawnParticle?.(e)
+    setTimeout(() => handleItemAdd(item), 100)
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: Math.min(idx, 8) * 0.05 }}
+      onClick={() => navigate(`/customer/item/${item.id}`)}
+      style={{
+        display: 'flex', background: 'white', borderRadius: 16, padding: 14, gap: 12,
+        boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #F3F4F6',
+        opacity: item.is_available ? 1 : 0.6, position: 'relative', cursor: 'pointer',
+      }}
+    >
+      {/* Issue 7: flying dot */}
+      {flying && (
+        <motion.div
+          initial={{ scale: 1, opacity: 1, x: 0, y: 0 }}
+          animate={{ scale: 0.3, opacity: 0, x: 120, y: -200 }}
+          transition={{ duration: 0.5, ease: 'easeIn' }}
+          style={{
+            position: 'fixed', width: '20px', height: '20px',
+            background: '#D97706', borderRadius: '50%',
+            zIndex: 9999, pointerEvents: 'none',
+          }}
+        />
+      )}
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+          <div style={{ width: 12, height: 12, borderRadius: 2, border: item.is_veg ? '2px solid #22C55E' : '2px solid #EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: item.is_veg ? '#22C55E' : '#EF4444' }} />
+          </div>
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{item.name}</span>
+        </div>
+        {item.description && (
+          <p style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.4, margin: '0 0 10px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            {item.description}
+          </p>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
+          <span style={{ fontSize: 17, fontWeight: 800, color: '#F97316' }}>₹{item.price}</span>
+          {/* Issue 7: use local handleAdd for flying dot; AddButton for stepper */}
+          <AddButton item={item} onAdd={handleItemAdd} onAnimate={(e) => { setFlying(true); setTimeout(() => setFlying(false), 600); spawnParticle?.(e) }} />
+        </div>
+      </div>
+
+      <div style={{ position: 'relative', width: 90, height: 90, borderRadius: 12, overflow: 'hidden', flexShrink: 0, backgroundColor: '#F3F4F6' }}>
+        <img
+          src={item.image_url || `https://placehold.co/90x90?text=${encodeURIComponent(item.name[0])}`}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          alt={item.name}
+        />
+        {!item.is_available && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ color: 'white', fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>Sold Out</span>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function MenuHome() {
   const navigate    = useNavigate()
@@ -110,6 +183,10 @@ export default function MenuHome() {
   const [navVisible,      setNavVisible]      = useState(true)
   const [lastScrollForNav,setLastScrollForNav]= useState(0)
   const [cartOpen,        setCartOpen]        = useState(false)
+  const [showSearch,      setShowSearch]      = useState(true)  // Issue 5
+
+  const sectionRefs  = useRef({})  // Issue 6
+  const activeTabRef = useRef(null) // Issue 6
 
   const recognitionRef = useRef(null)
 
@@ -134,12 +211,20 @@ export default function MenuHome() {
     fetchItems()
   }, [])
 
-  // Scroll tracking — hide/show nav + sticky overlay (ported from MenuClient.tsx)
+  // Scroll tracking — hide/show nav + sticky overlay + search bar (Issues 5 & 6)
   useEffect(() => {
     const onScroll = () => {
       const current = window.scrollY
       const dir     = current > lastScrollY ? 'down' : 'up'
       setScrollY(current)
+
+      // Issue 5: instant show on scroll-up, hide on scroll-down > 60px
+      if (current < lastScrollY) {
+        setShowSearch(true)
+      } else if (current > lastScrollY + 60) {
+        setShowSearch(false)
+      }
+
       setLastScrollY(current)
       setStickyVisible(current > STICKY_TRIGGER)
       if (current > STICKY_TRIGGER) setSearchInSticky(dir === 'up')
@@ -211,6 +296,31 @@ export default function MenuHome() {
     })
   }, [items, activeCategory, vegOnly, searchQuery])
 
+  // Issue 6: IntersectionObserver — update active category as sections scroll into view
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            const cat = Object.keys(sectionRefs.current)
+              .find(k => sectionRefs.current[k] === entry.target)
+            if (cat) setActiveCategory(cat)
+          }
+        })
+      },
+      { rootMargin: '-20% 0px -70% 0px', threshold: 0 }
+    )
+    Object.values(sectionRefs.current).forEach(el => { if (el) observer.observe(el) })
+    return () => observer.disconnect()
+  }, [displayedItems])
+
+  // Issue 6: auto-scroll active tab into view when activeCategory changes
+  useEffect(() => {
+    activeTabRef.current?.scrollIntoView({
+      behavior: 'smooth', block: 'nearest', inline: 'center'
+    })
+  }, [activeCategory])
+
   // ── JSX ───────────────────────────────────────────────────────────────────
   return (
     <div
@@ -262,6 +372,12 @@ export default function MenuHome() {
         gap: '12px',
         padding: '16px',
         background: '#F8F8F8',
+        // Issue 5: instant show/hide based on scroll direction
+        transform: showSearch ? 'translateY(0)' : 'translateY(-100%)',
+        transition: 'transform 0.15s ease',
+        position: 'sticky',
+        top: 74,
+        zIndex: 25,
       }}>
         {/* Search bar — takes remaining space */}
         <div style={{
@@ -315,23 +431,69 @@ export default function MenuHome() {
       </div>
 
       {/* ── CATEGORY PILLS ── */}
-      <div style={{ position: 'sticky', top: 74, zIndex: 20, backgroundColor: '#F8F8F8', padding: '4px 0 12px' }}>
-        <CategoryBubbles
-          categories={categories}
-          activeCategory={activeCategory}
-          onSelectCategory={setActiveCategory}
-          size="full"
-        />
+      <div style={{ position: 'sticky', top: 122, zIndex: 20, backgroundColor: '#F8F8F8', padding: '4px 0 12px' }}>
+        {/* Issue 6: render category tabs with activeTabRef on active tab */}
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '0 16px', scrollbarWidth: 'none' }}>
+          {categories.map(cat => {
+            const isActive = activeCategory === cat.id
+            return (
+              <button
+                key={cat.id}
+                ref={isActive ? activeTabRef : null}
+                onClick={() => setActiveCategory(cat.id)}
+                style={{
+                  flexShrink: 0,
+                  padding: '8px 18px',
+                  borderRadius: 999,
+                  border: 'none',
+                  background: isActive ? '#1B2B4B' : 'white',
+                  color: isActive ? 'white' : '#6B7280',
+                  fontWeight: isActive ? 700 : 500,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  boxShadow: isActive ? '0 2px 8px rgba(27,43,75,0.2)' : '0 1px 4px rgba(0,0,0,0.06)',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {cat.name}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* ── ITEM LIST ── */}
       <main style={{ padding: '4px 16px 200px' }}>
         {itemsLoading || items === null ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {Array.from({ length: 4 }).map((_, i) => (
-              <SkeletonCard key={i} />
-            ))}
-          </div>
+          // Issue 8: inline shimmer skeleton
+          <>
+            <style>{`
+              @keyframes shimmer {
+                0% { background-position: 200% 0; }
+                100% { background-position: -200% 0; }
+              }
+            `}</style>
+            <div style={{ padding: '4px 0' }}>
+              {[1,2,3,4].map(i => (
+                <div key={i} style={{
+                  background: 'white', borderRadius: '16px', padding: '16px',
+                  marginBottom: '12px', display: 'flex', gap: '12px', alignItems: 'center',
+                  border: '1px solid #F3F4F6'
+                }}>
+                  <div style={{
+                    width: '90px', height: '90px', borderRadius: '12px', flexShrink: 0,
+                    background: 'linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%)',
+                    backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite'
+                  }}/>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ height: '16px', background: 'linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%)', borderRadius: '8px', marginBottom: '8px', width: '70%', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }}/>
+                    <div style={{ height: '12px', background: 'linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%)', borderRadius: '8px', width: '90%', marginBottom: '8px', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }}/>
+                    <div style={{ height: '14px', background: 'linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%)', borderRadius: '8px', width: '40%', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }}/>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         ) : displayedItems.length === 0 && items.length > 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>
             <span style={{ fontSize: '48px' }}>🔍</span>
@@ -340,56 +502,34 @@ export default function MenuHome() {
             <button onClick={() => { setSearchQuery(''); setVegOnly(false); setActiveCategory('all') }} style={{ marginTop: '20px', color: '#F97316', fontWeight: 700, border: 'none', background: 'transparent' }}>Clear all filters</button>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {displayedItems.map((item, idx) => (
-              <motion.div
-                key={item.id}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(idx, 8) * 0.05 }}
-                onClick={() => navigate(`/customer/item/${item.id}`)}
-                style={{
-                  display: 'flex',
-                  background: 'white',
-                  borderRadius: 16,
-                  padding: 14,
-                  gap: 12,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
-                  border: '1px solid #F3F4F6',
-                  opacity: item.is_available ? 1 : 0.6,
-                }}
-              >
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <div style={{ width: 12, height: 12, borderRadius: 2, border: item.is_veg ? '2px solid #22C55E' : '2px solid #EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: item.is_veg ? '#22C55E' : '#EF4444' }} />
+          // Issue 6: group items by category with section headers
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {activeCategory === 'all' ? (
+              // Group by category when 'all' is active
+              Array.from(new Set(displayedItems.map(i => i.category).filter(Boolean))).map(cat => {
+                const catItems = displayedItems.filter(i => i.category === cat)
+                if (!catItems.length) return null
+                return (
+                  <div key={cat}>
+                    {/* Issue 6: section header with ref for IntersectionObserver */}
+                    <div
+                      ref={el => sectionRefs.current[cat] = el}
+                      style={{ fontSize: 13, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '16px 0 8px' }}
+                    >
+                      {cat}
                     </div>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{item.name}</span>
-                  </div>
-                  {item.description && (
-                    <p style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.4, margin: '0 0 10px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                      {item.description}
-                    </p>
-                  )}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
-                    <span style={{ fontSize: 17, fontWeight: 800, color: '#F97316' }}>₹{item.price}</span>
-                    <AddButton item={item} onAdd={handleItemAdd} onAnimate={spawnParticle} />
-                  </div>
-                </div>
-                <div style={{ position: 'relative', width: 90, height: 90, borderRadius: 12, overflow: 'hidden', flexShrink: 0, backgroundColor: '#F3F4F6' }}>
-                  <img
-                    src={item.image_url || `https://placehold.co/90x90?text=${encodeURIComponent(item.name[0])}`}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    alt={item.name}
-                  />
-                  {!item.is_available && (
-                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <span style={{ color: 'white', fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>Sold Out</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {catItems.map((item, idx) => <MenuItemCard key={item.id} item={item} idx={idx} navigate={navigate} handleItemAdd={handleItemAdd} spawnParticle={spawnParticle} />)}
                     </div>
-                  )}
-                </div>
-              </motion.div>
-            ))}
+                  </div>
+                )
+              })
+            ) : (
+              // Flat list when a specific category is active
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
+                {displayedItems.map((item, idx) => <MenuItemCard key={item.id} item={item} idx={idx} navigate={navigate} handleItemAdd={handleItemAdd} spawnParticle={spawnParticle} />)}
+              </div>
+            )}
           </div>
         )}
       </main>

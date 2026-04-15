@@ -10,6 +10,7 @@ export default function AssistModal({ open, onClose }) {
   const [error, setError] = useState('')
   const [customMsg, setCustomMsg] = useState('')
   const [showCustom, setShowCustom] = useState(false)
+  const [specialNote, setSpecialNote] = useState('')
 
   // Lock body scroll while open
   useEffect(() => {
@@ -32,6 +33,7 @@ export default function AssistModal({ open, onClose }) {
           table_num: table_num || getTableNum(),
           table_session_id: session_id || '',
           request_type: requestType,
+          message: specialNote.trim() || null,
           status: 'pending'
         })
 
@@ -41,6 +43,7 @@ export default function AssistModal({ open, onClose }) {
       }
 
       setSuccess('Request sent! Someone will be with you shortly.')
+      setSpecialNote('')
       setTimeout(() => { setSuccess(''); onClose() }, 2000)
 
     } catch (err) {
@@ -148,6 +151,35 @@ export default function AssistModal({ open, onClose }) {
                   </button>
                 </div>
               )}
+
+              {/* Special Request textarea (Issue 4) */}
+              <div style={{ marginTop: '16px' }}>
+                <label style={{
+                  fontSize: '11px', fontWeight: '600', color: '#6B7280',
+                  textTransform: 'uppercase', letterSpacing: '0.5px',
+                  display: 'block', marginBottom: '6px'
+                }}>
+                  Special Request (optional)
+                </label>
+                <textarea
+                  value={specialNote}
+                  onChange={e => setSpecialNote(e.target.value)}
+                  placeholder="e.g. Need extra napkins, high chair for baby, allergy alert..."
+                  maxLength={200}
+                  rows={3}
+                  style={{
+                    width: '100%', background: '#F9FAFB',
+                    border: '1.5px solid #E5E7EB', borderRadius: '12px',
+                    padding: '12px', fontSize: '14px', color: '#111827',
+                    resize: 'none', outline: 'none', boxSizing: 'border-box'
+                  }}
+                  onFocus={e => e.target.style.borderColor = '#1A365D'}
+                  onBlur={e => e.target.style.borderColor = '#E5E7EB'}
+                />
+                <div style={{ textAlign: 'right', fontSize: '11px', color: '#9CA3AF', marginTop: '4px' }}>
+                  {specialNote.length}/200
+                </div>
+              </div>
             </div>
           )}
         </div>

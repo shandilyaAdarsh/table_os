@@ -29,7 +29,7 @@ export default function CartDrawer({ open, onClose }) {
   const [isPlacing, setIsPlacing] = useState(false)
   const [note,      setNote]      = useState('')
 
-  const subtotal   = cartItems.reduce((a, i) => a + i.price * i.qty, 0)
+  const subtotal   = cartItems.reduce((a, i) => a + ((i.unit_price || i.price || 0) * i.qty), 0)
   const cgst       = +(subtotal * 0.025).toFixed(2)
   const sgst       = +(subtotal * 0.025).toFixed(2)
   const grandTotal = subtotal + cgst + sgst
@@ -110,7 +110,7 @@ export default function CartDrawer({ open, onClose }) {
           menu_item_id: item.id,
           name: item.name,
           qty: item.qty,
-          unit_price: item.price,
+          unit_price: item.unit_price || item.price || 0,
           station: item.station || 'HOT',
           allergen: item.allergen || null,
           note: item.note || null,
@@ -216,7 +216,7 @@ export default function CartDrawer({ open, onClose }) {
                           <p style={{ fontWeight: 700, fontSize: 12, color: '#1B2B4B', margin: '0 0 4px', lineHeight: 1.3, height: 32, overflow: 'hidden' }}>{rec.name}</p>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
                             <span style={{ fontWeight: 800, fontSize: 13, color: '#F97316' }}>₹{rec.price}</span>
-                            <button onClick={() => addItem({ ...rec, qty: 1, modifiers: [], note: '' })} style={{ width: 28, height: 28, borderRadius: 8, background: '#1B2B4B', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>+</button>
+                            <button onClick={() => addItem({ ...rec, qty: 1, unit_price: rec.price, modifiers: [], note: '' })} style={{ width: 28, height: 28, borderRadius: 8, background: '#1B2B4B', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>+</button>
                           </div>
                         </div>
                       ))}

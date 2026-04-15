@@ -27,7 +27,10 @@ export default function OrdersPage() {
     const fetchOrders = async () => {
       const { data, error } = await supabase
         .from('orders')
-        .select('*, order_items(*)')
+        .select(`*, order_items(
+          id, name, qty, unit_price,
+          is_rejected, status
+        )`)
         .eq('tenant_id', TENANT_ID)
         .eq('table_num', tableNum)
         .order('created_at', { ascending: false })
@@ -106,6 +109,49 @@ function OrderCard({ order }) {
   const navigate = useNavigate()
   const [timeRemaining, setTimeRemaining] = useState('')
   const isActive = ['pending', 'cooking', 'ready'].includes(order.status)
+
+  // Issue 10: download invoice as plain-text
+  const downloadInvoice = () => {
+    const session = JSON.parse(localStorage.getItem('customerSession') || '{}')
+    const subtotal = (order.order_items || [])
+      .reduce((sum, i) => sum + ((i.unit_price || 0) * (i.qty || 0)), 0)
+    const gst = Math.round(subtotal * 0.05)
+    const total = subtotal + gst
+
+    const lines = [
+      '===================================',
+      '        THE GRAND SPICE',
+      '      A Rooftop Kitchen, Mumbai',
+      '===================================',
+      `Diner   : ${session.name || 'Guest'}`,
+      `Table   : ${order.table_num}`,
+      `Order   : #${String(order.id).slice(-6).toUpperCase()}`,
+      `Date    : ${new Date(order.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
+      '-----------------------------------',
+      'ITEMS:',
+      ...(order.order_items || []).map(item =>
+        `${item.is_rejected ? '[CANCELLED] ' : ''}` +
+        `${item.name.padEnd(18)} x${item.qty}` +
+        `   \u20b9${(item.unit_price || 0) * (item.qty || 0)}`
+      ),
+      '-----------------------------------',
+      `Subtotal  :             \u20b9${subtotal}`,
+      `GST (5%)  :             \u20b9${gst}`,
+      `TOTAL     :             \u20b9${total}`,
+      '===================================',
+      '   Thank you for dining with us!',
+      '     Visit us again soon \ud83d\ude4f',
+      '===================================',
+    ]
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `GrandSpice_Invoice_${String(order.id).slice(-6).toUpperCase()}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
   
   useEffect(() => {
     if (!order.ends_at || !isActive) {
@@ -201,6 +247,20 @@ function OrderCard({ order }) {
           ))}
         </div>
       )}
+
+      {/* Issue 10: Download Invoice button */}
+      <button
+        onClick={(e) => { e.stopPropagation(); downloadInvoice() }}
+        style={{
+          background: 'white', border: '1.5px solid #1A365D',
+          borderRadius: '10px', padding: '8px 14px',
+          color: '#1A365D', fontSize: '12px', fontWeight: '600',
+          cursor: 'pointer', display: 'flex', alignItems: 'center',
+          gap: '6px', marginTop: '10px'
+        }}
+      >
+        ⬇ Download Invoice
+      </button>
     </div>
   )
 }
