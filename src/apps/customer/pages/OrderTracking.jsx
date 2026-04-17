@@ -71,38 +71,30 @@ export default function OrderTracking() {
       if (data) setOrder(prev => prev ? { ...prev, order_items: data } : prev)
     }
 
-    let channel
-    const subscribe = () => {
-      channel = supabase
-        .channel('track-order-' + resolvedOrderId)
-        .on('postgres_changes', {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'orders',
-          filter: 'id=eq.' + resolvedOrderId
-        }, (payload) => {
-          setOrderStatus(payload.new.status)
-          setOrder(prev => ({ ...prev, ...payload.new }))
-          playBeep()
-        })
-        .on('postgres_changes', {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'order_items',
-          filter: `order_id=eq.${resolvedOrderId}`
-        }, () => {
-          fetchOrderItems()
-        })
-        .subscribe((status) => {
-          if (status === 'CLOSED') {
-            setTimeout(subscribe, 2000)
-          }
-        })
-    }
-    subscribe()
-    
+    const channel = supabase
+      .channel(`track-order-${resolvedOrderId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'orders',
+        filter: `id=eq.${resolvedOrderId}`
+      }, (payload) => {
+        setOrderStatus(payload.new.status)
+        setOrder(prev => ({ ...prev, ...payload.new }))
+        playBeep()
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'order_items',
+        filter: `order_id=eq.${resolvedOrderId}`
+      }, () => {
+        fetchOrderItems()
+      })
+      .subscribe()
+
     return () => {
-      if (channel) supabase.removeChannel(channel)
+      supabase.removeChannel(channel)
     }
   }, [resolvedOrderId])
 
@@ -449,6 +441,21 @@ export default function OrderTracking() {
             <p style={{ fontSize: '14px', fontWeight: '600', color: '#111827', marginBottom: '12px' }}>
               Bill Summary
             </p>
+
+            {/* Item breakdown */}
+            {orderItemsList.filter(item => !item.is_rejected).map(item => (
+              <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <span style={{ fontSize: '13px', color: '#374151', maxWidth: '65%' }}>
+                  {item.name}
+                  <span style={{ color: '#9CA3AF', marginLeft: '4px' }}>×{item.qty}</span>
+                </span>
+                <span style={{ fontSize: '13px', color: '#374151', fontWeight: '500' }}>
+                  ₹{(item.unit_price || 0) * (item.qty || 0)}
+                </span>
+              </div>
+            ))}
+
+            <div style={{ height: '1px', background: '#F3F4F6', margin: '8px 0 10px' }} />
 
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
               <span style={{ fontSize: '13px', color: '#6B7280' }}>Subtotal</span>

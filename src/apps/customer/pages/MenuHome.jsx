@@ -25,13 +25,19 @@ const CATEGORY_ORDER = ['Starters', 'Mains', 'Sides', 'Desserts', 'Beverages']
 
 // ── Fly-to-cart: RAF-based so it works on every browser without CSS custom property issues ──
 function spawnFlyToCart(startX, startY) {
-  // Target the View Cart bottom bar first; fall back to header icon
-  const target = document.getElementById('cart-fab-btn') || document.getElementById('header-cart-btn')
-  if (!target) return
-
-  const rect = target.getBoundingClientRect()
-  const endX  = rect.left + rect.width  / 2
-  const endY  = rect.top  + rect.height / 2
+  // #cart-fab-btn only exists after first item is added (CartBar renders null on empty cart)
+  // So for the FIRST item we use a fixed bottom-center estimate of where it will appear
+  const target  = document.getElementById('cart-fab-btn')
+  let endX, endY
+  if (target) {
+    const r = target.getBoundingClientRect()
+    endX = r.left + r.width  / 2
+    endY = r.top  + r.height / 2
+  } else {
+    // CartBar not mounted yet — estimate its position at bottom center
+    endX = window.innerWidth  / 2
+    endY = window.innerHeight - 120   // ~where the CartBar will appear
+  }
 
   // Inject cartBounce keyframe once
   if (!document.getElementById('fly-to-cart-style')) {
@@ -84,9 +90,12 @@ function spawnFlyToCart(startX, startY) {
       requestAnimationFrame(tick)
     } else {
       dot.remove()
-      // Bounce the cart bar
-      target.style.animation = 'cartBounce 280ms ease'
-      target.addEventListener('animationend', () => { target.style.animation = '' }, { once: true })
+      // Re-query at end: CartBar is mounted now (item was added before animation completes)
+      const barEl = target || document.getElementById('cart-fab-btn')
+      if (barEl) {
+        barEl.style.animation = 'cartBounce 280ms ease'
+        barEl.addEventListener('animationend', () => { barEl.style.animation = '' }, { once: true })
+      }
     }
   }
 

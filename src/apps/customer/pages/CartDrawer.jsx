@@ -25,7 +25,9 @@ const UPSELL = [
 export default function CartDrawer({ open, onClose }) {
   const navigate   = useNavigate()
   const cartItems  = useCartStore(s => s.items)
-  const { addItem, updateQty, clear } = useCartStore.getState()
+  const addItem    = useCartStore(s => s.addItem)
+  const updateQty  = useCartStore(s => s.updateQty)
+  const clear      = useCartStore(s => s.clear)
   const [isPlacing, setIsPlacing] = useState(false)
   const [note,      setNote]      = useState('')
 
@@ -104,19 +106,20 @@ export default function CartDrawer({ open, onClose }) {
         throw error
       }
 
-      await supabase.from('order_items').insert(
+      const { error: itemsError } = await supabase.from('order_items').insert(
         cartItems.map(item => ({
-          order_id: order.id,
-          menu_item_id: item.id,
-          name: item.name,
-          qty: item.qty,
-          unit_price: item.unit_price || item.price || 0,
-          station: item.station || 'HOT',
-          allergen: item.allergen || null,
-          note: item.note || null,
-          modifiers: item.modifiers || [],
+          order_id:     order.id,
+          menu_item_id: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id) ? item.id : null,
+          name:         item.name,
+          qty:          item.qty,
+          unit_price:   item.unit_price || item.price || 0,
         }))
       )
+
+      if (itemsError) {
+        console.error('[CartDrawer] order_items insert error:', itemsError)
+        throw itemsError
+      }
 
       const newOrderId = order.id
       clear()
@@ -194,12 +197,12 @@ export default function CartDrawer({ open, onClose }) {
                           {item.modifiers?.length > 0 && (
                             <p style={{ fontSize: 12, color: '#6B7280', margin: '0 0 6px' }}>{item.modifiers.join(', ')}</p>
                           )}
-                          <span style={{ fontWeight: 800, fontSize: 15, color: '#F97316' }}>₹{item.price * item.qty}</span>
+                          <span style={{ fontWeight: 800, fontSize: 15, color: '#F97316' }}>₹{(item.unit_price || item.price || 0) * item.qty}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', background: '#F3F4F6', borderRadius: 10, height: 36, padding: '0 4px', alignSelf: 'center' }}>
                           <button onClick={() => updateQty(item.id, item.modifiers, item.qty - 1)} style={{ width: 28, height: 28, border: 'none', background: 'transparent', color: '#1B2B4B', fontWeight: 800, cursor: 'pointer', fontSize: 18 }}>−</button>
                           <span style={{ width: 30, textAlign: 'center', fontSize: 13, fontWeight: 700, color: '#111827' }}>{item.qty}</span>
-                          <button onClick={() => addItem({ ...item, qty: 1 })} style={{ width: 28, height: 28, border: 'none', background: 'transparent', color: '#1B2B4B', fontWeight: 800, cursor: 'pointer', fontSize: 18 }}>+</button>
+                          <button onClick={() => addItem({ ...item, qty: 1, unit_price: item.unit_price || item.price || 0 })} style={{ width: 28, height: 28, border: 'none', background: 'transparent', color: '#1B2B4B', fontWeight: 800, cursor: 'pointer', fontSize: 18 }}>+</button>
                         </div>
                       </div>
                     ))}
