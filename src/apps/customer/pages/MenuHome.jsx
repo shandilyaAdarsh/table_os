@@ -21,16 +21,80 @@ const TENANT_ID  = '11111111-1111-1111-1111-111111111111'
 const STICKY_TRIGGER = 280
 const NAV_SCROLL_THRESHOLD = 8
 
-// ── Particle +1 animation ─────────────────────────────────────────────────────
-function Particle({ x, y }) {
-  return (
-    <div style={{
-      position: 'fixed', left: x, top: y, pointerEvents: 'none', zIndex: 9999,
-      fontWeight: 600, fontSize: 14, color: '#F97316', fontFamily: 'Inter, sans-serif',
-      animation: 'flyUp 600ms ease forwards',
-    }}>+1</div>
-  )
+const CATEGORY_ORDER = ['Starters', 'Mains', 'Sides', 'Desserts', 'Beverages']
+
+// ── Fly-to-cart: RAF-based so it works on every browser without CSS custom property issues ──
+function spawnFlyToCart(startX, startY) {
+  // Target the View Cart bottom bar first; fall back to header icon
+  const target = document.getElementById('cart-fab-btn') || document.getElementById('header-cart-btn')
+  if (!target) return
+
+  const rect = target.getBoundingClientRect()
+  const endX  = rect.left + rect.width  / 2
+  const endY  = rect.top  + rect.height / 2
+
+  // Inject cartBounce keyframe once
+  if (!document.getElementById('fly-to-cart-style')) {
+    const s = document.createElement('style')
+    s.id = 'fly-to-cart-style'
+    s.textContent = `
+      @keyframes cartBounce {
+        0%,100% { transform:scale(1); }
+        35%     { transform:scale(1.15); }
+        65%     { transform:scale(0.92); }
+      }
+    `
+    document.head.appendChild(s)
+  }
+
+  // Create the flying dot
+  const dot = document.createElement('div')
+  dot.style.cssText = `
+    position:fixed; pointer-events:none; z-index:99999;
+    width:16px; height:16px; border-radius:50%;
+    background:#F97316; opacity:1;
+    left:${startX - 8}px; top:${startY - 8}px;
+  `
+  document.body.appendChild(dot)
+
+  // Arc: slight left/up jump, then sweep DOWN to the View Cart bar at bottom
+  const cp1 = { x: startX - 60, y: startY - 80 }   // jump left + slightly up
+  const cp2 = { x: endX - 40,   y: endY - 40   }   // approach bar from above-left
+
+  const DURATION = 520  // ms
+  const start = performance.now()
+
+  function tick(now) {
+    const raw = Math.min((now - start) / DURATION, 1)
+    const t   = raw < 0.5 ? 2*raw*raw : -1 + (4 - 2*raw)*raw  // ease-in-out
+
+    // Cubic bezier: B(t) = (1-t)³P0 + 3(1-t)²tP1 + 3(1-t)t²P2 + t³P3
+    const u  = 1 - t
+    const x  = u*u*u*startX + 3*u*u*t*cp1.x + 3*u*t*t*cp2.x + t*t*t*endX
+    const y  = u*u*u*startY + 3*u*u*t*cp1.y + 3*u*t*t*cp2.y + t*t*t*endY
+
+    dot.style.left = `${x - 8}px`
+    dot.style.top  = `${y - 8}px`
+
+    // Shrink as it approaches the cart
+    if (raw > 0.7) dot.style.transform = `scale(${1 - ((raw - 0.7) / 0.3)})`
+    if (raw > 0.8) dot.style.opacity   = String(1 - ((raw - 0.8) / 0.2))
+
+    if (t < 1) {
+      requestAnimationFrame(tick)
+    } else {
+      dot.remove()
+      // Bounce the cart bar
+      target.style.animation = 'cartBounce 280ms ease'
+      target.addEventListener('animationend', () => { target.style.animation = '' }, { once: true })
+    }
+  }
+
+  requestAnimationFrame(tick)
 }
+
+// Legacy Particle component kept for compatibility — renders nothing (spawnFlyToCart handles it)
+function Particle() { return null }
 
 // ── Inline +/stepper for each card ───────────────────────────────────────────
 function AddButton({ item, onAdd, onCustomize, onAnimate }) {
@@ -88,14 +152,10 @@ function AddButton({ item, onAdd, onCustomize, onAnimate }) {
 }
 
 // ── Issue 7: MenuItemCard with flying dot animation ───────────────────────────
-function MenuItemCard({ item, idx, navigate, handleItemAdd, spawnParticle }) {
-  const [flying, setFlying] = useState(false)
-
+function MenuItemCard({ item, idx, navigate, handleItemAdd }) {
   const handleAdd = (e) => {
     e.stopPropagation()
-    setFlying(true)
-    setTimeout(() => setFlying(false), 600)
-    spawnParticle?.(e)
+    spawnFlyToCart(e.clientX, e.clientY)
     setTimeout(() => handleItemAdd(item), 100)
   }
 
@@ -111,20 +171,6 @@ function MenuItemCard({ item, idx, navigate, handleItemAdd, spawnParticle }) {
         opacity: item.is_available ? 1 : 0.6, position: 'relative', cursor: 'pointer',
       }}
     >
-      {/* Issue 7: flying dot */}
-      {flying && (
-        <motion.div
-          initial={{ scale: 1, opacity: 1, x: 0, y: 0 }}
-          animate={{ scale: 0.3, opacity: 0, x: 120, y: -200 }}
-          transition={{ duration: 0.5, ease: 'easeIn' }}
-          style={{
-            position: 'fixed', width: '20px', height: '20px',
-            background: '#D97706', borderRadius: '50%',
-            zIndex: 9999, pointerEvents: 'none',
-          }}
-        />
-      )}
-
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
           <div style={{ width: 12, height: 12, borderRadius: 2, border: item.is_veg ? '2px solid #22C55E' : '2px solid #EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -139,8 +185,7 @@ function MenuItemCard({ item, idx, navigate, handleItemAdd, spawnParticle }) {
         )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
           <span style={{ fontSize: 17, fontWeight: 800, color: '#F97316' }}>₹{item.price}</span>
-          {/* Issue 7: use local handleAdd for flying dot; AddButton for stepper */}
-          <AddButton item={item} onAdd={handleItemAdd} onAnimate={(e) => { setFlying(true); setTimeout(() => setFlying(false), 600); spawnParticle?.(e) }} />
+          <AddButton item={item} onAdd={handleItemAdd} onAnimate={(e) => spawnFlyToCart(e.clientX, e.clientY)} />
         </div>
       </div>
 
@@ -183,10 +228,12 @@ export default function MenuHome() {
   const [navVisible,      setNavVisible]      = useState(true)
   const [lastScrollForNav,setLastScrollForNav]= useState(0)
   const [cartOpen,        setCartOpen]        = useState(false)
-  const [showSearch,      setShowSearch]      = useState(true)  // Issue 5
+  const [showSearch,      setShowSearch]      = useState(true)
 
-  const sectionRefs  = useRef({})  // Issue 6
-  const activeTabRef = useRef(null) // Issue 6
+  const sectionRefs      = useRef({})   // section header DOM elements
+  const activeTabRef     = useRef(null) // ref on the currently active tab button
+  const pillsRef         = useRef(null) // ref on the horizontal pill container
+  const isManualScroll   = useRef(false) // true while a tab-click scroll is in progress
 
   const recognitionRef = useRef(null)
 
@@ -280,46 +327,127 @@ export default function MenuHome() {
     ...Array.from(new Set((items || []).map(i => i.category).filter(Boolean))).map(c => ({ id: c, name: c })),
   ], [items])
 
-  // Filtered items — single computed array, all filters applied together
+  // Filtered items — category tab does NOT filter; only veg + search filter items
   const displayedItems = useMemo(() => {
     if (!items || items.length === 0) return []
     return items.filter(item => {
-      const matchesCategory =
-        !activeCategory ||
-        activeCategory === 'all' ||
-        item.category === activeCategory
-      const matchesVeg = !vegOnly || !!item.is_veg
+      const matchesVeg    = !vegOnly || !!item.is_veg
       const matchesSearch = !searchQuery ||
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (item.description || '').toLowerCase().includes(searchQuery.toLowerCase())
-      return matchesCategory && matchesVeg && matchesSearch
+      return matchesVeg && matchesSearch
     })
-  }, [items, activeCategory, vegOnly, searchQuery])
+  }, [items, vegOnly, searchQuery])
 
-  // Issue 6: IntersectionObserver — update active category as sections scroll into view
+  // Scroll spy — sort all passed sections by their top DESC to find the most-recently-scrolled-past one
+  // [] deps: runs once, reads sectionRefs.current live every scroll event
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            const cat = Object.keys(sectionRefs.current)
-              .find(k => sectionRefs.current[k] === entry.target)
-            if (cat) setActiveCategory(cat)
-          }
-        })
-      },
-      { rootMargin: '-20% 0px -70% 0px', threshold: 0 }
-    )
-    Object.values(sectionRefs.current).forEach(el => { if (el) observer.observe(el) })
-    return () => observer.disconnect()
-  }, [displayedItems])
+    const STICKY_H = 190  // approx: header(70) + search(60) + pills(60)
+    const onScrollSpy = () => {
+      if (isManualScroll.current) return  // paused during programmatic scrolling
+      const passed = Object.entries(sectionRefs.current)
+        .filter(([, el]) => el != null)
+        .map(([cat, el]) => ({ cat, top: el.getBoundingClientRect().top }))
+        .filter(({ top }) => top < STICKY_H)  // sections that have scrolled above sticky bar
+        .sort((a, b) => b.top - a.top)        // highest top = most recently scrolled past
+      setActiveCategory(passed.length > 0 ? passed[0].cat : 'all')
+    }
+    window.addEventListener('scroll', onScrollSpy, { passive: true })
+    return () => window.removeEventListener('scroll', onScrollSpy)
+  }, [])
 
-  // Issue 6: auto-scroll active tab into view when activeCategory changes
+  // Scroll the active pill into view inside the pill bar ONLY — never touches window scroll
   useEffect(() => {
-    activeTabRef.current?.scrollIntoView({
-      behavior: 'smooth', block: 'nearest', inline: 'center'
-    })
+    const tab = activeTabRef.current
+    const container = pillsRef.current
+    if (!tab || !container) return
+    // Center the active tab within the horizontal pill container
+    const targetLeft = tab.offsetLeft - (container.offsetWidth - tab.offsetWidth) / 2
+    container.scrollTo({ left: targetLeft, behavior: 'smooth' })
   }, [activeCategory])
+
+  // ── EASTER EGG: type "antigravity" anywhere to float everything up ────────
+  useEffect(() => {
+    const TRIGGER = 'antigravity'
+    let typed = ''
+    let rafId = null
+    let particles = []
+    let isActive = false
+
+    function activate() {
+      if (isActive) return
+      isActive = true
+
+      // Collect every visible element on the page (excluding html/body wrappers)
+      particles = Array.from(document.querySelectorAll('*'))
+        .filter(el => {
+          if (el === document.documentElement || el === document.body) return false
+          const r = el.getBoundingClientRect()
+          const s = getComputedStyle(el)
+          return r.width > 0 && r.height > 0 &&
+                 s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0'
+        })
+        .map(el => ({
+          el,
+          y: 0, x: 0, rot: 0,
+          vy: -(0.4 + Math.random() * 1.4),    // upward velocity px/frame (varied)
+          vx: (Math.random() - 0.5) * 0.5,     // gentle horizontal drift
+          vrot: (Math.random() - 0.5) * 0.35,  // rotation wobble
+          delay: Math.floor(Math.random() * 80), // staggered start (frames)
+          started: false,
+          prevTransition: el.style.transition,
+          prevTransform: el.style.transform,
+        }))
+
+      let frame = 0
+      function tick() {
+        frame++
+        particles.forEach(p => {
+          if (frame < p.delay) return   // staggered: not all start at once
+          if (!p.started) {
+            p.started = true
+            p.el.style.transition = 'none'  // freeze CSS transitions during flight
+          }
+          p.vy -= 0.015             // gentle acceleration upward (reverse gravity)
+          p.y  += p.vy
+          p.x  += p.vx
+          p.rot += p.vrot
+          // Soft rotation bounce between -15deg and +15deg
+          if (p.rot >  15) { p.rot =  15; p.vrot *= -0.7 }
+          if (p.rot < -15) { p.rot = -15; p.vrot *= -0.7 }
+          p.el.style.transform =
+            `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px) rotate(${p.rot.toFixed(2)}deg)`
+        })
+        rafId = requestAnimationFrame(tick)
+      }
+      rafId = requestAnimationFrame(tick)
+    }
+
+    function deactivate() {
+      if (!isActive) return
+      isActive = false
+      if (rafId) cancelAnimationFrame(rafId)
+      // Smoothly return each element to its original position
+      particles.forEach(p => {
+        p.el.style.transition = 'transform 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+        p.el.style.transform  = p.prevTransform || ''
+      })
+      setTimeout(() => {
+        particles.forEach(p => { p.el.style.transition = p.prevTransition || '' })
+        particles = []
+      }, 850)
+    }
+
+    function onKey(e) {
+      if (e.key === 'Escape') { deactivate(); typed = ''; return }
+      if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return
+      typed = (typed + e.key.toLowerCase()).slice(-TRIGGER.length)
+      if (typed === TRIGGER) { activate(); typed = '' }
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => { window.removeEventListener('keydown', onKey); deactivate() }
+  }, [])
 
   // ── JSX ───────────────────────────────────────────────────────────────────
   return (
@@ -330,7 +458,7 @@ export default function MenuHome() {
       <style>{`@keyframes flyUp { to { transform: translateY(-40px); opacity: 0; } } @keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
       {/* ── HEADER ── */}
-      <header style={{ position: 'sticky', top: 0, zIndex: 30, backgroundColor: '#1B2B4B', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <header data-sticky style={{ position: 'sticky', top: 0, zIndex: 30, backgroundColor: '#1B2B4B', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <div style={{ fontWeight: 800, fontSize: 18, color: 'white', lineHeight: 1.2, letterSpacing: '-0.02em' }}>The Grand Spice</div>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 2 }}>
@@ -431,16 +559,33 @@ export default function MenuHome() {
       </div>
 
       {/* ── CATEGORY PILLS ── */}
-      <div style={{ position: 'sticky', top: 122, zIndex: 20, backgroundColor: '#F8F8F8', padding: '4px 0 12px' }}>
+      <div data-sticky style={{ position: 'sticky', top: 122, zIndex: 20, backgroundColor: '#F8F8F8', padding: '4px 0 12px' }}>
         {/* Issue 6: render category tabs with activeTabRef on active tab */}
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '0 16px', scrollbarWidth: 'none' }}>
+        <div ref={pillsRef} style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '0 16px', scrollbarWidth: 'none' }}>
           {categories.map(cat => {
+            // activeCategory tracks which section is in view (scroll spy) or was tapped
             const isActive = activeCategory === cat.id
             return (
               <button
                 key={cat.id}
                 ref={isActive ? activeTabRef : null}
-                onClick={() => setActiveCategory(cat.id)}
+                onClick={() => {
+                  if (cat.id === 'all') {
+                    isManualScroll.current = true
+                    window.scrollTo({ top: 0, behavior: 'smooth' })
+                    setActiveCategory('all')
+                    setTimeout(() => { isManualScroll.current = false }, 1200)
+                  } else {
+                    const el = sectionRefs.current[cat.id]
+                    if (el) {
+                      isManualScroll.current = true
+                      const y = el.getBoundingClientRect().top + window.scrollY - 185
+                      window.scrollTo({ top: y, behavior: 'smooth' })
+                      setActiveCategory(cat.id)
+                      setTimeout(() => { isManualScroll.current = false }, 1200)
+                    }
+                  }
+                }}
                 style={{
                   flexShrink: 0,
                   padding: '8px 18px',
@@ -502,19 +647,27 @@ export default function MenuHome() {
             <button onClick={() => { setSearchQuery(''); setVegOnly(false); setActiveCategory('all') }} style={{ marginTop: '20px', color: '#F97316', fontWeight: 700, border: 'none', background: 'transparent' }}>Clear all filters</button>
           </div>
         ) : (
-          // Issue 6: group items by category with section headers
+          // Always render grouped — categories are scroll anchors, not filters
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {activeCategory === 'all' ? (
-              // Group by category when 'all' is active
-              Array.from(new Set(displayedItems.map(i => i.category).filter(Boolean))).map(cat => {
+            {(() => {
+              const allCats = Array.from(new Set(displayedItems.map(i => i.category).filter(Boolean)))
+              const ordered = [
+                ...CATEGORY_ORDER.filter(c => allCats.includes(c)),
+                ...allCats.filter(c => !CATEGORY_ORDER.includes(c))
+              ]
+              return ordered.map(cat => {
                 const catItems = displayedItems.filter(i => i.category === cat)
                 if (!catItems.length) return null
                 return (
                   <div key={cat}>
-                    {/* Issue 6: section header with ref for IntersectionObserver */}
                     <div
                       ref={el => sectionRefs.current[cat] = el}
-                      style={{ fontSize: 13, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '16px 0 8px' }}
+                      style={{
+                        fontSize: '11px', fontWeight: '600',
+                        letterSpacing: '0.08em', color: '#6B7280',
+                        textTransform: 'uppercase',
+                        padding: '16px 0 8px', margin: '0'
+                      }}
                     >
                       {cat}
                     </div>
@@ -524,12 +677,7 @@ export default function MenuHome() {
                   </div>
                 )
               })
-            ) : (
-              // Flat list when a specific category is active
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
-                {displayedItems.map((item, idx) => <MenuItemCard key={item.id} item={item} idx={idx} navigate={navigate} handleItemAdd={handleItemAdd} spawnParticle={spawnParticle} />)}
-              </div>
-            )}
+            })()}
           </div>
         )}
       </main>
