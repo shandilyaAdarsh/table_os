@@ -1,5 +1,8 @@
 import { create } from 'zustand'
-import { supabase, TENANT_ID } from '../lib/supabase.js'
+import { supabase } from '../lib/supabase.js'
+import { useAuthStore } from './authStore.js'
+
+export { useAuthStore, useAuthStore as useAdminStore }
 
 // ─── ORDER STORE ────────────────────────────────────────────────────────────
 export const useOrderStore = create((set, get) => ({
@@ -8,17 +11,20 @@ export const useOrderStore = create((set, get) => ({
 
   // Fetch all active orders from Supabase
   fetchOrders: async () => {
-    if (!supabase) {
-      console.error('[Store] Supabase client is null. Verify .env.local!');
-      set({ isLoading: false });
-      return;
+    const { tenantId: storeId } = useAuthStore.getState()
+    const tenantId = storeId || import.meta.env.VITE_TENANT_ID
+
+    if (!tenantId) {
+      console.warn('[Store] fetchOrders skipped: no tenantId')
+      set({ isLoading: false })
+      return
     }
     set({ isLoading: true })
     try {
       const { data, error } = await supabase
         .from('orders')
         .select('*, order_items(*)')
-        .eq('tenant_id', TENANT_ID)
+        .eq('tenant_id', tenantId)
         .not('status', 'eq', 'served')
         .order('created_at', { ascending: true })
 
@@ -36,14 +42,14 @@ export const useOrderStore = create((set, get) => ({
 
   // Subscribe to Realtime changes — call once on KDS mount
   subscribeRealtime: () => {
-    if (!supabase) {
-      console.error('[Store] subscribeRealtime: Supabase client missing!');
-      return () => {};
-    }
+    const { tenantId: storeId } = useAuthStore.getState()
+    const tenantId = storeId || import.meta.env.VITE_TENANT_ID
+    if (!tenantId) return () => {}
+
     const channel = supabase
       .channel('orders-realtime')
       .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'orders', filter: `tenant_id=eq.${TENANT_ID}` },
+        { event: '*', schema: 'public', table: 'orders', filter: `tenant_id=eq.${tenantId}` },
         (payload) => {
           const { eventType, new: newRow, old: oldRow } = payload
 
@@ -81,11 +87,13 @@ export const useOrderStore = create((set, get) => ({
 
   // Write status to DB → Realtime will update Zustand
   updateOrderStatus: async (id, status) => {
+    const { tenantId: storeId } = useAuthStore.getState()
+    const tenantId = storeId || import.meta.env.VITE_TENANT_ID
     const { error } = await supabase
       .from('orders')
       .update({ status })
       .eq('id', id)
-      .eq('tenant_id', TENANT_ID)
+      .eq('tenant_id', tenantId)
 
     if (error) console.error('[KDS] updateOrderStatus error:', error)
     // Do NOT manually update Zustand — Realtime handles it
@@ -93,15 +101,102 @@ export const useOrderStore = create((set, get) => ({
 
   // Remove (mark served) in DB → Realtime handles Zustand update
   removeOrder: async (id) => {
+    const { tenantId } = useAuthStore.getState()
     // We already updated status to 'served' in the component usually,
     // but this ensures the store action is consistent.
     const { error } = await supabase
       .from('orders')
       .update({ status: 'served' })
       .eq('id', id)
-      .eq('tenant_id', TENANT_ID)
+      .eq('tenant_id', tenantId)
 
     if (error) console.error('[KDS] removeOrder error:', error)
+  },
+
+  // Partial Accept: Items NOT in acceptedIds are marked is_rejected
+  acceptPartialOrder: async (orderId, acceptedIds) => {
+    const { tenantId: storeId } = useAuthStore.getState()
+    const tenantId = storeId || import.meta.env.VITE_TENANT_ID
+    const { orders } = get()
+    const order = orders.find(o => o.id === orderId)
+    if (!order) return
+
+    const rejectedIds = order.items
+      .filter(it => !acceptedIds.includes(it.id))
+      .map(it => it.id)
+
+    // OPTIMISTIC UPDATE: Move to cooking and reject filtered items instantly
+    set(s => ({
+      orders: s.orders.map(o => {
+        if (o.id !== orderId) return o;
+        return {
+          ...o,
+          status: 'cooking',
+          isNew: false,
+          items: o.items.map(it => rejectedIds.includes(it.id) ? { ...it, isRejected: true } : it)
+        };
+      })
+    }));
+
+    try {
+      // 1. Update order status to cooking
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update({ status: 'cooking', is_new: false })
+        .eq('id', orderId)
+        .eq('tenant_id', tenantId)
+
+      if (orderError) throw orderError
+
+      // 2. Mark unselected items as rejected
+      if (rejectedIds.length > 0) {
+        await supabase
+          .from('order_items')
+          .update({ is_rejected: true })
+          .in('id', rejectedIds)
+      }
+    } catch (err) {
+      console.error('[KDS] acceptPartialOrder failed, reverting...', err)
+      get().fetchOrders(); // Revert to server truth
+    }
+  },
+
+  // Reject Order: Mark whole order rejected and items rejected
+  rejectOrder: async (orderId, outOfStockItemIds = []) => {
+    const { tenantId } = useAuthStore.getState()
+    
+    // OPTIMISTIC UPDATE: Remove/Reject order instantly
+    set(s => ({
+      orders: s.orders.map(o => {
+        if (o.id !== orderId) return o;
+        return { ...o, status: 'rejected', isNew: false };
+      })
+    }));
+
+    try {
+      // 1. Mark order rejected
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update({ status: 'rejected', is_new: false })
+        .eq('id', orderId)
+        .eq('tenant_id', tenantId)
+
+      if (orderError) throw orderError
+
+      // 2. Mark all items in this order as rejected
+      await supabase
+        .from('order_items')
+        .update({ is_rejected: true })
+        .eq('order_id', orderId)
+
+      // 3. Mark specific items as out of stock if provided
+      if (outOfStockItemIds.length > 0) {
+        await useMenuStore.getState().markItemsUnavailable(outOfStockItemIds)
+      }
+    } catch (err) {
+      console.error('[KDS] rejectOrder failed, reverting...', err)
+      get().fetchOrders(); // Revert
+    }
   },
 
   setOrderNew: (id) => set(s => ({
@@ -134,12 +229,6 @@ export const useOrderStore = create((set, get) => ({
   },
 }))
 
-// ─── ADMIN STORE ─────────────────────────────────────────────────────────────
-export const useAdminStore = create((set) => ({
-  staff: null,
-  login: (staffData) => set({ staff: staffData }),
-  logout: () => set({ staff: null })
-}))
 
 // ─── TABLE STORE ─────────────────────────────────────────────────────────────
 export const useTableStore = create((set) => ({
@@ -147,11 +236,14 @@ export const useTableStore = create((set) => ({
   isLoading: false,
 
   fetchTables: async () => {
+    const { tenantId } = useAuthStore.getState()
+    if (!tenantId) return
+
     set({ isLoading: true })
     const { data, error } = await supabase
       .from('tables')
       .select('*')
-      .eq('tenant_id', TENANT_ID)
+      .eq('tenant_id', tenantId)
       .order('label', { ascending: true })
 
     if (error) { console.error('[Tables] fetch error:', error); set({ isLoading: false }); return }
@@ -159,11 +251,12 @@ export const useTableStore = create((set) => ({
   },
 
   updateTableStatus: async (id, status) => {
+    const { tenantId } = useAuthStore.getState()
     const { error } = await supabase
       .from('tables')
       .update({ status })
       .eq('id', id)
-      .eq('tenant_id', TENANT_ID)
+      .eq('tenant_id', tenantId)
 
     if (error) console.error('[Tables] updateStatus error:', error)
   },
@@ -185,11 +278,14 @@ export const useMenuStore = create((set) => ({
   isLoading: false,
 
   fetchMenu: async () => {
+    const { tenantId } = useAuthStore.getState()
+    if (!tenantId) return
+
     set({ isLoading: true })
     const { data, error } = await supabase
       .from('menu_items')
       .select('*')
-      .eq('tenant_id', TENANT_ID)
+      .eq('tenant_id', tenantId)
       .order('category', { ascending: true })
 
     if (error) { console.error('[Menu] fetch error:', error); set({ isLoading: false }); return }
@@ -197,6 +293,7 @@ export const useMenuStore = create((set) => ({
   },
 
   toggle86: async (id) => {
+    const { tenantId } = useAuthStore.getState()
     const { items } = useMenuStore.getState()
     const item = items.find(i => i.id === id)
     if (!item) return
@@ -205,11 +302,23 @@ export const useMenuStore = create((set) => ({
       .from('menu_items')
       .update({ is_available: !item.is_available })
       .eq('id', id)
-      .eq('tenant_id', TENANT_ID)
+      .eq('tenant_id', tenantId)
 
     if (error) console.error('[Menu] toggle86 error:', error)
     // Optimistic local update since menu has no Realtime subscription
     else set(s => ({ items: s.items.map(i => i.id === id ? { ...i, is_available: !i.is_available } : i) }))
+  },
+
+  markItemsUnavailable: async (itemIds) => {
+    const { tenantId } = useAuthStore.getState()
+    const { error } = await supabase
+      .from('menu_items')
+      .update({ is_available: false })
+      .in('id', itemIds)
+      .eq('tenant_id', tenantId)
+
+    if (error) console.error('[Menu] markItemsUnavailable error:', error)
+    else set(s => ({ items: s.items.map(i => itemIds.includes(i.id) ? { ...i, is_available: false } : i) }))
   },
 }))
 
@@ -227,12 +336,14 @@ function normalizeOrder(row) {
     isNew: row.isNew || false,
     items: (row.order_items || []).map(it => ({
       id: it?.id,
+      menuItemId: it?.menu_item_id || null, // Needed for OOS flagging
       name: it?.name || 'Unknown Item',
       qty: it?.qty || 1,
       station: it?.station || '',
       allergen: it?.allergen || null,
       note: it?.note || '',
       done: it?.done || false,
+      isRejected: it?.is_rejected || false,
     })).filter(Boolean),
   }
 }
