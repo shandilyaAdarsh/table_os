@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSessionStore } from '../../../store/index'
 import { supabase } from '../../../lib/supabase'
+import { getTableNum } from '../utils/tableNum'
 
 export default function AssistModal({ open, onClose }) {
   const { session_id, table_num } = useSessionStore()
@@ -9,6 +10,7 @@ export default function AssistModal({ open, onClose }) {
   const [error, setError] = useState('')
   const [customMsg, setCustomMsg] = useState('')
   const [showCustom, setShowCustom] = useState(false)
+  const [specialNote, setSpecialNote] = useState('')
 
   // Lock body scroll while open
   useEffect(() => {
@@ -28,9 +30,10 @@ export default function AssistModal({ open, onClose }) {
         .insert({
           tenant_id: '11111111-1111-1111-1111-111111111111',
           table_id: 'e719f4e5-b0f1-4c71-8e31-197041d71956',
-          table_num: table_num || 'T03',
+          table_num: table_num || getTableNum(),
           table_session_id: session_id || '',
           request_type: requestType,
+          message: specialNote.trim() || null,
           status: 'pending'
         })
 
@@ -39,7 +42,9 @@ export default function AssistModal({ open, onClose }) {
         throw error
       }
 
-      onClose()
+      setSuccess('Request sent! Someone will be with you shortly.')
+      setSpecialNote('')
+      setTimeout(() => { setSuccess(''); onClose() }, 2000)
 
     } catch (err) {
       setError('Failed to send request. Try again.')
@@ -81,11 +86,6 @@ export default function AssistModal({ open, onClose }) {
             </button>
           </div>
 
-          {!session_id && (
-             <div style={{ padding: '16px', background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#B91C1C', borderRadius: 12, marginBottom: 20, fontSize: 14, fontFamily: 'Manrope, sans-serif' }}>
-               Please go to the Profile tab and start a session to request assistance.
-             </div>
-          )}
 
           {error && <div style={{ color: '#EF4444', marginBottom: 16, fontSize: 14 }}>{error}</div>}
           
@@ -99,7 +99,7 @@ export default function AssistModal({ open, onClose }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <button 
                 onClick={() => sendAssistRequest('waiter')}
-                disabled={loading || !session_id}
+                disabled={loading}
                 style={btnStyle}
               >
                 <span className="material-symbols-outlined" style={{ color: '#FE932C' }}>pan_tool</span>
@@ -108,7 +108,7 @@ export default function AssistModal({ open, onClose }) {
 
               <button 
                 onClick={() => sendAssistRequest('water')}
-                disabled={loading || !session_id}
+                disabled={loading}
                 style={btnStyle}
               >
                 <span className="material-symbols-outlined" style={{ color: '#3B82F6' }}>water_drop</span>
@@ -117,7 +117,7 @@ export default function AssistModal({ open, onClose }) {
 
               <button 
                 onClick={() => sendAssistRequest('bill')}
-                disabled={loading || !session_id}
+                disabled={loading}
                 style={btnStyle}
               >
                 <span className="material-symbols-outlined" style={{ color: '#10B981' }}>receipt_long</span>
@@ -126,7 +126,7 @@ export default function AssistModal({ open, onClose }) {
 
               <button 
                 onClick={() => sendAssistRequest('special')}
-                disabled={loading || !session_id}
+                disabled={loading}
                 style={btnStyle}
               >
                 <span className="material-symbols-outlined" style={{ color: '#8B5CF6' }}>support_agent</span>
@@ -151,6 +151,35 @@ export default function AssistModal({ open, onClose }) {
                   </button>
                 </div>
               )}
+
+              {/* Special Request textarea (Issue 4) */}
+              <div style={{ marginTop: '16px' }}>
+                <label style={{
+                  fontSize: '11px', fontWeight: '600', color: '#6B7280',
+                  textTransform: 'uppercase', letterSpacing: '0.5px',
+                  display: 'block', marginBottom: '6px'
+                }}>
+                  Special Request (optional)
+                </label>
+                <textarea
+                  value={specialNote}
+                  onChange={e => setSpecialNote(e.target.value)}
+                  placeholder="e.g. Need extra napkins, high chair for baby, allergy alert..."
+                  maxLength={200}
+                  rows={3}
+                  style={{
+                    width: '100%', background: '#F9FAFB',
+                    border: '1.5px solid #E5E7EB', borderRadius: '12px',
+                    padding: '12px', fontSize: '14px', color: '#111827',
+                    resize: 'none', outline: 'none', boxSizing: 'border-box'
+                  }}
+                  onFocus={e => e.target.style.borderColor = '#1A365D'}
+                  onBlur={e => e.target.style.borderColor = '#E5E7EB'}
+                />
+                <div style={{ textAlign: 'right', fontSize: '11px', color: '#9CA3AF', marginTop: '4px' }}>
+                  {specialNote.length}/200
+                </div>
+              </div>
             </div>
           )}
         </div>

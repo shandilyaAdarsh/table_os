@@ -9,10 +9,12 @@ import { useNavigate } from 'react-router-dom'
 import { useCartStore, useSessionStore } from '../../../store/index'
 import { supabase } from '../../../lib/supabase'
 import { AnimatePresence, motion } from 'framer-motion'
+import { getTableNum } from '../utils/tableNum'
 
-const TENANT_ID  = import.meta.env.VITE_TENANT_ID
-const TABLE_NUM  = import.meta.env.VITE_DEMO_TABLE_NUM
-const TABLE_ID   = import.meta.env.VITE_DEMO_TABLE_ID
+// Hardcoded — env vars are NOT reliably set on Vercel for this demo build
+const TENANT_ID = import.meta.env.VITE_TENANT_ID || '11111111-1111-1111-1111-111111111111'
+const TABLE_ID  = import.meta.env.VITE_DEMO_TABLE_ID || null
+
 
 const UPSELL = [
   { id: 'm14', name: 'Garlic Naan x2',  price: 160, image_url: 'https://images.unsplash.com/photo-1601050638917-3606f5095b4e?w=200&q=80' },
@@ -23,11 +25,13 @@ const UPSELL = [
 export default function CartDrawer({ open, onClose }) {
   const navigate   = useNavigate()
   const cartItems  = useCartStore(s => s.items)
-  const { addItem, updateQty, clear } = useCartStore.getState()
+  const addItem    = useCartStore(s => s.addItem)
+  const updateQty  = useCartStore(s => s.updateQty)
+  const clear      = useCartStore(s => s.clear)
   const [isPlacing, setIsPlacing] = useState(false)
   const [note,      setNote]      = useState('')
 
-  const subtotal   = cartItems.reduce((a, i) => a + i.price * i.qty, 0)
+  const subtotal   = cartItems.reduce((a, i) => a + ((i.unit_price || i.price || 0) * i.qty), 0)
   const cgst       = +(subtotal * 0.025).toFixed(2)
   const sgst       = +(subtotal * 0.025).toFixed(2)
   const grandTotal = subtotal + cgst + sgst
@@ -43,51 +47,88 @@ export default function CartDrawer({ open, onClose }) {
     return () => { document.body.style.overflow = '' }
   }, [open])
 
+  // 5-tier table number resolver — survives React Router navigation dropping ?table=
+  const resolveTableNum = () => {
+    // Priority 1: Zustand session store
+    const store = useSessionStore.getState()
+    const fromStore = store.table_num || store.tableNum || store.currentTable
+    if (fromStore && fromStore !== 'undefined' && fromStore !== 'null') return fromStore
+
+    // Priority 2: Current URL
+    const fromUrl = new URLSearchParams(window.location.search).get('table')
+    if (fromUrl) return fromUrl
+
+    // Priority 3: localStorage
+    const fromLocal = localStorage.getItem('tableNum') || localStorage.getItem('table_num')
+    if (fromLocal && fromLocal !== 'undefined' && fromLocal !== 'null') return fromLocal
+
+    // Priority 4: sessionStorage
+    const fromSession = sessionStorage.getItem('tableNum') || sessionStorage.getItem('table_num')
+    if (fromSession && fromSession !== 'undefined' && fromSession !== 'null') return fromSession
+
+    // Priority 5: Absolute demo fallback
+    return 'T03'
+  }
+
   const handlePlaceOrder = async () => {
     if (cartItems.length === 0 || isPlacing) return
     setIsPlacing(true)
     try {
+      const resolvedTableNum = resolveTableNum()
+      console.log('[CartDrawer] resolvedTableNum:', resolvedTableNum)
+      console.log('[CartDrawer] window.location.search:', window.location.search)
+      console.log('[CartDrawer] localStorage tableNum:', localStorage.getItem('tableNum'))
+
+      // Read guest session saved by CheckIn screen
+      const guestSession = JSON.parse(localStorage.getItem('customerSession') || '{}')
+
       const { data: order, error } = await supabase
         .from('orders')
         .insert({
           tenant_id: TENANT_ID,
-          table_id: TABLE_ID,
+          ...(TABLE_ID ? { table_id: TABLE_ID } : {}),
           table_session_id: useSessionStore.getState().session_id,
-          table_num: TABLE_NUM,
+          table_num: resolvedTableNum,
           status: 'pending',
-          note,
+          note: note || `Order by ${guestSession.name || 'Guest'} · Party of ${guestSession.guestCount || 1}`,
           total_amount: Math.round(grandTotal),
           is_new: true,
           ends_at: new Date(Date.now() + 25 * 60000).toISOString(),
+          guest_name: guestSession.name || 'Guest',
+          guest_phone: guestSession.phone || null,
+          guest_count: guestSession.guestCount || 1,
         })
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('[CartDrawer] order insert error:', error)
+        throw error
+      }
 
-      await supabase.from('order_items').insert(
+      const { error: itemsError } = await supabase.from('order_items').insert(
         cartItems.map(item => ({
-          order_id: order.id,
-          menu_item_id: item.id,
-          name: item.name,
-          qty: item.qty,
-          unit_price: item.price,
-          station: item.station || 'HOT',
-          allergen: item.allergen || null,
-          note: item.note || null,
-          modifiers: item.modifiers || [],
+          order_id:     order.id,
+          menu_item_id: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id) ? item.id : null,
+          name:         item.name,
+          qty:          item.qty,
+          unit_price:   item.unit_price || item.price || 0,
         }))
       )
 
+      if (itemsError) {
+        console.error('[CartDrawer] order_items insert error:', itemsError)
+        throw itemsError
+      }
+
+      const newOrderId = order.id
       clear()
       onClose()
-      navigate(`/customer/confirmed/${order.id}`)
+      navigate(`/customer/confirmed/${newOrderId}`, { state: { orderId: newOrderId } })
     } catch (err) {
       console.error('[CartDrawer] placeOrder failed:', err.message)
-      const mockId = `mock-${Date.now()}`
-      clear()
-      onClose()
-      navigate(`/customer/confirmed/${mockId}`)
+      setIsPlacing(false)
+      alert('Could not place order. Please try again.')
     } finally {
       setIsPlacing(false)
     }
@@ -156,12 +197,12 @@ export default function CartDrawer({ open, onClose }) {
                           {item.modifiers?.length > 0 && (
                             <p style={{ fontSize: 12, color: '#6B7280', margin: '0 0 6px' }}>{item.modifiers.join(', ')}</p>
                           )}
-                          <span style={{ fontWeight: 800, fontSize: 15, color: '#F97316' }}>₹{item.price * item.qty}</span>
+                          <span style={{ fontWeight: 800, fontSize: 15, color: '#F97316' }}>₹{(item.unit_price || item.price || 0) * item.qty}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', background: '#F3F4F6', borderRadius: 10, height: 36, padding: '0 4px', alignSelf: 'center' }}>
                           <button onClick={() => updateQty(item.id, item.modifiers, item.qty - 1)} style={{ width: 28, height: 28, border: 'none', background: 'transparent', color: '#1B2B4B', fontWeight: 800, cursor: 'pointer', fontSize: 18 }}>−</button>
                           <span style={{ width: 30, textAlign: 'center', fontSize: 13, fontWeight: 700, color: '#111827' }}>{item.qty}</span>
-                          <button onClick={() => addItem({ ...item, qty: 1 })} style={{ width: 28, height: 28, border: 'none', background: 'transparent', color: '#1B2B4B', fontWeight: 800, cursor: 'pointer', fontSize: 18 }}>+</button>
+                          <button onClick={() => addItem({ ...item, qty: 1, unit_price: item.unit_price || item.price || 0 })} style={{ width: 28, height: 28, border: 'none', background: 'transparent', color: '#1B2B4B', fontWeight: 800, cursor: 'pointer', fontSize: 18 }}>+</button>
                         </div>
                       </div>
                     ))}
@@ -178,7 +219,7 @@ export default function CartDrawer({ open, onClose }) {
                           <p style={{ fontWeight: 700, fontSize: 12, color: '#1B2B4B', margin: '0 0 4px', lineHeight: 1.3, height: 32, overflow: 'hidden' }}>{rec.name}</p>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
                             <span style={{ fontWeight: 800, fontSize: 13, color: '#F97316' }}>₹{rec.price}</span>
-                            <button onClick={() => addItem({ ...rec, qty: 1, modifiers: [], note: '' })} style={{ width: 28, height: 28, borderRadius: 8, background: '#1B2B4B', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>+</button>
+                            <button onClick={() => addItem({ ...rec, qty: 1, unit_price: rec.price, modifiers: [], note: '' })} style={{ width: 28, height: 28, borderRadius: 8, background: '#1B2B4B', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>+</button>
                           </div>
                         </div>
                       ))}

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../../../lib/supabase'
 import { motion } from 'framer-motion'
 import { playBeep } from '../../../utils/beep'
 import { BottomNav } from '../components/BottomNav'
+import { getTableNum } from '../utils/tableNum'
 
 const STATUS_MAP = {
   pending:  { step: 1 },
@@ -23,6 +24,8 @@ const STEPS = [
 export default function OrderTracking() {
   const { orderId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  const resolvedOrderId = orderId || location?.state?.orderId
   
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -32,7 +35,7 @@ export default function OrderTracking() {
   const [paymentDone, setPaymentDone] = useState(false)
 
   useEffect(() => {
-    if (!orderId) return
+    if (!resolvedOrderId) return
 
     const fetchOrder = async () => {
       const { data, error } = await supabase
@@ -48,7 +51,7 @@ export default function OrderTracking() {
             )
           )
         `)
-        .eq('id', orderId)
+        .eq('id', resolvedOrderId)
         .single()
         
       if (!error && data) {
@@ -60,24 +63,40 @@ export default function OrderTracking() {
     
     fetchOrder()
 
+    const fetchOrderItems = async () => {
+      const { data } = await supabase
+        .from('order_items')
+        .select('*')
+        .eq('order_id', resolvedOrderId)
+      if (data) setOrder(prev => prev ? { ...prev, order_items: data } : prev)
+    }
+
     const channel = supabase
-      .channel('track-order-' + orderId)
+      .channel(`track-order-${resolvedOrderId}`)
       .on('postgres_changes', {
-        event: 'UPDATE',
+        event: '*',
         schema: 'public',
         table: 'orders',
-        filter: 'id=eq.' + orderId
+        filter: `id=eq.${resolvedOrderId}`
       }, (payload) => {
         setOrderStatus(payload.new.status)
         setOrder(prev => ({ ...prev, ...payload.new }))
         playBeep()
       })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'order_items',
+        filter: `order_id=eq.${resolvedOrderId}`
+      }, () => {
+        fetchOrderItems()
+      })
       .subscribe()
-    
+
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [orderId])
+  }, [resolvedOrderId])
 
   // Unlock audio on first tap (iOS requirement)
   useEffect(() => {
@@ -102,16 +121,7 @@ export default function OrderTracking() {
     return () => clearInterval(interval)
   }, [order?.created_at])
 
-  // Auto-redirect on served
-  useEffect(() => {
-    if (orderStatus === 'served') {
-      const t = setTimeout(() => {
-        navigate(`/customer/pay/${orderId}`)
-      }, 3000)
-      return () => clearTimeout(t)
-    }
-  }, [orderStatus, orderId, navigate])
-
+  // No auto-redirect on served — show Thank You screen instead
   // Stop on rejected — no redirect
 
   if (!order) {
@@ -143,15 +153,33 @@ export default function OrderTracking() {
   const stepIndex = { pending: 1, cooking: 2, ready: 3, served: 4, rejected: -1, payment_pending: 2, paid: 3 }
   const currentStep = stepIndex[orderStatus] ?? 1
 
-  // ETA calculation from localElapsed
-  const etaSeconds = Math.max(0, 20 * 60 - localElapsed)
+  // ETA calculation — item-count-based
+  const orderItemsList = order?.order_items || []
+  const itemCount = orderItemsList.length
+  const baseMins = Math.min(8 + (itemCount - 1) * 4, 35)
+  const etaSeconds = Math.max(0, (baseMins * 60) - localElapsed)
   const etaMinutes = Math.ceil(etaSeconds / 60)
 
   // Bill totals
-  const subtotal = (order?.order_items || []).reduce((sum, item) =>
+  const subtotal = orderItemsList.reduce((sum, item) =>
     sum + ((item.unit_price || 0) * (item.qty || 0)), 0)
   const gst = Math.round(subtotal * 0.05)
   const total = subtotal + gst
+
+  // Item status helpers (Issue 9)
+  const getItemStatus = (item) => {
+    if (item.is_rejected) return 'rejected'
+    if (item.done) return 'done'
+    if (item.status === 'accepted') return 'cooking'
+    return 'pending'
+  }
+
+  const statusConfig = {
+    rejected: { text: '✕ Not Prepared', color: '#EF4444', bg: '#FEF2F2' },
+    done:     { text: '✓ Ready',        color: '#16A34A', bg: '#F0FDF4' },
+    cooking:  { text: '🍳 Preparing',   color: '#1A365D', bg: '#EFF6FF' },
+    pending:  { text: '⏳ Waiting',     color: '#D97706', bg: '#FFFBEB' },
+  }
 
   // Load Razorpay SDK dynamically
   const loadRazorpay = () => {
@@ -181,7 +209,7 @@ export default function OrderTracking() {
         amount: total * 100,
         currency: 'INR',
         name: 'The Grand Spice',
-        description: `Order #${String(orderId).slice(-6).toUpperCase()}`,
+        description: `Order #${String(resolvedOrderId).slice(-6).toUpperCase()}`,
         image: 'https://i.imgur.com/n5tjHFD.png',
         handler: async (response) => {
           const paymentId = response.razorpay_payment_id
@@ -189,12 +217,12 @@ export default function OrderTracking() {
           await supabase
             .from('orders')
             .update({ status: 'paid' })
-            .eq('id', orderId)
+            .eq('id', resolvedOrderId)
 
           await supabase
             .from('restaurant_tables')
             .update({ status: 'paid' })
-            .eq('table_num', order?.table_num)
+            .eq('table_num', order?.table_num || getTableNum())
             .eq('tenant_id', '11111111-1111-1111-1111-111111111111')
 
           setPaymentDone(true)
@@ -231,7 +259,7 @@ export default function OrderTracking() {
       '       A Rooftop Kitchen, Mumbai',
       '===================================',
       `Table: ${order?.table_num || 'T03'}`,
-      `Order: #${String(orderId).slice(-6).toUpperCase()}`,
+      `Order: #${String(resolvedOrderId).slice(-6).toUpperCase()}`,
       `Date: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
       '-----------------------------------',
       'ITEMS:',
@@ -250,7 +278,7 @@ export default function OrderTracking() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `Invoice_${String(orderId).slice(-6).toUpperCase()}.txt`
+    a.download = `Invoice_${String(resolvedOrderId).slice(-6).toUpperCase()}.txt`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -369,39 +397,35 @@ export default function OrderTracking() {
         <div style={{ background: 'white', borderRadius: 16, margin: '0 16px 16px', padding: 16, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
           <h3 style={{ fontSize: 16, fontWeight: 700, color: '#111827', margin: '0 0 16px' }}>Your Items</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {order?.order_items?.map(item => (
-              <div key={item?.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <img 
-                    src={item?.menu_items?.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&q=80'} 
-                    alt={item?.name}
-                    style={{ width: 48, height: 48, borderRadius: 10, objectFit: 'cover' }}
-                    onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&q=80' }}
-                  />
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>{item?.name}</span>
-                    <span style={{ fontSize: 12, color: '#6B7280' }}>Qty: {item?.qty}</span>
+            {order?.order_items?.map(item => {
+              const itemSt = getItemStatus(item)
+              const cfg = statusConfig[itemSt]
+              return (
+                <div key={item?.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <img 
+                      src={item?.menu_items?.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&q=80'} 
+                      alt={item?.name}
+                      style={{ width: 48, height: 48, borderRadius: 10, objectFit: 'cover' }}
+                      onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&q=80' }}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{
+                        fontSize: 14, fontWeight: 600,
+                        textDecoration: item?.is_rejected ? 'line-through' : 'none',
+                        color: item?.is_rejected ? '#9CA3AF' : '#111827'
+                      }}>{item?.name}</span>
+                      <span style={{ fontSize: 12, color: '#6B7280' }}>Qty: {item?.qty}</span>
+                    </div>
                   </div>
+                  <span style={{
+                    fontSize: '11px', fontWeight: '600',
+                    color: cfg.color, background: cfg.bg,
+                    padding: '3px 8px', borderRadius: '20px'
+                  }}>{cfg.text}</span>
                 </div>
-                <div>
-                  {item?.status === 'out_of_stock' ? (
-                    <span style={{
-                      background: '#FEE2E2',
-                      color: '#EF4444',
-                      fontSize: '11px',
-                      fontWeight: '700',
-                      padding: '2px 8px',
-                      borderRadius: '20px',
-                      marginLeft: '8px'
-                    }}>Out of Stock</span>
-                  ) : item?.status === 'accepted' || item?.done === true ? (
-                    <span style={{ color: '#22C55E', fontSize: '13px' }}>✅ Accepted</span>
-                  ) : (
-                    <span style={{ color: '#F97316', fontSize: '13px' }}>🔄 Preparing</span>
-                  )}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
 
@@ -417,6 +441,21 @@ export default function OrderTracking() {
             <p style={{ fontSize: '14px', fontWeight: '600', color: '#111827', marginBottom: '12px' }}>
               Bill Summary
             </p>
+
+            {/* Item breakdown */}
+            {orderItemsList.filter(item => !item.is_rejected).map(item => (
+              <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <span style={{ fontSize: '13px', color: '#374151', maxWidth: '65%' }}>
+                  {item.name}
+                  <span style={{ color: '#9CA3AF', marginLeft: '4px' }}>×{item.qty}</span>
+                </span>
+                <span style={{ fontSize: '13px', color: '#374151', fontWeight: '500' }}>
+                  ₹{(item.unit_price || 0) * (item.qty || 0)}
+                </span>
+              </div>
+            ))}
+
+            <div style={{ height: '1px', background: '#F3F4F6', margin: '8px 0 10px' }} />
 
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
               <span style={{ fontSize: '13px', color: '#6B7280' }}>Subtotal</span>
@@ -525,6 +564,78 @@ export default function OrderTracking() {
 
       {/* 7. BOTTOM NAV */}
       <BottomNav />
+
+      {/* THANK YOU SCREEN — shown when order is served */}
+      {orderStatus === 'served' && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 100,
+          minHeight: '100vh',
+          background: 'white',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '32px 24px',
+          textAlign: 'center',
+          maxWidth: '430px',
+          margin: '0 auto',
+        }}>
+          <div style={{
+            width: '80px', height: '80px',
+            background: '#F0FDF4',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '36px',
+            marginBottom: '20px'
+          }}>✅</div>
+
+          <h2 style={{ fontSize: '24px', fontWeight: '700', color: '#111827', margin: '0 0 8px' }}>
+            Thank you for dining with us!
+          </h2>
+
+          <p style={{ fontSize: '14px', color: '#6B7280', margin: '0 0 32px', lineHeight: 1.6 }}>
+            We hope you enjoyed your meal.<br/>
+            Come back and visit us again soon 🙏
+          </p>
+
+          <button
+            onClick={() => navigate(`/menu?table=${order?.table_num || 'T03'}`)}
+            style={{
+              width: '100%',
+              background: '#1A365D',
+              color: 'white',
+              border: 'none',
+              borderRadius: '14px',
+              padding: '15px',
+              fontSize: '15px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              marginBottom: '12px'
+            }}
+          >
+            Back to Menu
+          </button>
+
+          <button
+            onClick={() => navigate('/customer/orders')}
+            style={{
+              width: '100%',
+              background: 'white',
+              color: '#1A365D',
+              border: '1.5px solid #1A365D',
+              borderRadius: '14px',
+              padding: '14px',
+              fontSize: '15px',
+              fontWeight: '600',
+              cursor: 'pointer'
+            }}
+          >
+            View Order History
+          </button>
+        </div>
+      )}
     </div>
   )
 }

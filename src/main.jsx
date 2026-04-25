@@ -1,7 +1,9 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './index.css'
+import { saveTableNum } from './apps/customer/utils/tableNum'
+import CheckIn from './apps/customer/pages/CheckIn'
 
 import MenuHome from './apps/customer/pages/MenuHome'
 import ItemDetail from './apps/customer/pages/ItemDetail'
@@ -16,7 +18,20 @@ import StaffLogin from './apps/staff/pages/StaffLogin'
 import TableOverview from './apps/staff/pages/TableOverview'
 import TableDetail from './apps/staff/pages/TableDetail'
 
+
 function CustomerApp() {
+  // Save ?table= param from URL to localStorage on first load.
+  // This survives React Router navigation that strips the query param.
+  useEffect(() => { saveTableNum() }, [])
+
+  // session lives only in React state — resets on page reload so CheckIn always shows.
+  // This is correct for a restaurant: each new customer scans fresh and checks in.
+  const [session, setSession] = useState(null)
+
+  if (!session) {
+    return <CheckIn onComplete={(s) => setSession(s)} />
+  }
+
   return (
     <Routes>
       <Route index element={<Splash />} />

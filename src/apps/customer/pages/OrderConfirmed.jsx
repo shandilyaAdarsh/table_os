@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import confetti from 'canvas-confetti'
 import { supabase } from '../../../lib/supabase'
 import { motion } from 'framer-motion'
@@ -7,6 +7,8 @@ import { motion } from 'framer-motion'
 export default function OrderConfirmed() {
   const { orderId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  const resolvedOrderId = orderId || location?.state?.orderId
   
   const [order, setOrder] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -14,14 +16,17 @@ export default function OrderConfirmed() {
   const [showCheck, setShowCheck] = useState(false)
 
   useEffect(() => {
-    if (!orderId) return
+    if (!resolvedOrderId) {
+      navigate('/customer/browse')
+      return
+    }
 
     const fetchOrder = async () => {
       try {
         const { data, error: fetchErr } = await supabase
           .from('orders')
           .select('*, order_items(*)')
-          .eq('id', orderId)
+          .eq('id', resolvedOrderId)
           .eq('tenant_id', '11111111-1111-1111-1111-111111111111')
           .single()
 
@@ -51,7 +56,7 @@ export default function OrderConfirmed() {
     }
 
     fetchOrder()
-  }, [orderId])
+  }, [resolvedOrderId])
 
   if (loading) {
     return (
@@ -184,7 +189,7 @@ export default function OrderConfirmed() {
 
       {/* 7. TRACK MY ORDER BUTTON */}
       <button 
-        onClick={() => navigate(orderId ? `/customer/track/${orderId}` : '/customer/browse')}
+        onClick={() => navigate(resolvedOrderId ? `/customer/track/${resolvedOrderId}` : '/customer/browse')}
         className="w-full bg-[#1B2B4B] text-white h-[52px] rounded-[14px] font-[700] text-[16px]"
       >
         Track My Order

@@ -1,16 +1,25 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../../lib/supabase'
-import { useSessionStore } from '../../../store/index'
 import { BottomNav } from '../components/BottomNav'
 
+const TENANT_ID = '11111111-1111-1111-1111-111111111111'
+
+const getSession = () => {
+  try { return JSON.parse(localStorage.getItem('customerSession') || '{}') }
+  catch { return {} }
+}
+
 export default function OrdersPage() {
-  const { session_id, name } = useSessionStore()
+  const session  = getSession()
+  const tableNum = session.tableNum
+    || new URLSearchParams(window.location.search).get('table')
+    || 'T03'
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!session_id) {
+    if (!session.name) {
       setLoading(false)
       return
     }
@@ -18,10 +27,15 @@ export default function OrdersPage() {
     const fetchOrders = async () => {
       const { data, error } = await supabase
         .from('orders')
-        .select('*, order_items(*)')
-        .eq('table_session_id', session_id)
+        .select(`*, order_items(
+          id, name, qty, unit_price,
+          is_rejected, status
+        )`)
+        .eq('tenant_id', TENANT_ID)
+        .eq('table_num', tableNum)
         .order('created_at', { ascending: false })
-      
+        .limit(20)
+
       if (!error && data) {
         setOrders(data)
       }
@@ -30,13 +44,14 @@ export default function OrdersPage() {
 
     fetchOrders()
 
-    const channel = supabase.channel(`customer_orders_session_${session_id}`)
+    const channel = supabase.channel(`customer_orders_table_${tableNum}`)
       .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'orders', filter: `table_session_id=eq.${session_id}`
+        event: '*', schema: 'public', table: 'orders',
+        filter: `table_num=eq.${tableNum}`
       }, (payload) => {
         if (payload.eventType === 'INSERT') {
           supabase.from('orders').select('*, order_items(*)').eq('id', payload.new.id).single()
-            .then(({ data }) => setOrders(prev => [data, ...prev]))
+            .then(({ data }) => { if (data) setOrders(prev => [data, ...prev]) })
         } else if (payload.eventType === 'UPDATE') {
           setOrders(prev => prev.map(o => o.id === payload.new.id ? { ...o, ...payload.new } : o))
         }
@@ -44,9 +59,9 @@ export default function OrdersPage() {
       .subscribe()
 
     return () => supabase.removeChannel(channel)
-  }, [session_id])
+  }, [tableNum])
 
-  if (!session_id) {
+  if (!session.name) {
     return (
       <div style={{ padding: '60px 24px 120px', maxWidth: '430px', margin: '0 auto', fontFamily: 'Inter, sans-serif', background: 'white', minHeight: '100vh' }}>
         <h1 style={{ fontSize: 28, fontWeight: 800, color: '#1B2B4B', marginBottom: 8 }}>Your Orders</h1>
@@ -62,7 +77,7 @@ export default function OrdersPage() {
   return (
     <div style={{ padding: '60px 24px 120px', maxWidth: '430px', margin: '0 auto', fontFamily: 'Inter, sans-serif', background: 'white', minHeight: '100vh' }}>
       <h1 style={{ fontSize: 28, fontWeight: 800, color: '#1B2B4B', marginBottom: 4 }}>Your Orders</h1>
-      <p style={{ margin: '0 0 32px', fontSize: 14, color: '#6B7280', fontWeight: 500 }}>Active orders for {name}</p>
+      <p style={{ margin: '0 0 32px', fontSize: 14, color: '#6B7280', fontWeight: 500 }}>Active orders for {session.name}</p>
 
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '64px 0' }}>
@@ -94,6 +109,49 @@ function OrderCard({ order }) {
   const navigate = useNavigate()
   const [timeRemaining, setTimeRemaining] = useState('')
   const isActive = ['pending', 'cooking', 'ready'].includes(order.status)
+
+  // Issue 10: download invoice as plain-text
+  const downloadInvoice = () => {
+    const session = JSON.parse(localStorage.getItem('customerSession') || '{}')
+    const subtotal = (order.order_items || [])
+      .reduce((sum, i) => sum + ((i.unit_price || 0) * (i.qty || 0)), 0)
+    const gst = Math.round(subtotal * 0.05)
+    const total = subtotal + gst
+
+    const lines = [
+      '===================================',
+      '        THE GRAND SPICE',
+      '      A Rooftop Kitchen, Mumbai',
+      '===================================',
+      `Diner   : ${session.name || 'Guest'}`,
+      `Table   : ${order.table_num}`,
+      `Order   : #${String(order.id).slice(-6).toUpperCase()}`,
+      `Date    : ${new Date(order.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
+      '-----------------------------------',
+      'ITEMS:',
+      ...(order.order_items || []).map(item =>
+        `${item.is_rejected ? '[CANCELLED] ' : ''}` +
+        `${item.name.padEnd(18)} x${item.qty}` +
+        `   \u20b9${(item.unit_price || 0) * (item.qty || 0)}`
+      ),
+      '-----------------------------------',
+      `Subtotal  :             \u20b9${subtotal}`,
+      `GST (5%)  :             \u20b9${gst}`,
+      `TOTAL     :             \u20b9${total}`,
+      '===================================',
+      '   Thank you for dining with us!',
+      '     Visit us again soon \ud83d\ude4f',
+      '===================================',
+    ]
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `GrandSpice_Invoice_${String(order.id).slice(-6).toUpperCase()}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
   
   useEffect(() => {
     if (!order.ends_at || !isActive) {
@@ -189,6 +247,20 @@ function OrderCard({ order }) {
           ))}
         </div>
       )}
+
+      {/* Issue 10: Download Invoice button */}
+      <button
+        onClick={(e) => { e.stopPropagation(); downloadInvoice() }}
+        style={{
+          background: 'white', border: '1.5px solid #1A365D',
+          borderRadius: '10px', padding: '8px 14px',
+          color: '#1A365D', fontSize: '12px', fontWeight: '600',
+          cursor: 'pointer', display: 'flex', alignItems: 'center',
+          gap: '6px', marginTop: '10px'
+        }}
+      >
+        ⬇ Download Invoice
+      </button>
     </div>
   )
 }
