@@ -1,228 +1,436 @@
 import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
-import { supabase, TENANT_ID } from '../../../lib/supabase.js';
 import { useOrderStore } from '../../../store/index.js';
 
-export const formatTime = (s) => 
+// Re-export formatTime for any parent that needs it
+export const formatTime = (s) =>
   `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
-const getBadgeConfig = (elapsed) => {
-  if (elapsed < 180) return { label: 'FRESH', class: 'bg-green-900 text-green-400', color: '#4edea3' };
-  if (elapsed < 420) return { label: 'WARNING', class: 'bg-amber-900 text-amber-400', color: '#F5A623' };
-  if (elapsed < 660) return { label: 'HOT', class: 'bg-orange-900 text-orange-400', color: '#ea580c' };
-  return { label: 'FIRE 🔥', class: 'bg-red-900 text-red-400', color: '#ef4444' };
+
+/* ─── Status config: "Clinical Artisan" palette ─── */
+const getStatusConfig = (status, elapsed) => {
+  // Late (over 11 min) — error state
+  if (status === 'cooking' && elapsed >= 660) return {
+    accentColor:  '#BA1A1A',
+    headerBg:     'rgba(186,26,26,0.04)',
+    timerColor:   '#BA1A1A',
+    timerPulse:   true,
+    showLate:     true,
+    lateLabel:    `LATE +${Math.floor((elapsed - 660) / 60)}m`,
+    outlineColor: 'rgba(186,26,26,0.15)',
+  };
+
+  if (status === 'ready') return {
+    accentColor:  '#006948',
+    headerBg:     'rgba(0,105,72,0.04)',
+    timerColor:   '#BA1A1A',
+    timerPulse:   false,
+    showLate:     elapsed >= 660,
+    lateLabel:    'LATE',
+    outlineColor: 'rgba(0,105,72,0.15)',
+  };
+
+  if (status === 'cooking') return {
+    accentColor:  '#2D5FA3',
+    headerBg:     'rgba(45,95,163,0.04)',
+    timerColor:   '#554336',
+    timerPulse:   false,
+    showLate:     false,
+    lateLabel:    '',
+    outlineColor: 'rgba(45,95,163,0.12)',
+  };
+
+  // pending (default)
+  return {
+    accentColor:  '#8D4B00',
+    headerBg:     'rgba(141,75,0,0.04)',
+    timerColor:   '#554336',
+    timerPulse:   false,
+    showLate:     false,
+    lateLabel:    '',
+    outlineColor: 'rgba(219,194,176,0.5)',
+  };
 };
 
-const OrderCard = ({ id, tableId, tableNum, items, createdAt, status, note, allergen: topLevelAllergen, isDark, theme, onClear, isNew }) => {
+/* ─── Station chip colour map ─── */
+const STATION_COLORS = {
+  GRILL: { bg: '#FFF4EC', color: '#8D4B00' },
+  FRY:   { bg: '#FEF3C7', color: '#92400E' },
+  HOT:   { bg: '#FEE2E2', color: '#991B1B' },
+  COLD:  { bg: '#EFF6FF', color: '#1E40AF' },
+  BAR:   { bg: '#F5F3FF', color: '#5B21B6' },
+};
+
+const chipStyle = (key) => {
+  const c = STATION_COLORS[key?.toUpperCase()] || { bg: '#F2F4F6', color: '#554336' };
+  return {
+    background:   c.bg,
+    color:        c.color,
+    fontSize:     '9px',
+    fontWeight:   900,
+    letterSpacing:'0.05em',
+    padding:      '2px 6px',
+    borderRadius: '9999px',   /* pill */
+    textTransform:'uppercase',
+    whiteSpace:   'nowrap',
+    flexShrink:   0,
+  };
+};
+
+/* ══════════════════════════════════════════════════
+   OrderCard
+══════════════════════════════════════════════════ */
+const OrderCard = ({ order }) => {
+  const { id, tableNum, items, status, createdAt } = order;
+  const acceptPartialOrder = useOrderStore(s => s.acceptPartialOrder);
+  const updateOrderStatus  = useOrderStore(s => s.updateOrderStatus);
+  const toggleOrderItem    = useOrderStore(s => s.toggleOrderItem);
+
+  // Default: all items are selected (kitchen accepts the full order unless they deselect)
+  const [selectedItems, setSelectedItems]     = useState(() => items.map(i => i.id));
   const [isActionLoading, setIsActionLoading] = useState(false);
-  const toggleOrderItem = useOrderStore(state => state.toggleOrderItem);
-  const removeOrder = useOrderStore(state => state.removeOrder);
-  
-  const [localElapsed, setLocalElapsed] = useState(() => {
-    if (!createdAt) return 0;
-    const start = new Date(createdAt).getTime();
-    return Math.floor((Date.now() - start) / 1000);
-  });
+  const [localElapsed, setLocalElapsed]       = useState(0);
 
-  // Per-card local timer tick
+  // Keep selectedItems in sync if items prop changes (e.g. realtime update)
   useEffect(() => {
-    const timerId = setInterval(() => {
-      setLocalElapsed(prev => prev + 1);
-    }, 1000);
-    return () => clearInterval(timerId);
-  }, []);
+    setSelectedItems(items.map(i => i.id));
+  }, [id]);
 
-  // Sync if createdAt changes (e.g. Supabase refresh)
   useEffect(() => {
-    if (createdAt) {
-      const start = new Date(createdAt).getTime();
-      setLocalElapsed(Math.floor((Date.now() - start) / 1000));
-    }
+    const calc = () => {
+      if (!createdAt) return;
+      setLocalElapsed(Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000));
+    };
+    calc();
+    const iv = setInterval(calc, 1000);
+    return () => clearInterval(iv);
   }, [createdAt]);
 
-  const allergen = topLevelAllergen || items.find(i => i.allergen)?.allergen;
-  const badge = getBadgeConfig(localElapsed);
+  const cfg = getStatusConfig(status, localElapsed);
 
-  // Border color style
-  const borderColor = status === 'ready' ? '#4ade80' : badge.color;
+  const toggleSelection = (itemId) =>
+    setSelectedItems(prev =>
+      prev.includes(itemId) ? prev.filter(x => x !== itemId) : [...prev, itemId]
+    );
 
   const handleAction = async () => {
     if (isActionLoading) return;
     setIsActionLoading(true);
-
     try {
       if (status === 'pending') {
-        // ACCEPT → Cooking & clear is_new flag
-        await supabase
-          .from('orders')
-          .update({ status: 'cooking', is_new: false })
-          .eq('id', id)
-          .eq('tenant_id', TENANT_ID);
-      } 
-      else if (status === 'cooking') {
-        // MARK READY
-        await supabase
-          .from('orders')
-          .update({ status: 'ready' })
-          .eq('id', id)
-          .eq('tenant_id', TENANT_ID);
-      } 
-      else if (status === 'ready') {
-        // CLEAR / SERVED
-        // 1. Update table status (Kitchen-side business logic)
-        if (tableId) {
-          await supabase
-            .from('restaurant_tables')
-            .update({ status: 'needs_bussing' })
-            .eq('id', tableId)
-            .eq('tenant_id', TENANT_ID);
-        }
-
-        // 2. Call store to update order status to 'served' and handle local state
-        await removeOrder(id);
-
-        if (onClear) {
-          onClear({ id, tableNum, items, createdAt, status, note, allergen: topLevelAllergen });
-        }
+        // acceptPartialOrder: moves to cooking + marks unselected items as rejected
+        await acceptPartialOrder(id, selectedItems);
+      } else if (status === 'cooking') {
+        await updateOrderStatus(id, 'ready');
+      } else if (status === 'ready') {
+        await updateOrderStatus(id, 'served');
       }
-    } catch (error) {
-      console.error('[KDS] handleAction error:', error);
+    } catch (err) {
+      console.error('[KDS] Action error:', err);
     } finally {
       setIsActionLoading(false);
     }
   };
 
-  const getButtonConfig = () => {
-    const baseClass = "text-white text-xs font-bold font-mono px-5 py-2 rounded-full cursor-pointer transition-colors duration-150";
-    switch (status) {
-      case 'pending':
-        return { label: 'ACCEPT', className: `bg-blue-600 hover:bg-blue-500 ${baseClass}` };
-      case 'cooking':
-        return { label: 'MARK READY', className: `bg-emerald-600 hover:bg-emerald-500 ${baseClass}` };
-      case 'ready':
-        return { label: 'CLEAR', className: `bg-[#2A2A2A] hover:bg-[#3A3A3A] text-gray-400 ${baseClass}`.replace('text-white', '') };
-      default:
-        return { label: 'ACTION', className: `bg-zinc-700 ${baseClass}` };
-    }
-  };
-
-  const button = getButtonConfig();
-
-  const cardBackground = isDark
-    ? (status === 'ready' ? '#0A1F0A' : status === 'cooking' ? '#191400' : '#1E1E1E')
-    : (status === 'ready' ? '#F0FFF4' : status === 'cooking' ? '#FFFBEB' : '#FFFFFF');
-
-  const cardShadow = isDark 
-    ? '0 4px 20px rgba(0,0,0,0.4)' 
-    : '0 2px 12px rgba(0,0,0,0.08)';
-
-  // Combine pulse animations: long-running (red/slow) vs new (amber/fast)
-  const isDanger = localElapsed >= 660;
-  const pulseClass = isDanger ? 'animate-pulse' : (isNew ? 'ring-4 ring-amber-500/50 animate-pulse' : '');
-
+  /* ─── CARD SHELL ─── */
   return (
-    <div 
-      className={pulseClass}
-      style={{ 
-        width: '100%',
-        boxSizing: 'border-box',
-        flexShrink: 0,
-        borderRadius: '16px',
-        padding: '16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px',
-        borderLeft: `5px solid ${borderColor}`,
-        background: cardBackground,
-        boxShadow: cardShadow,
-        transition: 'all 0.3s ease'
+    <div
+      className="order-card"
+      style={{
+        background:   '#FFFFFF',                     /* surface-container-lowest */
+        borderRadius: '8px',
+        overflow:     'hidden',
+        display:      'flex',
+        flexDirection:'column',
+        /* Ghost border — 15 % opacity as per spec */
+        outline:      `1px solid ${cfg.outlineColor}`,
+        /* Ambient shadow — marble-countertop diffuse */
+        boxShadow:    '0px 12px 32px rgba(15,23,42,0.06)',
+        /* left accent stripe — 4 px, no full border */
+        borderLeft:   `4px solid ${cfg.accentColor}`,
+        transition:   'transform 0.2s cubic-bezier(0.2,0,0,1)',
       }}
     >
-      {/* TOP ROW */}
-      <div className="flex justify-between items-start">
-        <div className="flex flex-col">
-          <span className="font-mono font-black text-lg" style={{ color: theme.text }}>
-            {String(id).startsWith('#') ? id : `#${id}`}
-          </span>
-          {isNew && (
-            <span className="text-[10px] font-black text-amber-500 font-mono animate-bounce mt-1">NEW ORDER</span>
-          )}
+      {/* ── CARD HEADER ── */}
+      <div style={{
+        padding:        '14px 16px',
+        background:     cfg.headerBg,
+        display:        'flex',
+        justifyContent: 'space-between',
+        alignItems:     'flex-start',
+        borderBottom:   '1px solid rgba(219,194,176,0.3)',
+      }}>
+        <div>
+          {/* Table number — "The Pulse" display */}
+          <h4 style={{
+            fontSize:      '26px',
+            fontWeight:    900,
+            letterSpacing: '-0.04em',
+            lineHeight:    1,
+            color:         '#191C1E',
+          }}>
+            T{tableNum}
+          </h4>
+          {/* Order ID — label metadata */}
+          <p style={{
+            fontSize:      '9px',
+            fontWeight:    700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.12em',
+            color:         '#887364',
+            marginTop:     '4px',
+          }}>
+            #{id.slice(0, 8)}
+          </p>
         </div>
-        
-        <div className="flex flex-col items-end gap-1">
-          <span 
-            className={`font-mono font-black text-2xl ${isDanger ? 'text-red-500 animate-pulse' : 'text-[#F5A623]'}`}
-          >
+
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+          <span style={{
+            fontFamily:         '"Inter", monospace',
+            fontVariantNumeric: 'tabular-nums',
+            fontSize:           '20px',
+            fontWeight:         700,
+            letterSpacing:      '-0.02em',
+            lineHeight:         1,
+            color:              cfg.timerColor,
+            animation:          cfg.timerPulse ? 'pulse 1s ease-in-out infinite' : 'none',
+          }}>
             {formatTime(localElapsed)}
           </span>
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${badge.class}`}>
-            {badge.label}
-          </span>
-        </div>
-      </div>
-
-      {/* ALLERGEN BANNER */}
-      {allergen && (
-        <div className="w-full bg-red-950 border border-red-800 rounded-lg px-3 py-2 text-red-400 text-xs font-bold font-mono">
-          ⚠️ {allergen}
-        </div>
-      )}
-
-      {/* ITEMS LIST */}
-      <div className="flex flex-col gap-2">
-        {items.map((item, idx) => (
-          <div 
-            key={item.id || idx} 
-            onClick={() => toggleOrderItem(id, item.id, !item.done)}
-            className="flex items-start gap-2 text-sm cursor-pointer group"
-          >
-            <div className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-colors ${
-              item.done ? 'bg-green-600 border-green-600' : 'border-zinc-700 hover:border-zinc-500'
-            }`}>
-              {item.done && <span className="text-[10px] text-white">✓</span>}
-            </div>
-            <span className="font-mono w-6 shrink-0" style={{ color: theme.textMuted }}>
-              {item.qty}x
+          {cfg.showLate && (
+            <span style={{
+              fontSize:      '9px',
+              fontWeight:    900,
+              textTransform: 'uppercase',
+              letterSpacing: '0.15em',
+              color:         '#BA1A1A',
+            }}>
+              {cfg.lateLabel}
             </span>
-            <span 
-              className={`font-medium transition-all ${item.done ? 'line-through opacity-40' : 'group-hover:translate-x-1'}`} 
-              style={{ color: item.done ? theme.textMuted : theme.text }}
-            >
-              {item.name}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* NOTE */}
-      {note && (
-        <div className="text-amber-500 text-xs italic">
-          📝 {note}
-        </div>
-      )}
-
-      {/* BOTTOM ROW */}
-      <div 
-        className="flex justify-between items-center"
-        style={{ marginTop: '8px', paddingRight: '4px' }}
-      >
-        <span className="text-xs font-mono tracking-widest uppercase" style={{ color: theme.textMuted }}>
-          TABLE {tableNum}
-        </span>
-        <button 
-          onClick={handleAction}
-          disabled={isActionLoading}
-          className={`${button.className} shrink-0 flex items-center justify-center gap-2 min-w-[100px]`}
-        >
-          {isActionLoading ? (
-            <>
-              <Loader2 size={14} className="animate-spin" />
-              <span>WAITING...</span>
-            </>
-          ) : (
-            button.label
           )}
-        </button>
+        </div>
+      </div>
+
+      {/* ── ITEMS LIST ── */}
+      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}>
+        {items.filter(item => status === 'pending' || !item.isRejected).map((item, idx) => {
+          const isPending  = status === 'pending';
+          const isSelected = selectedItems.includes(item.id);
+          const isItemDone = item.done;
+          const isAllergy  = item.note?.toLowerCase().includes('allergy');
+
+          /* dim unselected pending items, done cooking items */
+          const rowOpacity = (isPending && !isSelected) ? 0.35
+                           : (isItemDone && status === 'cooking') ? 0.5
+                           : 1;
+
+          return (
+            <div
+              key={item.id || idx}
+              onClick={() => isPending ? toggleSelection(item.id) : toggleOrderItem(id, item.id, !item.done)}
+              style={{
+                display:    'flex',
+                alignItems: 'flex-start',
+                gap:        '12px',
+                opacity:    rowOpacity,
+                cursor:     'pointer',
+                transition: 'opacity 0.2s cubic-bezier(0.2,0,0,1)',
+              }}
+            >
+              {/* check icon */}
+              {isItemDone ? (
+                <span
+                  className="material-symbols-outlined"
+                  style={{
+                    fontSize: '20px',
+                    color:    status === 'cooking' ? '#2D5FA3' : '#006948',
+                    flexShrink: 0,
+                    fontVariationSettings: "'FILL' 1",
+                  }}
+                >
+                  check_circle
+                </span>
+              ) : (
+                <span
+                  className="material-symbols-outlined"
+                  style={{ fontSize: '20px', color: '#DBC2B0', flexShrink: 0 }}
+                >
+                  radio_button_unchecked
+                </span>
+              )}
+
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' }}>
+                  {/* Dish name — "The Hero" title scale */}
+                  <span style={{
+                    fontSize:       '14px',
+                    fontWeight:     700,
+                    letterSpacing:  '-0.01em',
+                    lineHeight:     1.3,
+                    color:          isItemDone && status !== 'cooking' ? '#887364' : '#191C1E',
+                    textDecoration: isItemDone && status === 'cooking' ? 'line-through' : 'none',
+                    transition:     'color 0.2s cubic-bezier(0.2,0,0,1)',
+                  }}>
+                    {item.qty > 1 && (
+                      <span style={{ color: '#8D4B00', marginRight: '4px' }}>{item.qty}×</span>
+                    )}
+                    {item.name}
+                  </span>
+                  {/* station chip */}
+                  {item.station && (
+                    <span style={chipStyle(item.station)}>
+                      {item.station.toUpperCase()}
+                    </span>
+                  )}
+                </div>
+
+                {/* Modifications — "The Specs" body */}
+                {item.note && !isAllergy && (
+                  <p style={{ fontSize: '11px', color: '#887364', fontStyle: 'italic', marginTop: '4px' }}>
+                    • {item.note}
+                  </p>
+                )}
+
+                {/* Allergy — danger */}
+                {isAllergy && (
+                  <p style={{
+                    fontSize:      '10px',
+                    fontWeight:    900,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.12em',
+                    color:         '#BA1A1A',
+                    marginTop:     '6px',
+                  }}>
+                    {item.note}
+                  </p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── ACTIONS ── */}
+      <div style={{
+        padding:    '8px',
+        background: '#F2F4F6',
+        borderTop:  '1px solid rgba(219,194,176,0.3)',
+      }}>
+
+        {/* PENDING → ACCEPT */}
+        {status === 'pending' && (
+          <button
+            onClick={(e) => { e.stopPropagation(); handleAction(); }}
+            disabled={isActionLoading || selectedItems.length === 0}
+            className="cubic-transition"
+            style={{
+              width:       '100%',
+              background:  selectedItems.length > 0
+                ? 'linear-gradient(15deg, #8D4B00, #B15F00)'
+                : '#E6E8EA',
+              color:       selectedItems.length > 0 ? '#FFFFFF' : '#887364',
+              fontWeight:  900,
+              fontSize:    '11px',
+              textTransform:'uppercase',
+              letterSpacing:'0.15em',
+              padding:     '13px',
+              borderRadius:'6px',
+              border:      'none',
+              cursor:      selectedItems.length > 0 ? 'pointer' : 'not-allowed',
+              opacity:     isActionLoading ? 0.6 : 1,
+              display:     'flex',
+              alignItems:  'center',
+              justifyContent: 'center',
+            }}
+          >
+            {isActionLoading
+              ? <Loader2 size={14} className="animate-spin" />
+              : 'Accept Order'}
+          </button>
+        )}
+
+        {/* COOKING → BUMP + MARK READY */}
+        {status === 'cooking' && (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              className="cubic-transition"
+              style={{
+                flex:        1,
+                background:  '#FFFFFF',
+                color:       '#554336',
+                fontWeight:  900,
+                fontSize:    '10px',
+                textTransform:'uppercase',
+                letterSpacing:'0.12em',
+                padding:     '13px 8px',
+                borderRadius:'6px',
+                border:      '1px solid #DBC2B0',
+                cursor:      'pointer',
+              }}
+            >
+              BUMP
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleAction(); }}
+              disabled={isActionLoading}
+              className="cubic-transition"
+              style={{
+                flex:        2,
+                background:  'linear-gradient(15deg, #006948, #00855D)',
+                color:       '#FFFFFF',
+                fontWeight:  900,
+                fontSize:    '10px',
+                textTransform:'uppercase',
+                letterSpacing:'0.12em',
+                padding:     '13px 8px',
+                borderRadius:'6px',
+                border:      'none',
+                cursor:      'pointer',
+                opacity:     isActionLoading ? 0.6 : 1,
+                display:     'flex',
+                alignItems:  'center',
+                justifyContent: 'center',
+              }}
+            >
+              {isActionLoading ? <Loader2 size={14} className="animate-spin" /> : 'MARK READY'}
+            </button>
+          </div>
+        )}
+
+        {/* READY → CLEAR / SERVED */}
+        {status === 'ready' && (
+          <button
+            onClick={(e) => { e.stopPropagation(); handleAction(); }}
+            disabled={isActionLoading}
+            className="cubic-transition"
+            style={{
+              width:        '100%',
+              background:   'linear-gradient(15deg, #006948, #00855D)',
+              color:        '#FFFFFF',
+              fontWeight:   900,
+              fontSize:     '11px',
+              textTransform:'uppercase',
+              letterSpacing:'0.12em',
+              padding:      '13px',
+              borderRadius: '6px',
+              border:       'none',
+              cursor:       'pointer',
+              opacity:      isActionLoading ? 0.6 : 1,
+              display:      'flex',
+              alignItems:   'center',
+              justifyContent:'center',
+              gap:          '8px',
+            }}
+          >
+            {isActionLoading
+              ? <Loader2 size={14} className="animate-spin" />
+              : <>
+                  CLEAR / SERVED
+                  <span className="material-symbols-outlined" style={{ fontSize: '16px', fontVariationSettings: "'FILL' 1" }}>check</span>
+                </>
+            }
+          </button>
+        )}
       </div>
     </div>
   );

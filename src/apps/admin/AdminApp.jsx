@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { useAdminStore } from '../../store/index.js';
+import { useAuthStore } from '../../store/authStore.js';
+import ProtectedRoute from '../../components/shared/ProtectedRoute.jsx';
 import AdminLogin from './pages/AdminLogin.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import TableMap from './pages/TableMap.jsx';
@@ -16,24 +17,19 @@ import AdminHeader from './components/AdminHeader.jsx';
 
 // Protected Layout wrapper
 const ProtectedAdminLayout = () => {
-  const staff = useAdminStore((state) => state.staff);
-
-  if (!staff) {
-    // Redirect to login if not authenticated
-    return <Navigate to="/admin/login" replace />;
-  }
-
   return (
-    <div className="flex h-screen w-full bg-[#f9f9ff] overflow-hidden font-body text-[#141b2b]">
-      <AdminSidebar />
-      <AdminBottomNav />
-      <div className="flex-1 flex flex-col min-w-0 lg:ml-[240px]">
-        <AdminHeader />
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-16 lg:p-6 lg:pb-6">
-          <Outlet />
-        </main>
+    <ProtectedRoute allowedRoles={['owner', 'manager']}>
+      <div className="flex h-screen w-full bg-[#f9f9ff] overflow-hidden font-body text-[#141b2b]">
+        <AdminSidebar />
+        <AdminBottomNav />
+        <div className="flex-1 flex flex-col min-w-0 lg:ml-[240px]">
+          <AdminHeader />
+          <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-16 lg:p-6 lg:pb-6">
+            <Outlet />
+          </main>
+        </div>
       </div>
-    </div>
+    </ProtectedRoute>
   );
 };
 

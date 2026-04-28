@@ -32,6 +32,16 @@ function calculateMRR(plan: string, billingCycle: string): number {
 export async function POST(req: NextRequest) {
   let createdTenantId: string | null = null
 
+  const parseEdgeJson = async (res: Response) => {
+    const contentType = res.headers.get('content-type') ?? ''
+    if (contentType.toLowerCase().includes('application/json')) {
+      return res.json()
+    }
+
+    const text = await res.text()
+    return { error: text || `Unexpected ${res.status} response from edge function` }
+  }
+
   try {
     const body = await req.json()
 
@@ -102,6 +112,7 @@ export async function POST(req: NextRequest) {
     const { error: staffError } = await supabaseAdmin.from('staff').insert({
       tenant_id: tenant_id,
       name: ownerName,
+      email: ownerEmail,
       role: 'owner',
       pin,
       is_active: true,
@@ -110,7 +121,7 @@ export async function POST(req: NextRequest) {
     if (staffError) throw new Error(`Staff insert failed: ${staffError.message}`)
 
     // ── 6. Trigger Edge Function ─────────────────────────────────────────
-    const edgeFnUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/onboard-admin`
+    const edgeFnUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/create-tenant-admin`
 
     const edgeRes = await fetch(edgeFnUrl, {
       method: 'POST',
@@ -126,19 +137,38 @@ export async function POST(req: NextRequest) {
       }),
     })
 
-    const edgeData = await edgeRes.json()
+    const edgeData = await parseEdgeJson(edgeRes)
+    console.log('[onboard] Edge function response:', edgeData)
 
-    // Handle 409 Conflict (Email already exists)
-    if (edgeRes.status === 409 || (edgeData.error && edgeData.error.includes('already exists'))) {
-      throw new Error('An admin account for this email already exists.')
+    if (!edgeRes.ok) {
+      // ROLLBACK: Delete tenant if edge function fails
+      console.log(`[onboard] Rolling back tenant ${tenant_id} due to edge function failure`)
+      await supabaseAdmin.from('tenants').delete().eq('id', tenant_id)
+      return NextResponse.json({ error: edgeData.error || 'Edge function failed' }, { status: edgeRes.status })
     }
 
-    if (!edgeRes.ok || edgeData.success !== true || !edgeData.user_id) {
-      console.error('[onboard] edge function failed:', edgeData)
-      throw new Error(edgeData?.message || edgeData?.error || 'Edge function failed to create user or send credentials')
+    if (!edgeData?.success) {
+      console.log(`[onboard] Rolling back tenant ${tenant_id} due to unsuccessful edge function response`)
+      await supabaseAdmin.from('tenants').delete().eq('id', tenant_id)
+      return NextResponse.json(
+        { error: edgeData?.error || 'Unexpected response from create-tenant-admin' },
+        { status: 400 }
+      )
     }
 
     const newUserId = edgeData.user_id
+
+    if (!newUserId) {
+      console.log(`[onboard] Rolling back tenant ${tenant_id} due to missing user_id in edge response`)
+      await supabaseAdmin.from('tenants').delete().eq('id', tenant_id)
+      return NextResponse.json(
+        { error: 'create-tenant-admin did not return a user_id' },
+        { status: 502 }
+      )
+    }
+
+    const emailSent = edgeData.email_sent
+    const devCredentials = edgeData.dev_credentials
 
     // ── 7. Admin Profile (Idempotent) ────────────────────────────────────
     const { error: profileError } = await supabaseAdmin.from('profiles').upsert({
@@ -152,14 +182,21 @@ export async function POST(req: NextRequest) {
     if (profileError) throw new Error(`Profile upsert failed: ${profileError.message}`)
 
     // ── 8. Success ───────────────────────────────────────────────────────
-    return NextResponse.json({
+    const responseData: any = {
       success: true,
       message: 'Tenant created and credentials sent successfully',
       tenantId: tenant_id,
       tenantName: restaurantName,
       adminEmail: ownerEmail,
-      email_sent: edgeData.email_sent !== false
-    })
+      email_sent: emailSent !== false
+    }
+
+    // Only include dev_credentials if NOT in production AND email failed to send
+    if (process.env.NODE_ENV !== 'production' && emailSent === false) {
+      responseData.dev_credentials = devCredentials
+    }
+
+    return NextResponse.json(responseData)
   } catch (err: any) {
     console.error('[onboard] critical error:', err.message)
     

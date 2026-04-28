@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { formatINR } from '@/lib/formatINR'
 
+import type { CredentialInvite } from '@/lib/types'
+
 type Tenant = {
   id: string
   name: string
@@ -16,6 +18,7 @@ type Tenant = {
   orders_today: number
   total_tables: number
   occupied_tables: number
+  credential_invite: CredentialInvite | null
 }
 
 type FilterKey = 'all' | 'active' | 'trial' | 'suspended' | 'pro' | 'enterprise' | 'starter'
@@ -51,6 +54,33 @@ function PlanBadge({ plan }: { plan: string }) {
   )
 }
 
+function DeliveryBadge({ status }: { status?: string }) {
+  if (status === 'used') return (
+    <div className="flex items-center gap-1.5 text-emerald-500" title="Admin logged in successfully">
+      <span className="material-symbols-outlined text-[14px]">check_circle</span>
+      <span className="text-[10px] font-bold uppercase tracking-wider mt-0.5">Active</span>
+    </div>
+  )
+  if (status === 'failed') return (
+    <div className="flex items-center gap-1.5 text-red-500" title="Email delivery failed">
+      <span className="material-symbols-outlined text-[14px]">error</span>
+      <span className="text-[10px] font-bold uppercase tracking-wider mt-0.5">Failed</span>
+    </div>
+  )
+  if (status === 'sent') return (
+    <div className="flex items-center gap-1.5 text-yellow-500" title="Credentials sent, waiting for login">
+      <span className="material-symbols-outlined text-[14px]">mark_email_read</span>
+      <span className="text-[10px] font-bold uppercase tracking-wider mt-0.5">Invited</span>
+    </div>
+  )
+  return (
+    <div className="flex items-center gap-1.5 text-[#555]" title="Preparing credentials">
+      <span className="material-symbols-outlined text-[14px]">hourglass_empty</span>
+      <span className="text-[10px] font-bold uppercase tracking-wider mt-0.5">Pending</span>
+    </div>
+  )
+}
+
 export default function TenantsPage() {
   const router = useRouter()
   const [tenants, setTenants] = useState<Tenant[]>([])
@@ -63,6 +93,7 @@ export default function TenantsPage() {
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all')
   const [counts, setCounts] = useState({ all: 0, active: 0, trial: 0, suspended: 0, pro: 0, enterprise: 0, starter: 0 })
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
   const [currentTenantId, setCurrentTenantId] = useState<string | null>(null)
 
   // Debounce search
@@ -155,6 +186,57 @@ export default function TenantsPage() {
       alert(`Error: ${err.message}`)
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  const handleResend = async (t: Tenant) => {
+    if (!t.credential_invite) return
+    const confirmMsg = `Regenerate password and resend credentials to ${t.credential_invite.email}?`
+    if (!confirm(confirmMsg)) return
+
+    try {
+      const res = await fetch('/api/resend-credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant_id: t.id,
+          email: t.credential_invite.email,
+        })
+      })
+      const data = await res.json()
+
+      if (!res.ok) throw new Error(data.error || 'Failed to resend credentials')
+      
+      alert(`Credentials regenerated and sent to ${t.credential_invite.email}`)
+      fetchTenants() // refresh UI
+    } catch (err: any) {
+      alert(`Error: ${err.message}`)
+    }
+  }
+
+  const handleToggleStatus = async (t: Tenant) => {
+    const isSuspended = t.status === 'suspended'
+    const action = isSuspended ? 'reactivate' : 'suspend'
+    const confirmMsg = `Are you sure you want to ${action} ${t.name}?`
+    if (!confirm(confirmMsg)) return
+
+    setTogglingId(t.id)
+    try {
+      const res = await fetch('/api/toggle-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenant_id: t.id, action })
+      })
+      const data = await res.json()
+
+      if (!res.ok) throw new Error(data.error || `Failed to ${action} tenant`)
+      
+      alert(isSuspended ? `${t.name} has been reactivated.` : `${t.name} has been suspended.`)
+      fetchTenants() // refresh UI
+    } catch (err: any) {
+      alert(`Error: ${err.message}`)
+    } finally {
+      setTogglingId(null)
     }
   }
 
@@ -295,6 +377,35 @@ export default function TenantsPage() {
                   >
                     View Details
                   </button>
+                  {t.credential_invite?.delivery_status === 'failed' && (
+                    <button
+                      onClick={() => handleResend(t)}
+                      className="px-3 py-2 text-xs font-bold text-yellow-500 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-lg transition-colors border border-yellow-500/30 flex items-center gap-1"
+                      title="Resend Credentials"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">send</span> Resend
+                    </button>
+                  )}
+                  {t.id !== currentTenantId && (
+                    <button
+                      disabled={togglingId === t.id}
+                      onClick={() => handleToggleStatus(t)}
+                      className={`w-9 h-9 flex items-center justify-center hover:text-white rounded-lg transition-all border active:scale-95 disabled:opacity-50 disabled:cursor-wait ${
+                        t.status === 'suspended'
+                          ? 'text-emerald-500 hover:bg-emerald-600 border-emerald-900/30'
+                          : 'text-orange-500 hover:bg-orange-600 border-orange-900/30'
+                      }`}
+                      title={t.status === 'suspended' ? 'Reactivate Tenant' : 'Suspend Tenant'}
+                    >
+                      {togglingId === t.id ? (
+                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <span className="material-symbols-outlined text-lg">
+                          {t.status === 'suspended' ? 'play_arrow' : 'pause'}
+                        </span>
+                      )}
+                    </button>
+                  )}
                   {t.id !== currentTenantId && (
                     <button
                       disabled={deletingId === t.id}
@@ -310,9 +421,12 @@ export default function TenantsPage() {
                     </button>
                   )}
                 </div>
-                <span className="text-[10px] font-mono text-[#333]">
-                  {new Date(t.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                </span>
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] font-mono text-[#333]">
+                    {new Date(t.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </span>
+                  <DeliveryBadge status={t.credential_invite?.delivery_status} />
+                </div>
               </div>
             </div>
           ))}

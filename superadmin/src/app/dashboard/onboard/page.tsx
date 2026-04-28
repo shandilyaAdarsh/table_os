@@ -52,6 +52,10 @@ const defaultForm: FormData = {
 interface SuccessData {
   tenantName: string
   adminEmail: string
+  devCredentials?: {
+    email: string
+    password?: string
+  }
 }
 
 export default function OnboardPage() {
@@ -117,11 +121,24 @@ export default function OnboardPage() {
         body: JSON.stringify(payload),
       })
 
-      const result = await response.json()
+      let result: any
+      try {
+        result = await response.json()
+      } catch {
+        setSubmitError('Unexpected server response. Please try again.')
+        return
+      }
+
+      if (!response.ok) {
+        setSubmitError(result?.error || 'Failed to create tenant.')
+        return
+      }
+
       if (result.success) {
         setSuccessData({
           tenantName: formData.restaurantName,
           adminEmail: formData.ownerEmail,
+          devCredentials: result.dev_credentials,
         })
         if (result.email_sent === false) {
           setEmailDeliveryFailed(true)
@@ -516,25 +533,62 @@ export default function OnboardPage() {
               {emailDeliveryFailed ? 'Account Created!' : 'Credentials Sent!'}
             </h4>
 
-            {emailDeliveryFailed && (
-              <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg flex items-center justify-center gap-3">
-                <span className="material-symbols-outlined text-yellow-500 text-sm">error_outline</span>
-                <p className="text-xs text-[#e5e2e1] font-bold uppercase tracking-tight">Email delivery failed. Contact support.</p>
+            {successData.devCredentials && (
+              <div className="mb-8 p-6 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-left space-y-4 shadow-lg shadow-yellow-500/5">
+                <div className="flex items-center gap-2 text-yellow-500 mb-1">
+                  <span className="material-symbols-outlined text-lg">warning</span>
+                  <p className="text-[10px] font-black uppercase tracking-widest">Email delivery failed — share manually</p>
+                </div>
+                
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[9px] uppercase tracking-tighter text-[#555555] font-bold mb-1">Login Email</label>
+                    <div className="bg-black/40 px-3 py-2 rounded border border-white/5 font-mono text-xs text-[#e5e2e1] break-all">
+                      {successData.devCredentials.email}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-[9px] uppercase tracking-tighter text-[#555555] font-bold mb-1">Temp Password</label>
+                    <div className="flex gap-2">
+                      <div className="flex-1 bg-black/40 px-3 py-2 rounded border border-white/5 font-mono text-xs text-yellow-500 font-bold tracking-wider">
+                        {successData.devCredentials.password}
+                      </div>
+                      <button 
+                        onClick={() => {
+                          if (successData.devCredentials?.password) {
+                            navigator.clipboard.writeText(successData.devCredentials.password)
+                          }
+                        }}
+                        className="bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-500 p-2 rounded transition-colors flex items-center justify-center shrink-0"
+                        title="Copy Password"
+                      >
+                        <span className="material-symbols-outlined text-sm">content_copy</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-[9px] text-[#555555] italic leading-tight pt-1">
+                  ⚠️ This is only visible once. Save it now.
+                </p>
               </div>
             )}
 
-            <div className="space-y-2 mb-8">
-              <p className="text-[#c8c6c5] text-sm font-semibold">{successData.tenantName}</p>
-              <p className="text-xs text-[#555555]">
-                {emailDeliveryFailed ? 'Account created for recipient' : 'Credentials sent to'}
-              </p>
-              <p className="font-mono text-sm text-[#ffb3ae] font-bold">{successData.adminEmail}</p>
-              <p className="text-xs text-[#555555] leading-relaxed pt-2">
-                {emailDeliveryFailed 
-                  ? 'Tenant is active, but the admin did not receive their automated invite. Manual distribution required.'
-                  : 'They can now log in to the Admin Dashboard using the credentials sent to their email.'}
-              </p>
-            </div>
+            {!successData.devCredentials && (
+              <div className="space-y-2 mb-8">
+                <p className="text-[#c8c6c5] text-sm font-semibold">{successData.tenantName}</p>
+                <p className="text-xs text-[#555555]">
+                  {emailDeliveryFailed ? 'Account created for recipient' : 'Credentials sent to'}
+                </p>
+                <p className="font-mono text-sm text-[#ffb3ae] font-bold">{successData.adminEmail}</p>
+                <p className="text-xs text-[#555555] leading-relaxed pt-2">
+                  {emailDeliveryFailed 
+                    ? 'Tenant is active, but the admin did not receive their automated invite. Manual distribution required.'
+                    : 'They can now log in to the Admin Dashboard using the credentials sent to their email.'}
+                </p>
+              </div>
+            )}
             <div className="space-y-3">
               <button
                 onClick={() => router.push('/dashboard')}

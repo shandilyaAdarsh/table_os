@@ -29,13 +29,19 @@ export async function GET(request: Request) {
   const { data, count, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // For each tenant get orders_today + table stats
+  // For each tenant get orders_today + table stats + credential delivery status
   const enriched = await Promise.all((data ?? []).map(async (t) => {
-    const [ordersRes, tablesRes] = await Promise.all([
+    const [ordersRes, tablesRes, inviteRes] = await Promise.all([
       supabase.from('orders').select('id', { count: 'exact', head: true })
         .eq('tenant_id', t.id).gte('created_at', new Date().toISOString().split('T')[0]),
       supabase.from('restaurant_tables').select('id,status')
         .eq('tenant_id', t.id),
+      supabase.from('credential_invites')
+        .select('id,email,delivery_status,delivery_attempts,sent_at')
+        .eq('tenant_id', t.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ])
     const totalTables    = tablesRes.data?.length ?? 0
     const occupiedTables = tablesRes.data?.filter(r => r.status === 'occupied').length ?? 0
@@ -44,6 +50,7 @@ export async function GET(request: Request) {
       orders_today:    ordersRes.count ?? 0,
       total_tables:    totalTables,
       occupied_tables: occupiedTables,
+      credential_invite: inviteRes.data ?? null,
     }
   }))
 

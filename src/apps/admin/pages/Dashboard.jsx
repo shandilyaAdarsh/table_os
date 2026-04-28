@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabase.js';
+import { useAuthStore } from '../../../store/authStore.js';
 import KPIRow from '../components/KPIRow.jsx';
 import { Link } from 'react-router-dom';
 
-const TENANT_ID = '11111111-1111-1111-1111-111111111111';
+// const TENANT_ID = '...'; // Removed hardcoded ID
+
 
 const formatElapsed = (createdAt) => {
   const diffInMs = new Date() - new Date(createdAt);
@@ -21,6 +23,7 @@ const formatTotal = (createdAt) => {
 };
 
 export default function Dashboard() {
+  const { tenantId: TENANT_ID } = useAuthStore();
   const [liveOrders, setLiveOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [, setTick] = useState(0);
