@@ -4,3 +4,7 @@ export { default as ItemDetail } from './pages/ItemDetail';
 export { default as OrderConfirmation } from './pages/OrderConfirmed';
 export { default as OrderTracking } from './pages/OrderTracking';
 export { default as PaymentScreen } from './pages/Payment';
+export { default as OrdersPage } from './pages/OrdersPage';
+export { default as ProfilePage } from './pages/ProfilePage';
+export { default as CartPage } from './pages/Cart';
+export { default as CheckIn } from './pages/CheckIn';

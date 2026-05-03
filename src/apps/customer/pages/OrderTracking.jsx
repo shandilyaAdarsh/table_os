@@ -288,14 +288,14 @@ export default function OrderTracking() {
       
       {/* 1. HEADER ROW */}
       <header style={{ position: 'sticky', top: 0, background: 'white', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 20, width: '100%', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-        <button onClick={() => navigate('/customer/browse')} style={{ width: 40, height: 40, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <button onClick={() => navigate('/menu/browse')} style={{ width: 40, height: 40, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <span className="material-symbols-outlined" style={{ color: '#1B2B4B' }}>arrow_back</span>
         </button>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <h1 style={{ fontSize: 16, fontWeight: 700, color: '#1B2B4B', margin: 0 }}>Order #{(order?.id || '').substring(0, 8).toUpperCase()}</h1>
           <span style={{ fontSize: 12, color: '#6B7280' }}>Table {order?.table_num}</span>
         </div>
-        <button onClick={() => navigate('/customer/browse')} style={{ width: 40, height: 40, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <button onClick={() => navigate('/menu/browse')} style={{ width: 40, height: 40, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <span className="material-symbols-outlined" style={{ color: '#1B2B4B' }}>shopping_cart</span>
         </button>
       </header>
@@ -550,7 +550,7 @@ export default function OrderTracking() {
         {/* 7. ADD MORE ITEMS BUTTON */}
         <div style={{ padding: '0 16px', marginBottom: 8 }}>
           <button 
-            onClick={() => navigate('/customer/browse')}
+            onClick={() => navigate('/menu/browse')}
             style={{ width: '100%', border: '1.5px solid #1B2B4B', background: 'white', color: '#1B2B4B', height: 48, borderRadius: 12, fontWeight: 600, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}
           >
             <span className="material-symbols-outlined" style={{ fontSize: 20 }}>add</span>
@@ -601,7 +601,7 @@ export default function OrderTracking() {
           </p>
 
           <button
-            onClick={() => navigate('/customer/browse')}
+            onClick={() => navigate('/menu/browse')}
             style={{
               width: '100%',
               background: '#1A365D',
@@ -619,7 +619,7 @@ export default function OrderTracking() {
           </button>
 
           <button
-            onClick={() => navigate('/customer/orders')}
+            onClick={() => navigate('/menu/orders')}
             style={{
               width: '100%',
               background: 'white',

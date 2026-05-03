@@ -173,7 +173,7 @@ function MenuItemCard({ item, idx, navigate, handleItemAdd }) {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(idx, 8) * 0.05 }}
-      onClick={() => navigate(`/customer/item/${item.id}`)}
+      onClick={() => navigate(`/menu/item/${item.id}`)}
       style={{
         display: 'flex', background: 'white', borderRadius: 16, padding: 14, gap: 12,
         boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #F3F4F6',

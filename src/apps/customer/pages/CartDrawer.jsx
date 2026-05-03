@@ -124,7 +124,7 @@ export default function CartDrawer({ open, onClose }) {
       const newOrderId = order.id
       clear()
       onClose()
-      navigate(`/customer/confirmed/${newOrderId}`, { state: { orderId: newOrderId } })
+      navigate(`/menu/confirmed/${newOrderId}`, { state: { orderId: newOrderId } })
     } catch (err) {
       console.error('[CartDrawer] placeOrder failed:', err.message)
       setIsPlacing(false)

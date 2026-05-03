@@ -17,7 +17,7 @@ export default function OrderConfirmed() {
 
   useEffect(() => {
     if (!resolvedOrderId) {
-      navigate('/customer/browse')
+      navigate('/menu/browse')
       return
     }
 
@@ -72,7 +72,7 @@ export default function OrderConfirmed() {
         <h1 className="text-2xl font-bold text-[#1B2B4B] mb-2">Order Not Found</h1>
         <p className="text-gray-500 mb-8">We couldn't retrieve the details for this order.</p>
         <button 
-          onClick={() => navigate('/customer/browse')}
+          onClick={() => navigate('/menu/browse')}
           className="w-full max-w-[342px] bg-[#1B2B4B] text-white h-[52px] rounded-xl font-bold"
         >
           Back to Menu
@@ -189,7 +189,7 @@ export default function OrderConfirmed() {
 
       {/* 7. TRACK MY ORDER BUTTON */}
       <button 
-        onClick={() => navigate(resolvedOrderId ? `/customer/track/${resolvedOrderId}` : '/customer/browse')}
+        onClick={() => navigate(resolvedOrderId ? `/menu/track/${resolvedOrderId}` : '/menu/browse')}
         className="w-full bg-[#1B2B4B] text-white h-[52px] rounded-[14px] font-[700] text-[16px]"
       >
         Track My Order
@@ -197,7 +197,7 @@ export default function OrderConfirmed() {
 
       {/* 8. BACK TO MENU */}
       <button 
-        onClick={() => navigate('/customer/browse')}
+        onClick={() => navigate('/menu/browse')}
         className="mt-[12px] bg-transparent text-[#6B7280] text-[14px] font-medium"
       >
         Back to Menu
