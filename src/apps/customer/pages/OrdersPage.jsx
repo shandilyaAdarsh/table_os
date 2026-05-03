@@ -25,17 +25,34 @@ export default function OrdersPage() {
     }
 
     const fetchOrders = async () => {
-      const { data, error } = await supabase
+      // Build a query scoped to THIS customer's session.
+      // Priority 1: filter by guest_phone (most accurate — unique per person)
+      // Priority 2: filter by guest_name + table_num + session start time (name-only check-in)
+      let query = supabase
         .from('orders')
         .select(`*, order_items(
           id, name, qty, unit_price,
           is_rejected, status
         )`)
         .eq('tenant_id', TENANT_ID)
-        .eq('table_num', tableNum)
         .order('created_at', { ascending: false })
         .limit(20)
 
+      if (session.phone) {
+        // Filter by phone — every order placed from this phone number at this table
+        query = query.eq('guest_phone', session.phone).eq('table_num', tableNum)
+      } else {
+        // No phone — filter by name + table + only orders placed AFTER this check-in
+        query = query
+          .eq('guest_name', session.name)
+          .eq('table_num', tableNum)
+        // If we have a checkedInAt timestamp, only show orders from this session onward
+        if (session.checkedInAt) {
+          query = query.gte('created_at', session.checkedInAt)
+        }
+      }
+
+      const { data, error } = await query
       if (!error && data) {
         setOrders(data)
       }
@@ -44,11 +61,23 @@ export default function OrdersPage() {
 
     fetchOrders()
 
-    const channel = supabase.channel(`customer_orders_table_${tableNum}`)
+    // Realtime — only listen for orders matching this guest
+    const filterStr = session.phone
+      ? `guest_phone=eq.${session.phone}`
+      : `table_num=eq.${tableNum}`
+
+    const channel = supabase.channel(`customer_orders_${session.sessionId || tableNum}`)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'orders',
-        filter: `table_num=eq.${tableNum}`
+        filter: filterStr
       }, (payload) => {
+        // Extra guard: ensure the incoming order belongs to this guest
+        const isMyOrder = session.phone
+          ? payload.new?.guest_phone === session.phone
+          : payload.new?.guest_name === session.name
+
+        if (!isMyOrder) return
+
         if (payload.eventType === 'INSERT') {
           supabase.from('orders').select('*, order_items(*)').eq('id', payload.new.id).single()
             .then(({ data }) => { if (data) setOrders(prev => [data, ...prev]) })
@@ -59,7 +88,7 @@ export default function OrdersPage() {
       .subscribe()
 
     return () => supabase.removeChannel(channel)
-  }, [tableNum])
+  }, [tableNum, session.phone, session.name, session.sessionId])
 
   if (!session.name) {
     return (
