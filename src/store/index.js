@@ -9,9 +9,9 @@ export const useOrderStore = create((set, get) => ({
   // Fetch all active orders from Supabase
   fetchOrders: async () => {
     if (!supabase) {
-      console.error('[Store] Supabase client is null. Verify .env.local!');
-      set({ isLoading: false });
-      return;
+      console.error('[Store] Supabase client is null. Verify .env.local!')
+      set({ isLoading: false })
+      return
     }
     set({ isLoading: true })
     try {
@@ -37,8 +37,8 @@ export const useOrderStore = create((set, get) => ({
   // Subscribe to Realtime changes — call once on KDS mount
   subscribeRealtime: () => {
     if (!supabase) {
-      console.error('[Store] subscribeRealtime: Supabase client missing!');
-      return () => {};
+      console.error('[Store] subscribeRealtime: Supabase client missing!')
+      return () => {}
     }
     const channel = supabase
       .channel('orders-realtime')
@@ -113,23 +113,23 @@ export const useOrderStore = create((set, get) => ({
     // Optimistic update
     set(s => ({
       orders: s.orders.map(o => {
-        if (o.id !== orderId) return o;
+        if (o.id !== orderId) return o
         return {
           ...o,
           items: o.items.map(it => it.id === itemId ? { ...it, done } : it)
-        };
+        }
       })
-    }));
+    }))
 
     const { error } = await supabase
       .from('order_items')
       .update({ done })
-      .eq('id', itemId);
+      .eq('id', itemId)
 
     if (error) {
-      console.error('[KDS] toggleOrderItem error:', error);
+      console.error('[KDS] toggleOrderItem error:', error)
       // Revert on error (fetch orders again or handle specifically)
-      get().fetchOrders();
+      get().fetchOrders()
     }
   },
 }))
@@ -171,33 +171,83 @@ export const useTableStore = create((set) => ({
 
 // ─── CART STORE (local only, no DB) ──────────────────────────────────────────
 export const useCartStore = create((set) => ({
-  items: [], note: '',
-  addItem: (item) => set(s => ({ items: [...s.items, item] })),
-  removeItem: (id) => set(s => ({ items: s.items.filter(i => i.id !== id) })),
-  updateQty: (id, qty) => set(s => ({ items: s.items.map(i => i.id === id ? { ...i, qty } : i) })),
+  items: [],
+  note: '',
+  addItem: (item) => set(s => {
+    // Check if item with same ID and modifiers already exists
+    const existing = s.items.find(i =>
+      i.id === item.id &&
+      JSON.stringify(i.modifiers || []) === JSON.stringify(item.modifiers || [])
+    )
+    if (existing) {
+      return {
+        items: s.items.map(i =>
+          (i.id === item.id && JSON.stringify(i.modifiers || []) === JSON.stringify(item.modifiers || []))
+            ? { ...i, qty: i.qty + (item.qty || 1) }
+            : i
+        )
+      }
+    }
+    return { items: [...s.items, { ...item, qty: item.qty || 1 }] }
+  }),
+  removeItem: (id, modifiers) => set(s => ({
+    items: s.items.filter(i =>
+      !(i.id === id && JSON.stringify(i.modifiers || []) === JSON.stringify(modifiers || []))
+    )
+  })),
+  updateQty: (id, modifiers, qty) => set(s => {
+    if (qty <= 0) {
+      return {
+        items: s.items.filter(i =>
+          !(i.id === id && JSON.stringify(i.modifiers || []) === JSON.stringify(modifiers || []))
+        )
+      }
+    }
+    return {
+      items: s.items.map(i =>
+        (i.id === id && JSON.stringify(i.modifiers || []) === JSON.stringify(modifiers || []))
+          ? { ...i, qty }
+          : i
+      )
+    }
+  }),
   setNote: (note) => set({ note }),
   clear: () => set({ items: [], note: '' }),
 }))
 
 // ─── MENU STORE ───────────────────────────────────────────────────────────────
-export const useMenuStore = create((set) => ({
+export const useMenuStore = create((set, get) => ({
   items: [],
   isLoading: false,
+  initialized: false,
 
-  fetchMenu: async () => {
+  init: async (tenantId = TENANT_ID) => {
+    if (get().initialized) return
+    await get().fetchMenu(tenantId)
+    set({ initialized: true })
+  },
+
+  fetchMenu: async (tenantId = TENANT_ID) => {
+    if (!supabase) {
+      console.error('[Menu] Supabase client missing!')
+      set({ isLoading: false })
+      return
+    }
     set({ isLoading: true })
     const { data, error } = await supabase
       .from('menu_items')
       .select('*')
-      .eq('tenant_id', TENANT_ID)
+      .eq('tenant_id', tenantId)
       .order('category', { ascending: true })
 
     if (error) { console.error('[Menu] fetch error:', error); set({ isLoading: false }); return }
     set({ items: data || [], isLoading: false })
   },
 
+  destroy: () => set({ initialized: false, items: [] }),
+
   toggle86: async (id) => {
-    const { items } = useMenuStore.getState()
+    const { items } = get()
     const item = items.find(i => i.id === id)
     if (!item) return
 
@@ -211,6 +261,57 @@ export const useMenuStore = create((set) => ({
     // Optimistic local update since menu has no Realtime subscription
     else set(s => ({ items: s.items.map(i => i.id === id ? { ...i, is_available: !i.is_available } : i) }))
   },
+}))
+
+export const useSessionStore = create((set) => ({
+  session_id: localStorage.getItem('session_id') || null,
+  name: localStorage.getItem('session_name') || '',
+  phone: localStorage.getItem('session_phone') || '',
+  table_num: localStorage.getItem('session_table') || 'T03',
+
+  joinTable: (name, phone, tableNum) => {
+    const id = `sess_${Date.now()}`
+    localStorage.setItem('session_id', id)
+    localStorage.setItem('session_name', name)
+    localStorage.setItem('session_phone', phone)
+    localStorage.setItem('session_table', tableNum)
+    set({ session_id: id, name, phone, table_num: tableNum })
+  },
+
+  leaveTable: () => {
+    localStorage.removeItem('session_id')
+    localStorage.removeItem('session_name')
+    localStorage.removeItem('session_phone')
+    localStorage.removeItem('session_table')
+    set({ session_id: null, name: '', phone: '', table_num: 'T03' })
+  }
+}))
+
+export const useStaffStore = create((set) => ({
+  staff_user: null,
+  isAuthenticated: false,
+
+  login: (staffMember) => {
+    localStorage.setItem('staff_user', JSON.stringify(staffMember))
+    set({ staff_user: staffMember, isAuthenticated: true })
+  },
+
+  logout: () => {
+    localStorage.removeItem('staff_user')
+    set({ staff_user: null, isAuthenticated: false })
+  },
+
+  init: () => {
+    const stored = localStorage.getItem('staff_user')
+    if (stored) {
+      try {
+        const staffMember = JSON.parse(stored)
+        set({ staff_user: staffMember, isAuthenticated: true })
+      } catch {
+        localStorage.removeItem('staff_user')
+      }
+    }
+  }
 }))
 
 // ─── NORMALIZER ──────────────────────────────────────────────────────────────

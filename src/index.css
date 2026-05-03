@@ -77,17 +77,59 @@
   }
 }
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  /* Core Brand Colors from "The Elevated Heritage" */
+  --primary: #002045;
+  --primary-container: #1A365D;
+  --secondary: #904D00;
+  --secondary-container: #FE932C;
+  --surface: #F8F9FA;
+  --surface-container-low: #F3F4F5;
+  --surface-container-lowest: #FFFFFF;
+}
 
-body {
-  background: var(--color-background);
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  height: 100%;
+  background-color: var(--color-background);
   color: var(--color-on-surface);
-  font-family: var(--font-body);
+  font-family: 'Manrope', var(--font-body), 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
+}
+
+/* Headings use Epilogue */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Epilogue', var(--font-headline), system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .material-symbols-outlined {
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  vertical-align: middle;
+}
+
+/* Scrollbar styling for a premium feel */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 32, 69, 0.1);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 32, 69, 0.2);
 }
 
 #root {
