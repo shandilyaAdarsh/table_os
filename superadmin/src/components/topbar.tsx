@@ -13,9 +13,9 @@ export default function Topbar({ title }: TopbarProps) {
     const update = () => {
       const now = new Date()
       setDateTime(now.toLocaleDateString('en-US', {
-        month: 'short', day: 'numeric', year: 'numeric'
+        month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC'
       }) + ' · ' + now.toLocaleTimeString('en-US', {
-        hour: '2-digit', minute: '2-digit', hour12: false
+        hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC'
       }) + ' UTC')
     }
     update()
