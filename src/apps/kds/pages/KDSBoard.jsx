@@ -8,9 +8,12 @@ import { Loader2 } from 'lucide-react';
    KDSBoard — connects to Supabase realtime
 ═══════════════════════════════════════════════════ */
 const KDSBoard = () => {
-  const orders            = useOrderStore(s => s.orders);
+  const liveOrders        = useOrderStore(s => s.liveOrders);
+  const historyOrders     = useOrderStore(s => s.historyOrders);
   const isLoading         = useOrderStore(s => s.isLoading);
   const fetchOrders       = useOrderStore(s => s.fetchOrders);
+  const fetchHistory      = useOrderStore(s => s.fetchHistory);
+  const totalOrdersToday  = useOrderStore(s => s.totalOrdersToday);
   const subscribeRealtime = useOrderStore(s => s.subscribeRealtime);
   const tenantId          = useAuthStore(s => s.tenantId);
   const user              = useAuthStore(s => s.user);
@@ -20,6 +23,11 @@ const KDSBoard = () => {
   const [currentTime, setCurrentTime]     = useState('');
   const [isMuted, setIsMuted]             = useState(false);
   const [realtimeStatus, setRealtimeStatus] = useState('connecting'); // connecting | connected | disconnected
+  const [activeTab, setActiveTab]         = useState('Live Orders'); // 'Live Orders' | 'Order History'
+  const [confirmModal, setConfirmModal]   = useState(null); // { title, message, onConfirm }
+  const [historySearch, setHistorySearch] = useState('');
+  const [historySort, setHistorySort]     = useState('newest'); // newest | oldest
+  const [historyFilter, setHistoryFilter] = useState('day'); // day | week | month | all
   const prevOrderCount                    = useRef(0);
 
   /* ── Dev fallback (inline) ─────────────────────── */
@@ -27,40 +35,48 @@ const KDSBoard = () => {
   const effectiveUser     = user || (effectiveTenantId ? { name: 'KDS Terminal', role: 'kitchen' } : null);
 
   /* ── Initial fetch + Realtime subscription ──────── */
+  /* ── Initial fetch ──────── */
   useEffect(() => {
     if (!effectiveTenantId) return;
 
-    setRealtimeStatus('connecting');
-    fetchOrders().then(() => setRealtimeStatus('connected'));
+    if (activeTab === 'Live Orders') {
+      if (liveOrders.length === 0) setRealtimeStatus('connecting');
+      fetchOrders().then(() => setRealtimeStatus('connected'));
+    } else {
+      if (historyOrders.length === 0) setRealtimeStatus('connecting');
+      fetchHistory().then(() => setRealtimeStatus('connected'));
+    }
 
-    const unsub = subscribeRealtime ? subscribeRealtime() : null;
-
-    // Connection probe — if we can fetch, realtime is healthy
     const probe = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        fetchOrders()
-          .then(() => setRealtimeStatus('connected'))
-          .catch(() => setRealtimeStatus('disconnected'));
+      if (document.visibilityState === 'visible' && activeTab === 'Live Orders') {
+        fetchOrders().catch(() => setRealtimeStatus('disconnected'));
       }
-    }, 30_000); // re-probe every 30 s
+    }, 60_000);
 
-    return () => {
-      unsub && unsub();
-      clearInterval(probe);
-    };
+    return () => clearInterval(probe);
+  }, [tenantId, activeTab]);
+
+  /* ── Realtime subscription (Independent of tab) ── */
+  useEffect(() => {
+    if (!effectiveTenantId || !subscribeRealtime) return;
+    const unsub = subscribeRealtime();
+    return () => unsub && unsub();
   }, [tenantId]);
 
   /* ── Page Visibility API: re-sync when tab regains focus ── */
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible' && effectiveTenantId) {
-        setRealtimeStatus('connecting');
-        fetchOrders().then(() => setRealtimeStatus('connected'));
+        if (activeTab === 'Live Orders') {
+          fetchOrders();
+        } else {
+          fetchHistory();
+        }
       }
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [tenantId]);
+  }, [tenantId, activeTab]);
 
   /* ── Live clock ─────────────────────────────────── */
   useEffect(() => {
@@ -91,17 +107,15 @@ const KDSBoard = () => {
   };
 
   useEffect(() => {
-    const curr = orders.filter(o => o.status === 'pending').length;
+    const curr = liveOrders.filter(o => o.status === 'pending').length;
     if (curr > prevOrderCount.current) playOrderSound();
     prevOrderCount.current = curr;
-  }, [orders.length]);
+  }, [liveOrders.length]);
 
   /* ── Derived stats ──────────────────────────────── */
-  const safeOrders   = Array.isArray(orders) ? orders : [];
-  const pendingCount = safeOrders.filter(o => o.status === 'pending').length;
-  const cookingCount = safeOrders.filter(o => o.status === 'cooking').length;
-  const readyCount   = safeOrders.filter(o => o.status === 'ready').length;
-  const totalItems   = safeOrders.reduce((a, o) => a + (o.items?.length || 0), 0);
+  const pendingCount = liveOrders.filter(o => o.status === 'pending').length;
+  const cookingCount = liveOrders.filter(o => o.status === 'cooking').length;
+  const readyCount   = liveOrders.filter(o => o.status === 'ready').length;
 
   /* ── Column definitions ─────────────────────────── */
   const columns = [
@@ -125,7 +139,7 @@ const KDSBoard = () => {
 
 
   /* ── Loading screen ─────────────────────────────── */
-  if (isLoading && safeOrders.length === 0) {
+  if (isLoading && liveOrders.length === 0 && historyOrders.length === 0) {
     return (
       <div style={{
         height: '100vh', width: '100vw',
@@ -170,23 +184,19 @@ const KDSBoard = () => {
           <h1 style={{ fontSize: '22px', fontWeight: 900, letterSpacing: '-0.04em', color: '#8D4B00', lineHeight: 1 }}>
             TableOS
           </h1>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {[
-              { label: `${pendingCount} Pending`, bg: '#FFF4EC', color: '#8D4B00' },
-              { label: `${cookingCount} Cooking`, bg: '#EEF3FB', color: '#2D5FA3' },
-              { label: `${readyCount} Ready`,     bg: '#E8F6F1', color: '#006948' },
-            ].map(({ label, bg, color }) => (
-              <div key={label} style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
-                padding: '4px 10px',
-                background: bg, color,
-                borderRadius: '9999px',
-                fontSize: '11px', fontWeight: 700,
-              }}>
-                <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: color }} />
-                {label}
-              </div>
-            ))}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '10px',
+            padding: '6px 14px',
+            background: '#FFF4EC', color: '#8D4B00',
+            borderRadius: '12px',
+            border: '1px solid #F5D19A',
+            boxShadow: '0 1px 2px rgba(141,75,0,0.05)'
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>analytics</span>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '9px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.8, lineHeight: 1 }}>Orders Today</span>
+              <span style={{ fontSize: '16px', fontWeight: 900, lineHeight: 1.1 }}>{totalOrdersToday}</span>
+            </div>
           </div>
         </div>
 
@@ -230,7 +240,11 @@ const KDSBoard = () => {
               title="Refresh orders"
               onClick={() => {
                 setRealtimeStatus('connecting');
-                fetchOrders().then(() => setRealtimeStatus('connected'));
+                if (activeTab === 'Live Orders') {
+                  fetchOrders().then(() => setRealtimeStatus('connected'));
+                } else {
+                  fetchHistory(historyFilter).then(() => setRealtimeStatus('connected'));
+                }
               }}
               style={{ fontSize: '22px', color: '#887364', cursor: 'pointer' }}
             >
@@ -244,7 +258,7 @@ const KDSBoard = () => {
       {/* ━━━ SIDEBAR ━━━ */}
       <aside style={{
         position: 'fixed', left: 0, top: '64px',
-        width: '232px', height: 'calc(100vh - 64px - 32px)',
+        width: '232px', height: 'calc(100vh - 64px)',
         background: '#F2F4F6',
         display: 'flex', flexDirection: 'column',
         padding: '24px 16px', gap: '4px',
@@ -253,173 +267,291 @@ const KDSBoard = () => {
           <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#8D4B00', lineHeight: 1, letterSpacing: '-0.02em' }}>
             Main Kitchen
           </h2>
-          <p style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#887364', marginTop: '4px' }}>
-            {effectiveUser?.name || 'Station'} · {effectiveUser?.role || 'Kitchen'}
-          </p>
+          {/* Station/Role info removed as requested */}
         </div>
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           {[
-            { icon: 'restaurant',  label: 'Live Orders',      active: true  },
-            { icon: 'history',     label: 'Order History',    active: false },
-            { icon: 'settings',    label: 'Kitchen Settings', active: false },
-            { icon: 'inventory_2', label: 'Inventory',        active: false },
-          ].map(({ icon, label, active }) => (
-            <div
-              key={label}
-              className="cubic-transition"
-              style={{
-                display: 'flex', alignItems: 'center', gap: '12px',
-                padding: '10px 12px',
-                background:   active ? '#FFFFFF' : 'transparent',
-                color:        active ? '#8D4B00' : '#554336',
-                borderRadius: '8px',
-                fontWeight:   active ? 700 : 500,
-                fontSize:     '14px',
-                cursor:       'pointer',
-                boxShadow:    active ? '0 1px 4px rgba(15,23,42,0.06)' : 'none',
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>{icon}</span>
-              {label}
-            </div>
-          ))}
+            { icon: 'restaurant',  label: 'Live Orders'   },
+            { icon: 'history',     label: 'Order History' },
+          ].map(({ icon, label }) => {
+            const active = activeTab === label;
+            return (
+              <div
+                key={label}
+                onClick={() => setActiveTab(label)}
+                className="cubic-transition"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '12px',
+                  padding: '10px 12px',
+                  background:   active ? '#FFFFFF' : 'transparent',
+                  color:        active ? '#8D4B00' : '#554336',
+                  borderRadius: '8px',
+                  fontWeight:   active ? 700 : 500,
+                  fontSize:     '14px',
+                  cursor:       'pointer',
+                  boxShadow:    active ? '0 1px 4px rgba(15,23,42,0.06)' : 'none',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>{icon}</span>
+                {label}
+              </div>
+            );
+          })}
         </nav>
 
         <div style={{ marginTop: 'auto' }}>
-          <button
-            className="cubic-transition"
-            style={{
-              width: '100%',
-              background: 'linear-gradient(15deg, #8D4B00, #B15F00)',
-              color: '#FFFFFF',
-              fontWeight: 900, fontSize: '12px',
-              textTransform: 'uppercase', letterSpacing: '0.15em',
-              padding: '13px 16px',
-              borderRadius: '6px',
-              border: 'none', cursor: 'pointer',
-              boxShadow: '0 4px 16px rgba(141,75,0,0.2)',
-            }}
-          >
-            New Manual Order
-          </button>
+          {/* Removed Manual Order button as requested */}
         </div>
       </aside>
 
       {/* ━━━ MAIN BOARD ━━━ */}
       <main style={{ marginLeft: '232px', paddingTop: '64px', height: '100vh', display: 'flex', flexDirection: 'column', background: '#F7F9FB' }}>
-        <div style={{
-          flex: 1,
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr 1fr',
-          overflow: 'hidden',
-          marginBottom: '32px',
-        }}>
-          {columns.map(({ status, title, count, badgeBg, emptyIcon }, colIdx) => {
-            const colOrders = safeOrders.filter(o => o.status === status);
-            const isActive  = mobileCol === status;
-            const colBg = colIdx === 1 ? '#F2F4F6' : '#F7F9FB';
+        {activeTab === 'Live Orders' ? (
+          <div style={{
+            flex: 1,
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr 1fr',
+            overflow: 'hidden',
+            marginBottom: '0px',
+          }}>
+            {columns.map(({ status, title, count, badgeBg, emptyIcon }, colIdx) => {
+              const colOrders = liveOrders.filter(o => o.status === status);
+              const isActive  = mobileCol === status;
+              const colBg = colIdx === 1 ? '#F2F4F6' : '#F7F9FB';
 
-            return (
-              <section
-                key={status}
-                className={isActive ? '' : 'hidden-mobile'}
-                style={{
-                  display:       'flex',
-                  flexDirection: 'column',
-                  height:        '100%',
-                  overflow:      'hidden',
-                  background:    colBg,
-                  borderRight:   colIdx < 2 ? '1px solid #E6E8EA' : 'none',
-                }}
-              >
-                {/* Column header */}
-                <div style={{
-                  height: '48px', padding: '0 20px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  background: colBg,
-                  borderBottom: '1px solid #E6E8EA',
-                  position: 'sticky', top: 0, zIndex: 10,
+              return (
+                <section
+                  key={status}
+                  className={isActive ? '' : 'hidden-mobile'}
+                  style={{
+                    display:       'flex',
+                    flexDirection: 'column',
+                    height:        '100%',
+                    overflow:      'hidden',
+                    background:    colBg,
+                    borderRight:   colIdx < 2 ? '1px solid #E6E8EA' : 'none',
+                  }}
+                >
+                  {/* Column header */}
+                  <div style={{
+                    height: '48px', padding: '0 20px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    background: colBg,
+                    borderBottom: '1px solid #E6E8EA',
+                    position: 'sticky', top: 0, zIndex: 10,
+                  }}>
+                    <h3 style={{
+                      fontSize: '10px', fontWeight: 900,
+                      textTransform: 'uppercase', letterSpacing: '0.2em',
+                      color: '#554336',
+                    }}>{title}</h3>
+                    <span style={{
+                      background: badgeBg, color: '#FFFFFF',
+                      fontSize: '10px', fontWeight: 700,
+                      padding: '2px 8px', borderRadius: '9999px',
+                    }}>{count}</span>
+                  </div>
+
+                  {/* Scrollable order list */}
+                  <div
+                    className="hide-scrollbar"
+                    style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}
+                  >
+                    {colOrders.length === 0 ? (
+                      <div style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        height: '180px',
+                        border: '2px dashed #DBC2B0', borderRadius: '12px', opacity: 0.5,
+                      }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: '32px', color: '#887364', marginBottom: '8px' }}>
+                          {emptyIcon}
+                        </span>
+                        <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#887364', textAlign: 'center' }}>
+                          No active<br />{title.toLowerCase()}
+                        </span>
+                      </div>
+                    ) : (
+                      colOrders.map(order => <OrderCard key={order.id} order={order} setConfirmModal={setConfirmModal} />)
+                    )}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        ) : (
+          /* ━━━ HISTORY VIEW ━━━ */
+          <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div style={{
+              padding: '16px 32px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              borderBottom: '1px solid #E6E8EA',
+              background: '#FFFFFF',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+                <h3 style={{ fontSize: '12px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#554336' }}>
+                  Order History
+                </h3>
+                {/* Search / Filter */}
+                <div style={{ position: 'relative' }}>
+                  <span className="material-symbols-outlined" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '18px', color: '#887364' }}>
+                    search
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Search Table #..."
+                    value={historySearch}
+                    onChange={(e) => setHistorySearch(e.target.value)}
+                    style={{
+                      padding: '8px 12px 8px 38px',
+                      borderRadius: '8px',
+                      border: '1px solid #E6E8EA',
+                      fontSize: '13px',
+                      background: '#F7F9FB',
+                      width: '200px',
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Filters & Sort */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+                {/* Date Filters */}
+                <div style={{ 
+                  display: 'flex', 
+                  background: '#F2F4F6', 
+                  padding: '4px', 
+                  borderRadius: '10px',
+                  gap: '2px'
                 }}>
-                  <h3 style={{
-                    fontSize: '10px', fontWeight: 900,
-                    textTransform: 'uppercase', letterSpacing: '0.2em',
-                    color: '#554336',
-                  }}>{title}</h3>
-                  <span style={{
-                    background: badgeBg, color: '#FFFFFF',
-                    fontSize: '10px', fontWeight: 700,
-                    padding: '2px 8px', borderRadius: '9999px',
-                  }}>{count}</span>
+                  {['day', 'week', 'month', 'all'].map(f => (
+                    <button
+                      key={f}
+                      onClick={() => {
+                        setHistoryFilter(f);
+                        fetchHistory(f);
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '7px',
+                        border: 'none',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        cursor: 'pointer',
+                        background: historyFilter === f ? '#FFFFFF' : 'transparent',
+                        color: historyFilter === f ? '#8D4B00' : '#887364',
+                        boxShadow: historyFilter === f ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      {f}
+                    </button>
+                  ))}
                 </div>
 
-                {/* Scrollable order list */}
-                <div
-                  className="hide-scrollbar"
-                  style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}
-                >
-                  {colOrders.length === 0 ? (
-                    <div style={{
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                      height: '180px',
-                      border: '2px dashed #DBC2B0', borderRadius: '12px', opacity: 0.5,
-                    }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: '32px', color: '#887364', marginBottom: '8px' }}>
-                        {emptyIcon}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#887364', textTransform: 'uppercase' }}>Sort:</span>
+                  <select
+                    value={historySort}
+                    onChange={(e) => setHistorySort(e.target.value)}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #E6E8EA',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      color: '#554336',
+                      background: '#FFFFFF'
+                    }}
+                  >
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div
+              className="hide-scrollbar"
+              style={{
+                flex: 1, overflowY: 'auto', padding: '32px',
+                display: 'flex', flexDirection: 'column', gap: '40px'
+              }}
+            >
+              {(() => {
+                let filtered = historyOrders.filter(o => 
+                  o.tableNum?.toString().includes(historySearch) || 
+                  o.customerName?.toLowerCase().includes(historySearch.toLowerCase()) ||
+                  o.items?.some(it => it.name.toLowerCase().includes(historySearch.toLowerCase()))
+                );
+                
+                if (historySort === 'newest') {
+                  filtered = [...filtered].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                } else {
+                  filtered = [...filtered].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                }
+
+                if (filtered.length === 0) {
+                  return (
+                    <div style={{ textAlign: 'center', padding: '64px', color: '#887364' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '48px', opacity: 0.3, marginBottom: '16px' }}>
+                        inventory_2
                       </span>
-                      <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#887364', textAlign: 'center' }}>
-                        No active<br />{title.toLowerCase()}
+                      <p style={{ fontWeight: 600 }}>No historical orders found matching your criteria.</p>
+                    </div>
+                  );
+                }
+
+                // Group by day
+                const groups = filtered.reduce((acc, order) => {
+                  const date = new Date(order.createdAt);
+                  const today = new Date();
+                  const yesterday = new Date();
+                  yesterday.setDate(today.getDate() - 1);
+
+                  let dateStr = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+                  if (date.toDateString() === today.toDateString()) dateStr = 'Today';
+                  else if (date.toDateString() === yesterday.toDateString()) dateStr = 'Yesterday';
+
+                  if (!acc[dateStr]) acc[dateStr] = [];
+                  acc[dateStr].push(order);
+                  return acc;
+                }, {});
+
+                return Object.entries(groups).map(([date, orders]) => (
+                  <div key={date} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <h4 style={{ fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#887364', whiteSpace: 'nowrap' }}>
+                        {date}
+                      </h4>
+                      <div style={{ height: '1px', flex: 1, background: '#E6E8EA' }} />
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: '#887364', background: '#F2F4F6', padding: '2px 8px', borderRadius: '9999px' }}>
+                        {orders.length} Orders
                       </span>
                     </div>
-                  ) : (
-                    colOrders.map(order => <OrderCard key={order.id} order={order} />)
-                  )}
-                </div>
-              </section>
-            );
-          })}
-        </div>
-      </main>
-
-      {/* ━━━ FOOTER ━━━ */}
-      <footer style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
-        height: '32px', zIndex: 50,
-        background: '#FFFFFF',
-        borderTop: '1px solid #E6E8EA',
-        padding: '0 32px',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-          {[
-            { label: 'AVG TICKET:', value: '—', valueColor: '#8D4B00' },
-            { label: 'ITEMS:',      value: String(totalItems) },
-            { label: 'SERVERS:',   value: '— ACTIVE' },
-          ].map(({ label, value, valueColor }) => (
-            <span key={label} style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#887364' }}>
-              {label}&nbsp;<span style={{ color: valueColor || '#191C1E' }}>{value}</span>
-            </span>
-          ))}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{
-              width: '8px', height: '8px', borderRadius: '50%',
-              background: dotColor,
-              boxShadow: `0 0 8px ${dotColor}80`,
-              transition: 'background 0.4s, box-shadow 0.4s',
-              display: 'inline-block',
-            }} />
-            <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#887364' }}>
-              {dotLabel}
-            </span>
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', 
+                      gap: '24px' 
+                    }}>
+                      {orders.map(order => (
+                        <OrderCard 
+                          key={order.id}
+                          order={order} 
+                          isHistory={true} 
+                          setConfirmModal={setConfirmModal}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
           </div>
-          <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#DBC2B0' }}>
-            TABLEOS KDS V2.4
-          </span>
-        </div>
-      </footer>
+        )}
+      </main>
 
       {/* ━━━ MOBILE BOTTOM NAV ━━━ */}
       <nav className="mobile-nav" style={{
@@ -428,6 +560,7 @@ const KDSBoard = () => {
         borderTop: '1px solid #E6E8EA',
         padding: '8px 16px',
         zIndex: 55,
+        display: 'flex',
         justifyContent: 'space-around', alignItems: 'center',
       }}>
         {columns.map(({ status, title, emptyIcon }) => {
@@ -449,7 +582,55 @@ const KDSBoard = () => {
           );
         })}
       </nav>
-
+      
+      {/* ━━━ CUSTOM CONFIRM MODAL ━━━ */}
+      {confirmModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          backdropFilter: 'blur(4px)',
+        }}>
+          <div style={{
+            background: '#FFFFFF', borderRadius: '12px', width: '90%', maxWidth: '400px',
+            padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
+            textAlign: 'center',
+          }}>
+            <div style={{
+              width: '48px', height: '48px', background: '#FEF2F2', borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
+            }}>
+              <span className="material-symbols-outlined" style={{ color: '#DC2626', fontSize: '24px' }}>warning</span>
+            </div>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, marginBottom: '8px', color: '#111827' }}>
+              {confirmModal.title}
+            </h3>
+            <p style={{ fontSize: '14px', color: '#6B7280', marginBottom: '24px', lineHeight: 1.5 }}>
+              {confirmModal.message}
+            </p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => setConfirmModal(null)}
+                style={{
+                  flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #E5E7EB',
+                  background: '#FFFFFF', color: '#374151', fontWeight: 600, fontSize: '14px', cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { confirmModal.onConfirm(); setConfirmModal(null); }}
+                style={{
+                  flex: 1, padding: '12px', borderRadius: '8px', border: 'none',
+                  background: '#DC2626', color: '#FFFFFF', fontWeight: 600, fontSize: '14px', cursor: 'pointer',
+                }}
+              >
+                Yes, Cancel Order
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

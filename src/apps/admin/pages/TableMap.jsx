@@ -42,7 +42,7 @@ export default function TableMap() {
         .from('orders')
         .select('*, order_items(*)')
         .eq('tenant_id', TENANT_ID)
-        .not('status', 'in', '("served","cancelled")');
+        .not('status', 'in', '("served","cancelled","rejected")');
         
       if (ordersData) setOrders(ordersData);
     };
@@ -72,7 +72,7 @@ export default function TableMap() {
           .from('orders')
           .select('*, order_items(*)')
           .eq('tenant_id', TENANT_ID)
-          .not('status', 'in', '("served","cancelled")')
+          .not('status', 'in', '("served","cancelled","rejected")')
           .then(({ data }) => setOrders(data || []));
       })
       .subscribe();

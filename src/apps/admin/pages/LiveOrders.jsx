@@ -114,7 +114,7 @@ export default function LiveOrders() {
       .from('orders')
       .select('*, order_items(name, qty)')
       .eq('tenant_id', TENANT_ID)
-      .not('status', 'in', '("served","cancelled")')
+      .not('status', 'in', '("served","cancelled","rejected")')
       .order('created_at', { ascending: false });
 
     if (data) {

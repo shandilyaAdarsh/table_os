@@ -80,11 +80,12 @@ const chipStyle = (key) => {
 /* ══════════════════════════════════════════════════
    OrderCard
 ══════════════════════════════════════════════════ */
-const OrderCard = ({ order }) => {
+const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
   const { id, tableNum, items, status, createdAt } = order;
   const acceptPartialOrder = useOrderStore(s => s.acceptPartialOrder);
   const updateOrderStatus  = useOrderStore(s => s.updateOrderStatus);
   const toggleOrderItem    = useOrderStore(s => s.toggleOrderItem);
+  const rejectOrder        = useOrderStore(s => s.rejectOrder);
 
   // Default: all items are selected (kitchen accepts the full order unless they deselect)
   const [selectedItems, setSelectedItems]     = useState(() => items.map(i => i.id));
@@ -97,6 +98,7 @@ const OrderCard = ({ order }) => {
   }, [id]);
 
   useEffect(() => {
+    if (isHistory) return;
     const calc = () => {
       if (!createdAt) return;
       setLocalElapsed(Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000));
@@ -104,7 +106,7 @@ const OrderCard = ({ order }) => {
     calc();
     const iv = setInterval(calc, 1000);
     return () => clearInterval(iv);
-  }, [createdAt]);
+  }, [createdAt, isHistory]);
 
   const cfg = getStatusConfig(status, localElapsed);
 
@@ -114,7 +116,7 @@ const OrderCard = ({ order }) => {
     );
 
   const handleAction = async () => {
-    if (isActionLoading) return;
+    if (isActionLoading || isHistory) return;
     setIsActionLoading(true);
     try {
       if (status === 'pending') {
@@ -130,6 +132,25 @@ const OrderCard = ({ order }) => {
     } finally {
       setIsActionLoading(false);
     }
+  };
+
+  const handleCancel = async () => {
+    if (isActionLoading || isHistory) return;
+    
+    setConfirmModal({
+      title: 'Cancel Order',
+      message: 'Are you sure you want to cancel this entire order? This action cannot be undone.',
+      onConfirm: async () => {
+        setIsActionLoading(true);
+        try {
+          await rejectOrder(id);
+        } catch (err) {
+          console.error('[KDS] Cancel error:', err);
+        } finally {
+          setIsActionLoading(false);
+        }
+      }
+    });
   };
 
   /* ─── CARD SHELL ─── */
@@ -161,6 +182,22 @@ const OrderCard = ({ order }) => {
         borderBottom:   '1px solid rgba(219,194,176,0.3)',
       }}>
         <div>
+          {/* Customer Name */}
+          <div style={{
+            fontSize:      '12px',
+            fontWeight:    800,
+            color:         '#8D4B00',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            marginBottom:  '6px',
+            display:       'flex',
+            alignItems:    'center',
+            gap:           '4px'
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>person</span>
+            {order.customerName || 'GUEST'}
+          </div>
+
           {/* Table number — "The Pulse" display */}
           <h4 style={{
             fontSize:      '26px',
@@ -169,8 +206,9 @@ const OrderCard = ({ order }) => {
             lineHeight:    1,
             color:         '#191C1E',
           }}>
-            T{tableNum}
+            Table {tableNum?.toString().replace(/^T/, '')}
           </h4>
+          
           {/* Order ID — label metadata */}
           <p style={{
             fontSize:      '9px',
@@ -185,65 +223,115 @@ const OrderCard = ({ order }) => {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-          <span style={{
-            fontFamily:         '"Inter", monospace',
-            fontVariantNumeric: 'tabular-nums',
-            fontSize:           '20px',
-            fontWeight:         700,
-            letterSpacing:      '-0.02em',
-            lineHeight:         1,
-            color:              cfg.timerColor,
-            animation:          cfg.timerPulse ? 'pulse 1s ease-in-out infinite' : 'none',
-          }}>
-            {formatTime(localElapsed)}
-          </span>
-          {cfg.showLate && (
-            <span style={{
-              fontSize:      '9px',
-              fontWeight:    900,
-              textTransform: 'uppercase',
-              letterSpacing: '0.15em',
-              color:         '#BA1A1A',
+          {!isHistory ? (
+            <>
+              <span style={{
+                fontFamily:         '"Inter", monospace',
+                fontVariantNumeric: 'tabular-nums',
+                fontSize:           '20px',
+                fontWeight:         700,
+                letterSpacing:      '-0.02em',
+                lineHeight:         1,
+                color:              cfg.timerColor,
+                animation:          cfg.timerPulse ? 'pulse 1s ease-in-out infinite' : 'none',
+              }}>
+                {formatTime(localElapsed)}
+              </span>
+              {cfg.showLate && (
+                <span style={{
+                  fontSize:      '9px',
+                  fontWeight:    900,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.15em',
+                  color:         '#BA1A1A',
+                }}>
+                  {cfg.lateLabel}
+                </span>
+              )}
+            </>
+          ) : (
+            <div style={{ 
+              fontSize: '10px', 
+              fontWeight: 700, 
+              color: '#887364',
+              textAlign: 'right',
+              lineHeight: 1.4
             }}>
-              {cfg.lateLabel}
-            </span>
+              <div>{new Date(order.createdAt).toLocaleDateString()}</div>
+              <div>{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+            </div>
           )}
         </div>
       </div>
 
       {/* ── ITEMS LIST ── */}
       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}>
-        {items.filter(item => status === 'pending' || !item.isRejected).map((item, idx) => {
+        {items.map((item, idx) => {
           const isPending  = status === 'pending';
           const isSelected = selectedItems.includes(item.id);
-          const isItemDone = item.done;
+          const isRejected = item.isRejected;
+          
+          // Once accepted (cooking/ready/served), accepted items are ALWAYS ticked and can't be unticked
+          const isItemDone = (!isPending && !isRejected) ? true : item.done;
+          
           const isAllergy  = item.note?.toLowerCase().includes('allergy');
 
-          /* dim unselected pending items, done cooking items */
+          /* dim unselected pending items, rejected items, done cooking items */
           const rowOpacity = (isPending && !isSelected) ? 0.35
-                           : (isItemDone && status === 'cooking') ? 0.5
+                           : isRejected ? 0.4
+                           : (isItemDone && status === 'cooking') ? 0.6
                            : 1;
 
           return (
             <div
               key={item.id || idx}
-              onClick={() => isPending ? toggleSelection(item.id) : toggleOrderItem(id, item.id, !item.done)}
+              onClick={() => {
+                if (isPending) toggleSelection(item.id);
+                else if (status === 'cooking' && !isRejected && !isItemDone) {
+                  // If we wanted to allow ticking in cooking, we could.
+                  // But user said "should always be marked tick ... and cant be unticked"
+                  // So we effectively disable interaction here.
+                }
+              }}
               style={{
                 display:    'flex',
                 alignItems: 'flex-start',
                 gap:        '12px',
+                padding:    '4px 8px',
+                margin:     '0 -8px',
+                borderRadius: '6px',
+                background: isSelected ? 'rgba(141, 75, 0, 0.05)' : 'transparent',
                 opacity:    rowOpacity,
                 cursor:     'pointer',
-                transition: 'opacity 0.2s cubic-bezier(0.2,0,0,1)',
+                transition: 'all 0.2s cubic-bezier(0.2,0,0,1)',
               }}
             >
               {/* check icon */}
-              {isItemDone ? (
+              {isRejected ? (
+                <span
+                  className="material-symbols-outlined"
+                  style={{ fontSize: '20px', color: '#BA1A1A', flexShrink: 0 }}
+                >
+                  cancel
+                </span>
+              ) : isItemDone ? (
                 <span
                   className="material-symbols-outlined"
                   style={{
                     fontSize: '20px',
                     color:    status === 'cooking' ? '#2D5FA3' : '#006948',
+                    flexShrink: 0,
+                    fontVariationSettings: "'FILL' 1",
+                  }}
+                >
+                  check_circle
+                </span>
+              ) : (isPending && isSelected) ? (
+                <span
+                  className="material-symbols-outlined"
+                  style={{
+                    fontSize: '20px',
+                    color:    '#8D4B00',
                     flexShrink: 0,
                     fontVariationSettings: "'FILL' 1",
                   }}
@@ -272,16 +360,22 @@ const OrderCard = ({ order }) => {
                     transition:     'color 0.2s cubic-bezier(0.2,0,0,1)',
                   }}>
                     {item.qty > 1 && (
-                      <span style={{ color: '#8D4B00', marginRight: '4px' }}>{item.qty}×</span>
+                      <span style={{ color: isRejected ? '#BA1A1A' : '#8D4B00', marginRight: '4px' }}>{item.qty}×</span>
                     )}
-                    {item.name}
-                  </span>
-                  {/* station chip */}
-                  {item.station && (
-                    <span style={chipStyle(item.station)}>
-                      {item.station.toUpperCase()}
+                    <span style={{ textDecoration: isRejected ? 'line-through' : 'none' }}>
+                      {item.name}
                     </span>
-                  )}
+                    {isRejected && (
+                      <span style={{ 
+                        fontSize: '9px', fontWeight: 900, color: '#BA1A1A', 
+                        marginLeft: '8px', padding: '2px 6px', background: '#FEF2F2',
+                        borderRadius: '4px', textTransform: 'uppercase'
+                      }}>
+                        Cancelled
+                      </span>
+                    )}
+                  </span>
+                  {/* station chip removed */}
                 </div>
 
                 {/* Modifications — "The Specs" body */}
@@ -311,64 +405,90 @@ const OrderCard = ({ order }) => {
       </div>
 
       {/* ── ACTIONS ── */}
-      <div style={{
-        padding:    '8px',
-        background: '#F2F4F6',
-        borderTop:  '1px solid rgba(219,194,176,0.3)',
-      }}>
+      {!isHistory && (
+        <div style={{
+          padding:    '8px',
+          background: '#F2F4F6',
+          borderTop:  '1px solid rgba(219,194,176,0.3)',
+        }}>
 
-        {/* PENDING → ACCEPT */}
+        {/* PENDING → CANCEL + ACCEPT */}
         {status === 'pending' && (
-          <button
-            onClick={(e) => { e.stopPropagation(); handleAction(); }}
-            disabled={isActionLoading || selectedItems.length === 0}
-            className="cubic-transition"
-            style={{
-              width:       '100%',
-              background:  selectedItems.length > 0
-                ? 'linear-gradient(15deg, #8D4B00, #B15F00)'
-                : '#E6E8EA',
-              color:       selectedItems.length > 0 ? '#FFFFFF' : '#887364',
-              fontWeight:  900,
-              fontSize:    '11px',
-              textTransform:'uppercase',
-              letterSpacing:'0.15em',
-              padding:     '13px',
-              borderRadius:'6px',
-              border:      'none',
-              cursor:      selectedItems.length > 0 ? 'pointer' : 'not-allowed',
-              opacity:     isActionLoading ? 0.6 : 1,
-              display:     'flex',
-              alignItems:  'center',
-              justifyContent: 'center',
-            }}
-          >
-            {isActionLoading
-              ? <Loader2 size={14} className="animate-spin" />
-              : 'Accept Order'}
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleCancel(); }}
+              disabled={isActionLoading}
+              className="cubic-transition"
+              style={{
+                flex: 1,
+                background: '#FFFFFF',
+                color: '#BA1A1A',
+                fontWeight: 900,
+                fontSize: '11px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.12em',
+                padding: '13px 8px',
+                borderRadius: '6px',
+                border: '1px solid rgba(186,26,26,0.3)',
+                cursor: 'pointer',
+                opacity: isActionLoading ? 0.6 : 1,
+              }}
+            >
+              CANCEL
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleAction(); }}
+              disabled={isActionLoading || selectedItems.length === 0}
+              className="cubic-transition"
+              style={{
+                flex: 2,
+                background: selectedItems.length > 0
+                  ? 'linear-gradient(15deg, #8D4B00, #B15F00)'
+                  : '#E6E8EA',
+                color: selectedItems.length > 0 ? '#FFFFFF' : '#887364',
+                fontWeight: 900,
+                fontSize: '11px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.15em',
+                padding: '13px',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: selectedItems.length > 0 ? 'pointer' : 'not-allowed',
+                opacity: isActionLoading ? 0.6 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {isActionLoading
+                ? <Loader2 size={14} className="animate-spin" />
+                : 'Accept Order'}
+            </button>
+          </div>
         )}
 
         {/* COOKING → BUMP + MARK READY */}
         {status === 'cooking' && (
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
+              onClick={(e) => { e.stopPropagation(); handleCancel(); }}
+              disabled={isActionLoading}
               className="cubic-transition"
               style={{
                 flex:        1,
                 background:  '#FFFFFF',
-                color:       '#554336',
+                color:       '#BA1A1A',
                 fontWeight:  900,
                 fontSize:    '10px',
                 textTransform:'uppercase',
                 letterSpacing:'0.12em',
                 padding:     '13px 8px',
                 borderRadius:'6px',
-                border:      '1px solid #DBC2B0',
+                border:      '1px solid rgba(186,26,26,0.3)',
                 cursor:      'pointer',
               }}
             >
-              BUMP
+              CANCEL
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleAction(); }}
@@ -432,6 +552,7 @@ const OrderCard = ({ order }) => {
           </button>
         )}
       </div>
+      )}
     </div>
   );
 };

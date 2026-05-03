@@ -47,7 +47,7 @@ export default function Analytics() {
         .from('orders')
         .select('created_at, status')
         .eq('tenant_id', TENANT_ID)
-        .neq('status', 'cancelled');
+        .not('status', 'in', '("cancelled","rejected")');
       
       if (ordersErr) throw ordersErr;
 
@@ -75,7 +75,7 @@ export default function Analytics() {
           orders!inner(tenant_id, status)
         `)
         .eq('orders.tenant_id', TENANT_ID)
-        .neq('orders.status', 'cancelled');
+        .not('orders.status', 'in', '("cancelled","rejected")');
 
       if (itemsErr) throw itemsErr;
 

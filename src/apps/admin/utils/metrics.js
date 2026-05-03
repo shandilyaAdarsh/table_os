@@ -7,7 +7,7 @@ export const fetchKPIMetrics = async (tenantId) => {
       .from('orders')
       .select('total_amount')
       .eq('tenant_id', tenantId)
-      .neq('status', 'cancelled');
+      .not('status', 'in', '("cancelled","rejected")');
       
     if (revErr) throw revErr;
 
@@ -33,7 +33,7 @@ export const fetchKPIMetrics = async (tenantId) => {
       .from('orders')
       .select('*', { count: 'exact', head: true })
       .eq('tenant_id', tenantId)
-      .not('status', 'in', '("served","cancelled")');
+      .not('status', 'in', '("served","cancelled","rejected")');
 
     if (ordErr) throw ordErr;
 
