@@ -94,6 +94,11 @@ function AuthGate({ children }) {
   return children
 }
 
+function CheckInRoute() {
+  const navigate = useNavigate()
+  return <CheckIn onComplete={() => navigate('/menu/browse')} />
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <AuthGate>
@@ -111,7 +116,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/menu/orders" element={<OrdersPage />} />
           <Route path="/menu/profile" element={<ProfilePage />} />
           <Route path="/menu/cart" element={<CartPage />} />
-          <Route path="/menu/checkin" element={<CheckIn />} />
+          <Route path="/menu/checkin" element={<CheckInRoute />} />
 
           {/* Admin Dashboard */}
           <Route path="/admin/login" element={<AdminLogin />} />
