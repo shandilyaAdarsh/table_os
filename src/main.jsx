@@ -17,8 +17,8 @@ import Splash from './apps/customer/pages/Splash'
 import StaffLogin from './apps/staff/pages/StaffLogin'
 import TableOverview from './apps/staff/pages/TableOverview'
 import TableDetail from './apps/staff/pages/TableDetail'
-import KitchenDisplay from './apps/kds/pages/KitchenDisplay'
-
+import KDSBoard from './apps/kds/pages/KDSBoard'
+import AdminApp from './apps/admin/AdminApp.jsx'
 
 function CustomerApp() {
   // Save ?table= param from URL to localStorage on first load.
@@ -60,7 +60,7 @@ function StaffApp() {
 function KdsApp() {
   return (
     <Routes>
-      <Route index element={<KitchenDisplay />} />
+      <Route index element={<KDSBoard />} />
     </Routes>
   )
 }
@@ -70,8 +70,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <Routes>
         <Route path="/customer/*" element={<CustomerApp />} />
+        <Route path="/menu/*" element={<CustomerApp />} />
         <Route path="/staff/*" element={<StaffApp />} />
         <Route path="/kds/*" element={<KdsApp />} />
+        <Route path="/admin/*" element={<AdminApp />} />
         <Route path="/" element={<Navigate to="/customer/browse" replace />} />
       </Routes>
     </BrowserRouter>

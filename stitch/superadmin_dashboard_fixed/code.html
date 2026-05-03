@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>TableOS SuperAdmin Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed": "#c0e8ff",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary-fixed": "#1b1c1c",
+                        "surface-bright": "#3a3939",
+                        "surface": "#131313",
+                        "inverse-primary": "#b72028",
+                        "tertiary": "#83d0f6",
+                        "surface-container-highest": "#353534",
+                        "tertiary-fixed-dim": "#83d0f6",
+                        "on-secondary-container": "#b6b5b4",
+                        "secondary-fixed": "#e4e2e1",
+                        "inverse-on-surface": "#313030",
+                        "on-surface": "#e5e2e1",
+                        "on-tertiary-fixed-variant": "#004d66",
+                        "outline": "#aa8986",
+                        "inverse-surface": "#e5e2e1",
+                        "surface-dim": "#131313",
+                        "surface-container-high": "#2a2a2a",
+                        "surface-container": "#201f1f",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "on-primary-container": "#ffdad7",
+                        "on-tertiary": "#003547",
+                        "surface-container-lowest": "#0e0e0e",
+                        "on-secondary": "#303030",
+                        "on-error": "#690005",
+                        "secondary-container": "#474746",
+                        "surface-tint": "#ffb3ae",
+                        "primary-fixed": "#ffdad7",
+                        "surface-container-low": "#1c1b1b",
+                        "on-tertiary-container": "#c1e9ff",
+                        "on-secondary-fixed-variant": "#474746",
+                        "outline-variant": "#5a403e",
+                        "primary-fixed-dim": "#ffb3ae",
+                        "primary-container": "#c0272d",
+                        "on-primary": "#68000c",
+                        "primary": "#ffb3ae",
+                        "error": "#ffb4ab",
+                        "tertiary-container": "#006d8f",
+                        "background": "#131313",
+                        "secondary": "#c8c6c5",
+                        "on-primary-fixed-variant": "#930015",
+                        "surface-variant": "#353534",
+                        "on-surface-variant": "#e3bebb",
+                        "on-primary-fixed": "#410004",
+                        "error-container": "#93000a",
+                        "on-background": "#e5e2e1",
+                        "on-tertiary-fixed": "#001e2b"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "fontFamily": {
+                        "headline": ["Inter"],
+                        "body": ["Inter"],
+                        "label": ["Inter"],
+                        "mono": ["JetBrains Mono"]
+                    }
+                },
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #131313;
+            background-image: radial-gradient(#1A1A1A 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="font-body text-on-surface antialiased">
+<!-- SideNavBar Shell -->
+<aside class="fixed left-0 top-0 h-full w-[240px] z-50 bg-[#0D0D0D] border-r border-[#2A2A2A] flex flex-col justify-between pb-6">
+<div>
+<!-- Brand Anchor -->
+<div class="px-6 py-8 flex items-center gap-3">
+<div class="w-8 h-8 bg-primary-container flex items-center justify-center rounded">
+<span class="material-symbols-outlined text-white text-xl" data-icon="layers" style="font-variation-settings: 'FILL' 1;">layers</span>
+</div>
+<span class="text-[20px] font-bold text-[#C0272D] tracking-tighter">TableOS</span>
+</div>
+<!-- Navigation Links -->
+<nav class="mt-4 flex flex-col">
+<!-- Dashboard Active -->
+<a class="flex items-center justify-between px-6 py-3 text-[#F5F5F5] bg-[#C0272D08] border-l-[3px] border-[#C0272D] transition-all duration-200 group" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[#C0272D]" data-icon="bar_chart" style="font-variation-settings: 'FILL' 1;">bar_chart</span>
+<span class="font-medium text-sm tracking-tight">Dashboard</span>
+</div>
+<span class="flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+</span>
+</a>
+<a class="flex items-center gap-3 px-6 py-3 text-[#555555] hover:text-[#F5F5F5] hover:bg-[#1C1B1B] transition-all duration-300 group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors" data-icon="store">store</span>
+<span class="font-medium text-sm tracking-tight">Tenants</span>
+</a>
+<a class="flex items-center gap-3 px-6 py-3 text-[#555555] hover:text-[#F5F5F5] hover:bg-[#1C1B1B] transition-all duration-300 group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors" data-icon="add">add</span>
+<span class="font-medium text-sm tracking-tight">Onboard New</span>
+</a>
+<a class="flex items-center gap-3 px-6 py-3 text-[#555555] hover:text-[#F5F5F5] hover:bg-[#1C1B1B] transition-all duration-300 group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors" data-icon="credit_card">credit_card</span>
+<span class="font-medium text-sm tracking-tight">Billing</span>
+</a>
+<a class="flex items-center gap-3 px-6 py-3 text-[#555555] hover:text-[#F5F5F5] hover:bg-[#1C1B1B] transition-all duration-300 group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors" data-icon="campaign">campaign</span>
+<span class="font-medium text-sm tracking-tight">Broadcast</span>
+</a>
+<a class="flex items-center gap-3 px-6 py-3 text-[#555555] hover:text-[#F5F5F5] hover:bg-[#1C1B1B] transition-all duration-300 group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors" data-icon="settings">settings</span>
+<span class="font-medium text-sm tracking-tight">Settings</span>
+</a>
+</nav>
+</div>
+<!-- Footer Actions -->
+<div class="px-2">
+<div class="flex items-center gap-3 px-4 py-3 text-[#555555] hover:text-[#F5F5F5] hover:bg-[#1C1B1B] transition-all duration-300 cursor-pointer rounded-xl mx-2">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+<span class="font-medium text-sm tracking-tight">Logout</span>
+</div>
+<div class="mt-4 px-6 pt-4 border-t border-[#2A2A2A]/50 flex items-center gap-3">
+<img alt="Admin User Profile" class="w-8 h-8 rounded-full border border-outline-variant/30" data-alt="professional male portrait with minimalist background, soft studio lighting, corporate administrative profile headshot" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBI4JOkNKQYfvulIxdYFw8SJ-mT2OqbwAVbaJRPSH_FyWNX6oo_fq4RW__PupK6Xw7swFtKT1lquQZMD7eiVSzCnhDqkQGTngfS_zEStfeSGef_jEPZU3PVQZfE079rrGOu-_CHcF9YjeBZFkGyyBtocBUiFeEsbGT0PIhsKvR8lzsPuDgQvrl1N67BN796scL6wwDgVL4L7kzRCswcq2RRti27vRd98j46fMIiy5sgjIB-R_hH6wkaBbnWsZObiNvMJ7liVF8D3Gcd"/>
+<div class="flex flex-col">
+<span class="text-xs font-bold text-on-surface">SuperAdmin</span>
+<span class="text-[10px] font-mono text-[#555555]">ID: 0042X_S</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- TopNavBar Shell -->
+<header class="fixed top-0 right-0 z-40 w-[calc(100%-240px)] h-16 bg-[#131313]/80 backdrop-blur-xl border-b border-[#2A2A2A]/50 flex justify-between items-center px-8">
+<h1 class="text-xl font-semibold font-headline tracking-tight text-on-surface">Dashboard Overview</h1>
+<div class="flex items-center gap-6">
+<div class="text-right hidden md:block">
+<p class="font-mono text-xs text-[#555555] uppercase tracking-widest">System Operational</p>
+<p class="font-mono text-xs text-on-surface-variant">May 24, 2024 • 14:32 UTC</p>
+</div>
+<div class="flex items-center gap-3 pl-6 border-l border-[#2A2A2A]">
+<button class="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="search">search</span>
+</button>
+<button class="relative w-10 h-10 flex items-center justify-center rounded-xl hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="notifications">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-primary-container rounded-full"></span>
+</button>
+</div>
+</div>
+</header>
+<!-- Main Canvas -->
+<main class="ml-[240px] pt-24 px-8 pb-12">
+<!-- Row 1: KPI Bento Grid -->
+<section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+<!-- KPI 1 -->
+<div class="bg-surface-container rounded-xl p-6 border border-[#2A2A2A] relative overflow-hidden group hover:bg-surface-container-high transition-all">
+<p class="text-[0.6875rem] font-bold text-[#555555] uppercase tracking-widest mb-4">Total Restaurants</p>
+<div class="flex items-end gap-2">
+<h2 class="text-[48px] font-bold font-mono text-on-surface leading-none">12</h2>
+<span class="text-xs text-emerald-500 font-mono mb-2 flex items-center"><span class="material-symbols-outlined text-xs" data-icon="arrow_upward">arrow_upward</span> +2</span>
+</div>
+<span class="material-symbols-outlined absolute -right-4 -bottom-4 text-[120px] opacity-[0.03] group-hover:opacity-[0.05] transition-opacity" data-icon="store">store</span>
+</div>
+<!-- KPI 2: MRR (Featured) -->
+<div class="bg-surface-container rounded-xl p-6 border border-[#C0272D]/30 relative overflow-hidden group hover:bg-surface-container-high transition-all shadow-[0_0_40px_rgba(192,39,45,0.08)]">
+<div class="absolute inset-0 bg-gradient-to-br from-primary-container/10 to-transparent pointer-events-none"></div>
+<p class="text-[0.6875rem] font-bold text-primary tracking-widest uppercase mb-4">Platform MRR</p>
+<div class="flex items-end gap-2">
+<h2 class="text-[48px] font-bold font-mono text-on-surface leading-none">₹1,24,800</h2>
+</div>
+<p class="text-[10px] font-mono text-[#555555] mt-2 italic">Refreshed 2m ago</p>
+</div>
+<!-- KPI 3 -->
+<div class="bg-surface-container rounded-xl p-6 border border-[#2A2A2A] relative overflow-hidden group hover:bg-surface-container-high transition-all">
+<p class="text-[0.6875rem] font-bold text-[#555555] uppercase tracking-widest mb-4">Orders Today</p>
+<div class="flex items-end gap-2">
+<h2 class="text-[48px] font-bold font-mono text-on-surface leading-none">1,847</h2>
+<span class="text-xs text-emerald-500 font-mono mb-2 flex items-center"><span class="material-symbols-outlined text-xs" data-icon="trending_up">trending_up</span> 12%</span>
+</div>
+<span class="material-symbols-outlined absolute -right-4 -bottom-4 text-[120px] opacity-[0.03] group-hover:opacity-[0.05] transition-opacity" data-icon="receipt_long">receipt_long</span>
+</div>
+<!-- KPI 4 -->
+<div class="bg-surface-container rounded-xl p-6 border border-[#2A2A2A] relative overflow-hidden group hover:bg-surface-container-high transition-all">
+<p class="text-[0.6875rem] font-bold text-[#555555] uppercase tracking-widest mb-4">System Health</p>
+<div class="flex items-end gap-2">
+<h2 class="text-[48px] font-bold font-mono text-on-surface leading-none">99.9%</h2>
+</div>
+<div class="mt-4 flex gap-1 h-1">
+<div class="flex-1 bg-primary rounded-full"></div>
+<div class="flex-1 bg-primary rounded-full"></div>
+<div class="flex-1 bg-primary rounded-full"></div>
+<div class="flex-1 bg-primary rounded-full"></div>
+<div class="flex-1 bg-primary rounded-full animate-pulse"></div>
+</div>
+</div>
+</section>
+<!-- Row 2: Charts Asymmetric -->
+<section class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+<!-- Left Chart: MRR Growth -->
+<div class="lg:col-span-2 bg-surface-container rounded-xl p-8 border border-[#2A2A2A]">
+<div class="flex justify-between items-center mb-10">
+<div>
+<h3 class="text-lg font-bold tracking-tight text-on-surface">MRR Growth</h3>
+<p class="text-xs text-[#555555]">Monthly revenue performance across all tenants</p>
+</div>
+<div class="flex gap-2">
+<button class="px-3 py-1 text-[10px] font-bold uppercase tracking-tighter bg-surface-container-low text-[#555555] rounded border border-outline-variant/30">6 Months</button>
+<button class="px-3 py-1 text-[10px] font-bold uppercase tracking-tighter hover:bg-surface-container-low text-[#F5F5F5] rounded border border-outline-variant/30 transition-colors">1 Year</button>
+</div>
+</div>
+<div class="h-[240px] w-full relative">
+<!-- SVG Chart Visualization -->
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 800 200">
+<defs>
+<lineargradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
+<stop offset="0%" stop-color="#C0272D" stop-opacity="0.3"></stop>
+<stop offset="100%" stop-color="#C0272D" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<!-- Path Fill -->
+<path d="M0,180 L0,160 C50,155 100,165 150,140 C200,115 250,120 300,100 C350,80 400,90 450,60 C500,30 550,50 600,40 C650,30 700,20 800,10 L800,180 Z" fill="url(#chartGradient)"></path>
+<!-- Path Line -->
+<path d="M0,160 C50,155 100,165 150,140 C200,115 250,120 300,100 C350,80 400,90 450,60 C500,30 550,50 600,40 C650,30 700,20 800,10" fill="none" stroke="#C0272D" stroke-linecap="round" stroke-width="3"></path>
+</svg>
+<!-- X-Axis Labels -->
+<div class="flex justify-between mt-4 px-2 font-mono text-[10px] text-[#555555]">
+<span>NOV</span>
+<span>DEC</span>
+<span>JAN</span>
+<span>FEB</span>
+<span>MAR</span>
+<span>APR</span>
+</div>
+</div>
+</div>
+<!-- Right Chart: Plan Distribution -->
+<div class="bg-surface-container rounded-xl p-8 border border-[#2A2A2A] flex flex-col">
+<h3 class="text-lg font-bold tracking-tight text-on-surface mb-2">Plan Distribution</h3>
+<p class="text-xs text-[#555555] mb-8">Subscriber tier analytics</p>
+<div class="flex-1 flex flex-col justify-center items-center relative">
+<svg class="w-48 h-48 transform -rotate-90">
+<!-- Enterprise 15% -->
+<circle cx="96" cy="96" fill="transparent" r="70" stroke="#C0272D" stroke-dasharray="440" stroke-dashoffset="374" stroke-linecap="butt" stroke-width="24"></circle>
+<!-- Pro 45% -->
+<circle cx="96" cy="96" fill="transparent" r="70" stroke="#2A2A2A" stroke-dasharray="440" stroke-dashoffset="66" stroke-width="24" transform="rotate(54, 96, 96)"></circle>
+<!-- Starter 40% -->
+<circle cx="96" cy="96" fill="transparent" r="70" stroke="#1C1B1B" stroke-dasharray="440" stroke-dashoffset="264" stroke-width="24" transform="rotate(216, 96, 96)"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="text-3xl font-bold font-mono">12</span>
+<span class="text-[10px] text-[#555555] uppercase tracking-tighter font-bold">Tenants</span>
+</div>
+</div>
+<div class="space-y-3 mt-8">
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-[#1C1B1B]"></div>
+<span class="text-xs text-on-surface-variant">Starter</span>
+</div>
+<span class="font-mono text-xs text-on-surface">40%</span>
+</div>
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-[#2A2A2A]"></div>
+<span class="text-xs text-on-surface-variant">Pro</span>
+</div>
+<span class="font-mono text-xs text-on-surface">45%</span>
+</div>
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary-container"></div>
+<span class="text-xs text-on-surface-variant">Enterprise</span>
+</div>
+<span class="font-mono text-xs text-on-surface">15%</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Row 3: Recent Tenants Table -->
+<section class="bg-surface-container rounded-xl overflow-hidden border border-[#2A2A2A]">
+<div class="px-8 py-6 flex justify-between items-center">
+<h3 class="text-lg font-bold tracking-tight text-on-surface">Recent Tenants</h3>
+<button class="text-xs font-bold text-primary uppercase tracking-widest hover:underline transition-all">View All</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead class="bg-surface-container-low border-y border-[#2A2A2A]/50">
+<tr>
+<th class="px-8 py-4 text-[10px] font-bold text-[#555555] uppercase tracking-widest">Restaurant Name</th>
+<th class="px-8 py-4 text-[10px] font-bold text-[#555555] uppercase tracking-widest">Plan Badge</th>
+<th class="px-8 py-4 text-[10px] font-bold text-[#555555] uppercase tracking-widest">MRR</th>
+<th class="px-8 py-4 text-[10px] font-bold text-[#555555] uppercase tracking-widest">Status</th>
+<th class="px-8 py-4 text-[10px] font-bold text-[#555555] uppercase tracking-widest">Joined Date</th>
+<th class="px-8 py-4 text-[10px] font-bold text-[#555555] uppercase tracking-widest text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-[#2A2A2A]/30">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-high transition-colors group">
+<td class="px-8 py-5">
+<div class="flex items-center gap-4">
+<img alt="Lumiere Dining Logo" class="w-10 h-10 rounded-lg object-cover grayscale group-hover:grayscale-0 transition-all" data-alt="minimalist restaurant logo on dark background, fine dining aesthetic, elegant typography" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAmLwqog1UpEJ6dIMJRSpyBsxAN3FZ8PhQoql2b1or-WwzPa2AXgAspBj0_D4Eodzl1OD2ZKH2FOl6StQjd3iIfweR3EPpGIeXYuQiNgM0V5T0VQJQC10d6lInvUhlGA8LyBcUAsJuZiPCGBlMGt1jkfX0hs9dSxCq_sUDI2o1KjUZWZz-yXmk2qZuHxhHfl0Om_1Rv53PhEGe5nQrmajAuUU-OvBBNliGaTXugIKrqpGdXlCr55V1CyuMRSTbjvjMeZipecY5XkVky"/>
+<div class="flex flex-col">
+<span class="text-sm font-bold text-on-surface">Lumière Dining</span>
+<span class="text-[10px] font-mono text-[#555555]">#T-99210</span>
+</div>
+</div>
+</td>
+<td class="px-8 py-5">
+<span class="px-3 py-1 bg-primary-container/10 text-primary border border-primary-container/20 text-[10px] font-bold uppercase tracking-tighter rounded-full">Enterprise</span>
+</td>
+<td class="px-8 py-5 font-mono text-sm text-emerald-500 font-bold">₹24,500</td>
+<td class="px-8 py-5">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"></div>
+<span class="text-xs text-on-surface-variant">Active</span>
+</div>
+</td>
+<td class="px-8 py-5 font-mono text-xs text-[#555555]">24 APR 2024</td>
+<td class="px-8 py-5 text-right">
+<div class="flex justify-end gap-2">
+<button class="px-3 py-1 text-[10px] font-bold uppercase text-on-surface hover:bg-surface-container-highest transition-colors rounded">View</button>
+<button class="p-1 hover:bg-surface-container-highest rounded"><span class="material-symbols-outlined text-sm" data-icon="more_vert">more_vert</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container-high transition-colors group">
+<td class="px-8 py-5">
+<div class="flex items-center gap-4">
+<img alt="Urban Crust Logo" class="w-10 h-10 rounded-lg object-cover grayscale group-hover:grayscale-0 transition-all" data-alt="modern pizza restaurant branding, minimalist black and white icon, industrial chic aesthetic" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD4eI285vzz2PnBasECNe9Edu8nC14a5KyRo0T3pthqyx9tg32RDkoGZucF4ixlrFNZG36lIbMpiNfy9Oa54_ZmnQQylU8HAZX-4YXlaopbtC5naIfhZTFKSACDfukf3i5zxOgulsAGI2QhTf4huL4Y_MobMMAQ81QKshNjyuYrpvFHxPTyRHVd3qpiBAoH2_mwyjlB_6fb-yAyexdS-dNgDhdQtFq0SqZdqsk2r1GqaWk_7XjBFlheZqz6O6e3HCE_z126gLaKfM8h"/>
+<div class="flex flex-col">
+<span class="text-sm font-bold text-on-surface">Urban Crust</span>
+<span class="text-[10px] font-mono text-[#555555]">#T-99185</span>
+</div>
+</div>
+</td>
+<td class="px-8 py-5">
+<span class="px-3 py-1 bg-surface-container-highest text-on-surface-variant border border-[#2A2A2A] text-[10px] font-bold uppercase tracking-tighter rounded-full">Pro</span>
+</td>
+<td class="px-8 py-5 font-mono text-sm text-emerald-500 font-bold">₹12,200</td>
+<td class="px-8 py-5">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"></div>
+<span class="text-xs text-on-surface-variant">Active</span>
+</div>
+</td>
+<td class="px-8 py-5 font-mono text-xs text-[#555555]">18 APR 2024</td>
+<td class="px-8 py-5 text-right">
+<div class="flex justify-end gap-2">
+<button class="px-3 py-1 text-[10px] font-bold uppercase text-on-surface hover:bg-surface-container-highest transition-colors rounded">View</button>
+<button class="p-1 hover:bg-surface-container-highest rounded"><span class="material-symbols-outlined text-sm" data-icon="more_vert">more_vert</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container-high transition-colors group">
+<td class="px-8 py-5">
+<div class="flex items-center gap-4">
+<img alt="The Green Bowl Logo" class="w-10 h-10 rounded-lg object-cover grayscale group-hover:grayscale-0 transition-all" data-alt="clean healthy food brand logo, minimalist leaf icon, high-end organic cafe aesthetic" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAIi2WD_ngbMIualRrAO50cgXeWl2lDTMw3mVBhUW78jOcXNqIX_sakFkZDzb7EvCLSPlEUKQ4e1MYyf17dod1B5RRsnfw5gzN6ar9Nd3QOOc9oPXVdeozQIgP8l3j7giep2vGWvBQp7zaNXPailKKIVe16Mm7ohBrS2XHUCLyDplmpkvitb2AqqdaD8eHzLkPAVE5TzvwOboAnoT-xqjv_zlgskE10gDd3fmfo7EBNURfNBY22PHKJPLbYEVLGJtMf2gCzCBXXgLZc"/>
+<div class="flex flex-col">
+<span class="text-sm font-bold text-on-surface">The Green Bowl</span>
+<span class="text-[10px] font-mono text-[#555555]">#T-99142</span>
+</div>
+</div>
+</td>
+<td class="px-8 py-5">
+<span class="px-3 py-1 bg-surface-container-lowest text-[#555555] border border-[#2A2A2A] text-[10px] font-bold uppercase tracking-tighter rounded-full">Starter</span>
+</td>
+<td class="px-8 py-5 font-mono text-sm text-emerald-500 font-bold">₹4,800</td>
+<td class="px-8 py-5">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-amber-500"></div>
+<span class="text-xs text-on-surface-variant">Trial</span>
+</div>
+</td>
+<td class="px-8 py-5 font-mono text-xs text-[#555555]">12 APR 2024</td>
+<td class="px-8 py-5 text-right">
+<div class="flex justify-end gap-2">
+<button class="px-3 py-1 text-[10px] font-bold uppercase text-on-surface hover:bg-surface-container-highest transition-colors rounded">View</button>
+<button class="p-1 hover:bg-surface-container-highest rounded"><span class="material-symbols-outlined text-sm" data-icon="more_vert">more_vert</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-surface-container-high transition-colors group">
+<td class="px-8 py-5">
+<div class="flex items-center gap-4">
+<img alt="Soma Sushi Logo" class="w-10 h-10 rounded-lg object-cover grayscale group-hover:grayscale-0 transition-all" data-alt="sophisticated japanese restaurant logo, minimalist brush stroke icon, dark upscale branding" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBDcqm-lYy5-_JXLWqUJ4MyRpN4sCQjK8vLybFuBTvXkOxZTemttSKzeko38HXW2wsDIQwgNi29nBLp5pldx507xxD3BHEmv7gLlDSlIDi8vDRYq0PvJNb2mJ4dHUnJK0dBvX4yKca0Z9v-KxTBisV0PLa73f7q3B-9TTZgk-tKfOaY28c2bjTqlKncxe4WjfUGxRmAbcnsQrtTyIKoVsNvK4Zeo0171dxqjA6pXMr_siIABZeHJzDNCfQCtcnntOEMOlatRAm_yqlv"/>
+<div class="flex flex-col">
+<span class="text-sm font-bold text-on-surface">Soma Sushi</span>
+<span class="text-[10px] font-mono text-[#555555]">#T-99098</span>
+</div>
+</div>
+</td>
+<td class="px-8 py-5">
+<span class="px-3 py-1 bg-surface-container-highest text-on-surface-variant border border-[#2A2A2A] text-[10px] font-bold uppercase tracking-tighter rounded-full">Pro</span>
+</td>
+<td class="px-8 py-5 font-mono text-sm text-emerald-500 font-bold">₹12,200</td>
+<td class="px-8 py-5">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"></div>
+<span class="text-xs text-on-surface-variant">Active</span>
+</div>
+</td>
+<td class="px-8 py-5 font-mono text-xs text-[#555555]">05 APR 2024</td>
+<td class="px-8 py-5 text-right">
+<div class="flex justify-end gap-2">
+<button class="px-3 py-1 text-[10px] font-bold uppercase text-on-surface hover:bg-surface-container-highest transition-colors rounded">View</button>
+<button class="p-1 hover:bg-surface-container-highest rounded"><span class="material-symbols-outlined text-sm" data-icon="more_vert">more_vert</span></button>
+</div>
+</td>
+</tr>
+<!-- Row 5 -->
+<tr class="hover:bg-surface-container-high transition-colors group">
+<td class="px-8 py-5">
+<div class="flex items-center gap-4">
+<img alt="Velvet Bistro Logo" class="w-10 h-10 rounded-lg object-cover grayscale group-hover:grayscale-0 transition-all" data-alt="luxurious bistro logo, gold and dark theme, minimalist script font, premium dining brand" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDjQNbEn-fLYPs3RCFth8c8U6vcA1_-iUXa3o59jgunzX04dHP0qi7tXbfIw9uimSfz_X6M2JPWkGG4ivXEJmXswypTKROC-n-YXZXFU2oi-4HjBNcK_K5N92imo5hx1y-r4mM90eZ3Ir7Bdobiy5JRskMgvrYDLdG4EiA6mxfL3sstJk_yjepyWA_wrfi3RNDz52f4JG4b5M7UVsom5D6uSfGuovb5S70hNQm8sbPMAGfmNlS0iiZWZzeTum5Lgy1cLnAm2QWudbyY"/>
+<div class="flex flex-col">
+<span class="text-sm font-bold text-on-surface">Velvet Bistro</span>
+<span class="text-[10px] font-mono text-[#555555]">#T-99050</span>
+</div>
+</div>
+</td>
+<td class="px-8 py-5">
+<span class="px-3 py-1 bg-primary-container/10 text-primary border border-primary-container/20 text-[10px] font-bold uppercase tracking-tighter rounded-full">Enterprise</span>
+</td>
+<td class="px-8 py-5 font-mono text-sm text-[#C0272D] font-bold">₹0</td>
+<td class="px-8 py-5">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-error"></div>
+<span class="text-xs text-on-surface-variant">Suspended</span>
+</div>
+</td>
+<td class="px-8 py-5 font-mono text-xs text-[#555555]">01 APR 2024</td>
+<td class="px-8 py-5 text-right">
+<div class="flex justify-end gap-2">
+<button class="px-3 py-1 text-[10px] font-bold uppercase text-on-surface hover:bg-surface-container-highest transition-colors rounded">View</button>
+<button class="p-1 hover:bg-surface-container-highest rounded"><span class="material-symbols-outlined text-sm" data-icon="more_vert">more_vert</span></button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</main>
+</body></html>

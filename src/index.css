@@ -1,5 +1,82 @@
 @import "tailwindcss";
 
+@theme {
+  --color-surface-dim: #d3daef;
+  --color-on-background: #141b2b;
+  --color-on-secondary: #ffffff;
+  --color-on-tertiary-container: #003f6d;
+  --color-inverse-on-surface: #edf0ff;
+  --color-on-tertiary: #ffffff;
+  --color-surface-tint: #7d5700;
+  --color-on-secondary-fixed: #1b1b1d;
+  --color-surface-variant: #dce2f7;
+  --color-surface-container-lowest: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-surface-container-highest: #dce2f7;
+  --color-error: #ba1a1a;
+  --color-surface: #f9f9ff;
+  --color-on-secondary-container: #636264;
+  --color-on-tertiary-fixed-variant: #00497d;
+  --color-surface-container-low: #f1f3ff;
+  --color-secondary: #5f5e60;
+  --color-outline-variant: #d4c4af;
+  --color-outline: #827563;
+  --color-tertiary-container: #6cacf2;
+  --color-on-primary: #ffffff;
+  --color-primary-fixed-dim: #f8bc4b;
+  --color-inverse-primary: #f8bc4b;
+  --color-on-surface-variant: #504535;
+  --color-on-primary-fixed-variant: #5f4100;
+  --color-surface-container: #e9edff;
+  --color-secondary-fixed: #e4e2e4;
+  --color-tertiary-fixed: #d1e4ff;
+  --color-on-surface: #141b2b;
+  --color-on-tertiary-fixed: #001d36;
+  --color-on-error-container: #93000a;
+  --color-primary-fixed: #ffdeaa;
+  --color-surface-bright: #f9f9ff;
+  --color-tertiary-fixed-dim: #9ecaff;
+  --color-secondary-container: #e2dfe1;
+  --color-on-primary-fixed: #271900;
+  --color-inverse-surface: #293040;
+  --color-primary: #7d5700;
+  --color-on-secondary-fixed-variant: #474649;
+  --color-surface-container-high: #e1e8fd;
+  --color-on-error: #ffffff;
+  --color-background: #f9f9ff;
+  --color-secondary-fixed-dim: #c8c6c8;
+  --color-primary-container: #d69e2e;
+  --color-on-primary-container: #523800;
+  --color-tertiary: #0961a2;
+
+  --font-headline: "Space Grotesk", sans-serif;
+  --font-label: "Space Grotesk", sans-serif;
+  --font-body: "Inter", sans-serif;
+
+  --animate-pulse-green: pulse-green 2s infinite;
+  --animate-pulse-red-border: pulse-red-border 1.5s infinite;
+  --animate-shake: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+
+  @keyframes pulse-green {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(78, 222, 163, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(78, 222, 163, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(78, 222, 163, 0); }
+  }
+
+  @keyframes shake {
+    10%, 90% { transform: translate3d(-1px, 0, 0); }
+    20%, 80% { transform: translate3d(2px, 0, 0); }
+    30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+    40%, 60% { transform: translate3d(4px, 0, 0); }
+  }
+
+  @keyframes pulse-red-border {
+    0% { background-color: #ef4444; }
+    50% { background-color: #7f1d1d; }
+    100% { background-color: #ef4444; }
+  }
+}
+
 :root {
   /* Core Brand Colors from "The Elevated Heritage" */
   --primary: #002045;
@@ -11,7 +88,7 @@
   --surface-container-lowest: #FFFFFF;
 }
 
-* {
+*, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -20,10 +97,9 @@
 
 html, body {
   height: 100%;
-  background-color: var(--surface);
-  color: var(--primary);
-  /* Primary body font */
-  font-family: 'Manrope', 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-on-surface);
+  font-family: 'Manrope', var(--font-body), 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.6;
@@ -31,12 +107,11 @@ html, body {
 
 /* Headings use Epilogue */
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'Epilogue', system-ui, sans-serif;
+  font-family: 'Epilogue', var(--font-headline), system-ui, sans-serif;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
 
-/* Material Symbols specific adjustment */
 .material-symbols-outlined {
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   vertical-align: middle;
@@ -55,4 +130,8 @@ h1, h2, h3, h4, h5, h6 {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 32, 69, 0.2);
+}
+
+#root {
+  min-height: 100svh;
 }

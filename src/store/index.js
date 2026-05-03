@@ -1,56 +1,187 @@
 import { create } from 'zustand'
-import { supabase } from '../lib/supabase'
+import { supabase, TENANT_ID } from '../lib/supabase.js'
 
-const mockOrders = [
-  { id: "#1001", tableNum: "T03", items: [{ name: "Butter Chicken", qty: 2, station: "HOT", allergen: null, note: "", done: false }, { name: "Garlic Naan", qty: 4, station: "BREAD", allergen: null, note: "", done: false }], status: "cooking", elapsed: 240, isNew: false, note: "" },
-  { id: "#1002", tableNum: "T07", items: [{ name: "Paneer Tikka", qty: 1, station: "GRILL", allergen: "NUT ALLERGY — verify sauce", note: "Extra spicy", done: false }], status: "pending", elapsed: 60, isNew: false, note: "Extra spicy please" },
-  { id: "#1003", tableNum: "T11", items: [{ name: "Dal Makhani", qty: 2, station: "HOT", allergen: null, note: "", done: false }, { name: "Jeera Rice", qty: 2, station: "HOT", allergen: null, note: "", done: false }], status: "ready", elapsed: 680, isNew: false, note: "" }
-]
+// ─── ORDER STORE ────────────────────────────────────────────────────────────
+export const useOrderStore = create((set, get) => ({
+  orders: [],
+  isLoading: false,
 
-const mockTables = Array.from({ length: 15 }, (_, i) => ({
-  id: `T${String(i + 1).padStart(2, '0')}`,
-  status: ['vacant', 'occupied', 'payment_pending', 'needs_bussing', 'vacant'][i % 5],
-  capacity: 4,
+  // Fetch all active orders from Supabase
+  fetchOrders: async () => {
+    if (!supabase) {
+      console.error('[Store] Supabase client is null. Verify .env.local!')
+      set({ isLoading: false })
+      return
+    }
+    set({ isLoading: true })
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*, order_items(*)')
+        .eq('tenant_id', TENANT_ID)
+        .not('status', 'eq', 'served')
+        .order('created_at', { ascending: true })
+
+      if (error) {
+        throw error
+      }
+
+      const orders = (data || []).map(normalizeOrder)
+      set({ orders, isLoading: false })
+    } catch (err) {
+      console.error('[Store] fetchOrders failed:', err)
+      set({ isLoading: false })
+    }
+  },
+
+  // Subscribe to Realtime changes — call once on KDS mount
+  subscribeRealtime: () => {
+    if (!supabase) {
+      console.error('[Store] subscribeRealtime: Supabase client missing!')
+      return () => {}
+    }
+    const channel = supabase
+      .channel('orders-realtime')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'orders', filter: `tenant_id=eq.${TENANT_ID}` },
+        (payload) => {
+          const { eventType, new: newRow, old: oldRow } = payload
+
+          if (eventType === 'INSERT') {
+            // Need to fetch order_items for the new order
+            supabase
+              .from('order_items')
+              .select('*')
+              .eq('order_id', newRow.id)
+              .then(({ data: items }) => {
+                const order = normalizeOrder({ ...newRow, order_items: items || [], isNew: true })
+                set(s => ({ orders: [order, ...s.orders] }))
+              })
+          }
+
+          if (eventType === 'UPDATE') {
+            set(s => ({
+              orders: s.orders.map(o =>
+                o.id === newRow.id
+                  ? { ...o, status: newRow.status }
+                  : o
+              )
+            }))
+          }
+
+          if (eventType === 'DELETE') {
+            set(s => ({ orders: s.orders.filter(o => o.id !== oldRow.id) }))
+          }
+        })
+      .subscribe()
+
+    // Return unsubscribe function for cleanup
+    return () => supabase.removeChannel(channel)
+  },
+
+  // Write status to DB → Realtime will update Zustand
+  updateOrderStatus: async (id, status) => {
+    const { error } = await supabase
+      .from('orders')
+      .update({ status })
+      .eq('id', id)
+      .eq('tenant_id', TENANT_ID)
+
+    if (error) console.error('[KDS] updateOrderStatus error:', error)
+    // Do NOT manually update Zustand — Realtime handles it
+  },
+
+  // Remove (mark served) in DB → Realtime handles Zustand update
+  removeOrder: async (id) => {
+    // We already updated status to 'served' in the component usually,
+    // but this ensures the store action is consistent.
+    const { error } = await supabase
+      .from('orders')
+      .update({ status: 'served' })
+      .eq('id', id)
+      .eq('tenant_id', TENANT_ID)
+
+    if (error) console.error('[KDS] removeOrder error:', error)
+  },
+
+  setOrderNew: (id) => set(s => ({
+    orders: s.orders.map(o => o.id === id ? { ...o, isNew: false } : o)
+  })),
+
+  // Toggle individual order item 'done' status
+  toggleOrderItem: async (orderId, itemId, done) => {
+    // Optimistic update
+    set(s => ({
+      orders: s.orders.map(o => {
+        if (o.id !== orderId) return o
+        return {
+          ...o,
+          items: o.items.map(it => it.id === itemId ? { ...it, done } : it)
+        }
+      })
+    }))
+
+    const { error } = await supabase
+      .from('order_items')
+      .update({ done })
+      .eq('id', itemId)
+
+    if (error) {
+      console.error('[KDS] toggleOrderItem error:', error)
+      // Revert on error (fetch orders again or handle specifically)
+      get().fetchOrders()
+    }
+  },
 }))
 
-const mockMenuItems = [
-  { id: "m1", name: "Butter Chicken", category: "Mains", price: 380, station: "HOT", allergen: null, isAvailable: true, image: "https://source.unsplash.com/400x300/?butter-chicken" },
-  { id: "m2", name: "Paneer Tikka", category: "Starters", price: 280, station: "GRILL", allergen: null, isAvailable: true, image: "https://source.unsplash.com/400x300/?paneer-tikka" },
-  { id: "m3", name: "Garlic Naan", category: "Breads", price: 60, station: "BREAD", allergen: "GLUTEN", isAvailable: true, image: "https://source.unsplash.com/400x300/?naan" },
-  { id: "m4", name: "Dal Makhani", category: "Mains", price: 260, station: "HOT", allergen: null, isAvailable: true, image: "https://source.unsplash.com/400x300/?dal" },
-  { id: "m5", name: "Jeera Rice", category: "Rice", price: 180, station: "HOT", allergen: null, isAvailable: true, image: "https://source.unsplash.com/400x300/?rice" },
-  { id: "m6", name: "Mango Lassi", category: "Drinks", price: 120, station: "BAR", allergen: "DAIRY", isAvailable: true, image: "https://source.unsplash.com/400x300/?lassi" },
-  { id: "m7", name: "Chicken Biryani", category: "Mains", price: 420, station: "HOT", allergen: null, isAvailable: false, image: "https://source.unsplash.com/400x300/?biryani" },
-  { id: "m8", name: "Samosa", category: "Starters", price: 80, station: "FRY", allergen: "GLUTEN", isAvailable: true, image: "https://source.unsplash.com/400x300/?samosa" }
-]
-
-export const useOrderStore = create((set) => ({
-  orders: [...mockOrders],
-  addOrder: (order) => set(s => ({ orders: [...s.orders, { ...order, isNew: true }] })),
-  updateOrderStatus: (id, status) => set(s => ({ orders: s.orders.map(o => o.id === id ? { ...o, status } : o) })),
-  toggleItemDone: (orderId, itemIdx) => set(s => ({ orders: s.orders.map(o => o.id === orderId ? { ...o, items: o.items.map((it, i) => i === itemIdx ? { ...it, done: !it.done } : it) } : o) })),
-  removeOrder: (id) => set(s => ({ orders: s.orders.filter(o => o.id !== id) })),
-  setOrderNew: (id) => set(s => ({ orders: s.orders.map(o => o.id === id ? { ...o, isNew: false } : o) })),
-  incrementElapsed: () => set(s => ({ orders: s.orders.map(o => ['pending','cooking'].includes(o.status) ? { ...o, elapsed: o.elapsed + 1 } : o) })),
+// ─── ADMIN STORE ─────────────────────────────────────────────────────────────
+export const useAdminStore = create((set) => ({
+  staff: null,
+  login: (staffData) => set({ staff: staffData }),
+  logout: () => set({ staff: null })
 }))
 
+// ─── TABLE STORE ─────────────────────────────────────────────────────────────
 export const useTableStore = create((set) => ({
-  tables: [...mockTables],
-  updateTableStatus: (id, status) => set(s => ({ tables: s.tables.map(t => t.id === id ? { ...t, status } : t) })),
+  tables: [],
+  isLoading: false,
+
+  fetchTables: async () => {
+    set({ isLoading: true })
+    const { data, error } = await supabase
+      .from('tables')
+      .select('*')
+      .eq('tenant_id', TENANT_ID)
+      .order('label', { ascending: true })
+
+    if (error) { console.error('[Tables] fetch error:', error); set({ isLoading: false }); return }
+    set({ tables: data || [], isLoading: false })
+  },
+
+  updateTableStatus: async (id, status) => {
+    const { error } = await supabase
+      .from('tables')
+      .update({ status })
+      .eq('id', id)
+      .eq('tenant_id', TENANT_ID)
+
+    if (error) console.error('[Tables] updateStatus error:', error)
+  },
 }))
 
+// ─── CART STORE (local only, no DB) ──────────────────────────────────────────
 export const useCartStore = create((set) => ({
   items: [],
   note: '',
   addItem: (item) => set(s => {
     // Check if item with same ID and modifiers already exists
-    const existing = s.items.find(i => 
-      i.id === item.id && 
+    const existing = s.items.find(i =>
+      i.id === item.id &&
       JSON.stringify(i.modifiers || []) === JSON.stringify(item.modifiers || [])
     )
     if (existing) {
       return {
-        items: s.items.map(i => 
+        items: s.items.map(i =>
           (i.id === item.id && JSON.stringify(i.modifiers || []) === JSON.stringify(item.modifiers || []))
             ? { ...i, qty: i.qty + (item.qty || 1) }
             : i
@@ -59,21 +190,21 @@ export const useCartStore = create((set) => ({
     }
     return { items: [...s.items, { ...item, qty: item.qty || 1 }] }
   }),
-  removeItem: (id, modifiers) => set(s => ({ 
-    items: s.items.filter(i => 
+  removeItem: (id, modifiers) => set(s => ({
+    items: s.items.filter(i =>
       !(i.id === id && JSON.stringify(i.modifiers || []) === JSON.stringify(modifiers || []))
-    ) 
+    )
   })),
   updateQty: (id, modifiers, qty) => set(s => {
     if (qty <= 0) {
       return {
-        items: s.items.filter(i => 
+        items: s.items.filter(i =>
           !(i.id === id && JSON.stringify(i.modifiers || []) === JSON.stringify(modifiers || []))
         )
       }
     }
     return {
-      items: s.items.map(i => 
+      items: s.items.map(i =>
         (i.id === id && JSON.stringify(i.modifiers || []) === JSON.stringify(modifiers || []))
           ? { ...i, qty }
           : i
@@ -84,34 +215,52 @@ export const useCartStore = create((set) => ({
   clear: () => set({ items: [], note: '' }),
 }))
 
+// ─── MENU STORE ───────────────────────────────────────────────────────────────
 export const useMenuStore = create((set, get) => ({
-  items: [...mockMenuItems],
-  loading: false,
+  items: [],
+  isLoading: false,
   initialized: false,
-  
-  init: async (tenantId) => {
+
+  init: async (tenantId = TENANT_ID) => {
     if (get().initialized) return
-    set({ loading: true })
-    try {
-      const { data, error } = await supabase
-        .from('menu_items')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .order('category', { ascending: true })
-      
-      if (!error && data) {
-        set({ items: data, initialized: true })
-      }
-    } catch (err) {
-      console.error('Menu init error:', err)
-    } finally {
-      set({ loading: false })
+    await get().fetchMenu(tenantId)
+    set({ initialized: true })
+  },
+
+  fetchMenu: async (tenantId = TENANT_ID) => {
+    if (!supabase) {
+      console.error('[Menu] Supabase client missing!')
+      set({ isLoading: false })
+      return
     }
+    set({ isLoading: true })
+    const { data, error } = await supabase
+      .from('menu_items')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .order('category', { ascending: true })
+
+    if (error) { console.error('[Menu] fetch error:', error); set({ isLoading: false }); return }
+    set({ items: data || [], isLoading: false })
   },
 
   destroy: () => set({ initialized: false, items: [] }),
 
-  toggle86: (id) => set(s => ({ items: s.items.map(i => i.id === id ? { ...i, isAvailable: !i.isAvailable } : i) })),
+  toggle86: async (id) => {
+    const { items } = get()
+    const item = items.find(i => i.id === id)
+    if (!item) return
+
+    const { error } = await supabase
+      .from('menu_items')
+      .update({ is_available: !item.is_available })
+      .eq('id', id)
+      .eq('tenant_id', TENANT_ID)
+
+    if (error) console.error('[Menu] toggle86 error:', error)
+    // Optimistic local update since menu has no Realtime subscription
+    else set(s => ({ items: s.items.map(i => i.id === id ? { ...i, is_available: !i.is_available } : i) }))
+  },
 }))
 
 export const useSessionStore = create((set) => ({
@@ -138,7 +287,7 @@ export const useSessionStore = create((set) => ({
   }
 }))
 
-export const useStaffStore = create((set, get) => ({
+export const useStaffStore = create((set) => ({
   staff_user: null,
   isAuthenticated: false,
 
@@ -164,3 +313,27 @@ export const useStaffStore = create((set, get) => ({
     }
   }
 }))
+
+// ─── NORMALIZER ──────────────────────────────────────────────────────────────
+function normalizeOrder(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    tableId: row.table_id || row.tableId || null,
+    tableNum: row.table_num || row.tableNum || '?',
+    status: row.status || 'pending',
+    createdAt: row.created_at || null,
+    note: row.note || '',
+    allergen: row.allergen || null,
+    isNew: row.isNew || false,
+    items: (row.order_items || []).map(it => ({
+      id: it?.id,
+      name: it?.name || 'Unknown Item',
+      qty: it?.qty || 1,
+      station: it?.station || '',
+      allergen: it?.allergen || null,
+      note: it?.note || '',
+      done: it?.done || false,
+    })).filter(Boolean),
+  }
+}
