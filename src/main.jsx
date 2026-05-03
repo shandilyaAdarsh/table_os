@@ -17,6 +17,7 @@ import Splash from './apps/customer/pages/Splash'
 import StaffLogin from './apps/staff/pages/StaffLogin'
 import TableOverview from './apps/staff/pages/TableOverview'
 import TableDetail from './apps/staff/pages/TableDetail'
+import KitchenDisplay from './apps/kds/pages/KitchenDisplay'
 
 
 function CustomerApp() {
@@ -56,12 +57,21 @@ function StaffApp() {
   )
 }
 
+function KdsApp() {
+  return (
+    <Routes>
+      <Route index element={<KitchenDisplay />} />
+    </Routes>
+  )
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <Routes>
         <Route path="/customer/*" element={<CustomerApp />} />
         <Route path="/staff/*" element={<StaffApp />} />
+        <Route path="/kds/*" element={<KdsApp />} />
         <Route path="/" element={<Navigate to="/customer/browse" replace />} />
       </Routes>
     </BrowserRouter>

@@ -601,7 +601,7 @@ export default function OrderTracking() {
           </p>
 
           <button
-            onClick={() => navigate(`/menu?table=${order?.table_num || 'T03'}`)}
+            onClick={() => navigate('/customer/browse')}
             style={{
               width: '100%',
               background: '#1A365D',
