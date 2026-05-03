@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TableOS KDS</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-low": "#f2f4f6",
+                        "surface-container": "#eceef0",
+                        "surface-container-high": "#e6e8ea",
+                        "surface-container-highest": "#e0e3e5",
+                        "surface": "#f8fafc",
+                        "surface-bright": "#f8fafc",
+                        "surface-variant": "#e0e3e5",
+                        "surface-dim": "#d8dadc",
+                        "on-surface": "#191c1e",
+                        "on-surface-variant": "#554336",
+                        "on-background": "#191c1e",
+                        "background": "#f8fafc",
+                        "primary": "#f59e0b",
+                        "primary-container": "#b15f00",
+                        "primary-fixed": "#ffdcc3",
+                        "primary-fixed-dim": "#ffb77d",
+                        "on-primary": "#ffffff",
+                        "on-primary-container": "#fffbff",
+                        "on-primary-fixed": "#2f1500",
+                        "on-primary-fixed-variant": "#6e3900",
+                        "inverse-primary": "#ffb77d",
+                        "secondary": "#505f76",
+                        "secondary-container": "#d0e1fb",
+                        "secondary-fixed": "#d3e4fe",
+                        "secondary-fixed-dim": "#b7c8e1",
+                        "on-secondary": "#ffffff",
+                        "on-secondary-container": "#54647a",
+                        "on-secondary-fixed": "#0b1c30",
+                        "on-secondary-fixed-variant": "#38485d",
+                        "tertiary": "#006948",
+                        "tertiary-container": "#00855d",
+                        "tertiary-fixed": "#85f8c4",
+                        "tertiary-fixed-dim": "#68dba9",
+                        "on-tertiary": "#ffffff",
+                        "on-tertiary-container": "#f5fff7",
+                        "on-tertiary-fixed": "#002114",
+                        "on-tertiary-fixed-variant": "#005137",
+                        "error": "#e11d48",
+                        "error-container": "#ffdad6",
+                        "on-error": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "outline": "#887364",
+                        "outline-variant": "#dbc2b0",
+                        "inverse-surface": "#2d3133",
+                        "inverse-on-surface": "#eff1f3",
+                        "surface-tint": "#f59e0b",
+                    },
+                    borderRadius: {
+                        DEFAULT: "4px", lg: "8px", xl: "12px", full: "9999px"
+                    },
+                    fontFamily: {
+                        headline: ["Inter"], body: ["Inter"], label: ["Inter"]
+                    },
+                    spacing: {
+                        '1':'4px','2':'8px','3':'12px','4':'16px','5':'20px',
+                        '6':'24px','8':'32px','10':'40px','12':'48px','16':'64px'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.fill {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .order-card { min-height: 340px; display: flex; flex-direction: column; }
+        body { overflow: hidden; font-family: 'Inter', sans-serif; }
+        .transition-tactile { transition: all 0.2s cubic-bezier(0.2, 0, 0, 1); }
+        .transition-tactile:active { transform: scale(0.98); }
+    </style>
+</head>
+<body class="bg-surface text-on-surface">
+
+    <!-- HEADER -->
+    <header class="fixed top-0 w-full h-16 z-50 bg-white border-b border-slate-200 px-8 flex justify-between items-center">
+        <div class="flex items-center gap-8">
+            <span class="text-2xl font-black tracking-tighter text-amber-900">TableOS</span>
+            <div class="flex gap-2">
+                <div class="flex items-center gap-2 px-3 py-1 bg-rose-50 text-rose-600 rounded-full text-[11px] font-bold">
+                    <span class="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                    3 Pending
+                </div>
+                <div class="flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[11px] font-bold">
+                    <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                    4 Cooking
+                </div>
+                <div class="flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[11px] font-bold">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                    2 Ready
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-8">
+            <div class="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black tracking-widest uppercase rounded">LIVE</div>
+            <span class="font-mono text-2xl font-bold tabular-nums text-slate-800">18:42:05</span>
+            <div class="flex gap-4 text-slate-400">
+                <span class="material-symbols-outlined cursor-pointer hover:text-primary transition-colors">timer</span>
+                <span class="material-symbols-outlined cursor-pointer hover:text-primary transition-colors">signal_wifi_4_bar</span>
+                <span class="material-symbols-outlined cursor-pointer hover:text-primary transition-colors">refresh</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- SIDEBAR -->
+    <aside class="fixed left-0 top-16 w-64 h-[calc(100vh-64px-32px)] bg-slate-50 border-r border-slate-200 flex flex-col pt-4">
+        <div class="px-6 mb-6">
+            <h2 class="text-xl font-black text-amber-900 leading-none">Main Kitchen</h2>
+            <p class="text-[11px] text-slate-500 font-bold uppercase tracking-wide mt-1">STATION 01 • ADMIN</p>
+        </div>
+        
+        <nav class="flex flex-col gap-1 px-4 flex-1">
+            <div class="flex items-center gap-3 p-3 bg-white text-amber-900 rounded-lg shadow-sm border border-slate-100 font-bold text-sm cursor-pointer transition-tactile">
+                <span class="material-symbols-outlined text-[20px]">restaurant</span>
+                Live Orders
+            </div>
+            <div class="flex items-center gap-3 p-3 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm cursor-pointer transition-tactile">
+                <span class="material-symbols-outlined text-[20px]">history</span>
+                Order History
+            </div>
+            <div class="flex items-center gap-3 p-3 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm cursor-pointer transition-tactile">
+                <span class="material-symbols-outlined text-[20px]">settings</span>
+                Kitchen Settings
+            </div>
+            <div class="flex items-center gap-3 p-3 text-slate-600 hover:bg-slate-200 rounded-lg font-medium text-sm cursor-pointer transition-tactile">
+                <span class="material-symbols-outlined text-[20px]">inventory_2</span>
+                Inventory
+            </div>
+        </nav>
+
+        <div class="p-4 bg-slate-50 border-t border-slate-200">
+            <button class="w-full bg-amber-900 text-white font-black text-sm uppercase tracking-widest py-4 rounded-xl shadow-lg shadow-amber-900/10 transition-tactile">
+                NEW MANUAL ORDER
+            </button>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="ml-64 pt-16 flex flex-col h-screen overflow-hidden">
+        <div class="flex-1 grid grid-cols-3 divide-x divide-slate-200 h-full">
+            
+            <!-- PENDING COLUMN -->
+            <section class="flex flex-col h-full overflow-hidden">
+                <div class="h-12 px-5 flex items-center justify-between bg-slate-50 border-b border-slate-200 sticky top-0 z-10 shrink-0">
+                    <h3 class="font-black text-slate-900 text-xs tracking-widest uppercase">Pending Orders</h3>
+                    <span class="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">3</span>
+                </div>
+                <div class="flex-1 overflow-y-auto p-4 space-y-4 hide-scrollbar pb-16">
+                    
+                    <!-- Card 1 -->
+                    <div class="bg-white rounded-lg shadow-sm border-l-4 border-l-amber-500 overflow-hidden order-card">
+                        <div class="p-4 flex justify-between items-baseline bg-slate-50/50 border-b border-slate-100">
+                            <div>
+                                <h1 class="text-2xl font-black text-slate-900 tracking-tighter leading-none">T01</h1>
+                                <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">#ORD-4821</p>
+                            </div>
+                            <span class="font-mono text-xl font-bold tabular-nums text-slate-600">01:08</span>
+                        </div>
+                        <div class="p-4 space-y-4 flex-1">
+                            <div class="flex items-start gap-3">
+                                <span class="material-symbols-outlined text-xl text-slate-300">radio_button_unchecked</span>
+                                <div class="flex-1">
+                                    <div class="flex justify-between items-center">
+                                        <p class="font-bold text-slate-800 text-sm">Double Truffle Burger</p>
+                                        <span class="bg-slate-100 text-slate-500 text-[9px] px-1.5 py-0.5 rounded font-black uppercase">GRILL</span>
+                                    </div>
+                                    <p class="text-[10px] text-slate-400 mt-0.5">• No Onions</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <span class="material-symbols-outlined text-xl text-slate-300">radio_button_unchecked</span>
+                                <div class="flex-1">
+                                    <div class="flex justify-between items-center">
+                                        <p class="font-bold text-slate-800 text-sm">Parmesan Fries</p>
+                                        <span class="bg-slate-100 text-slate-500 text-[9px] px-1.5 py-0.5 rounded font-black uppercase">FRY</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="p-2 bg-slate-50 border-t border-slate-100 mt-auto">
+                            <button class="w-full bg-amber-500 text-white font-black text-[10px] uppercase tracking-widest py-3.5 rounded-md transition-tactile">
+                                ACCEPT ORDER
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Card 2 -->
+                    <div class="bg-white rounded-lg shadow-sm border-l-4 border-l-amber-500 overflow-hidden order-card">
+                        <div class="p-4 flex justify-between items-baseline bg-slate-50/50 border-b border-slate-100">
+                            <div>
+                                <h1 class="text-2xl font-black text-slate-900 tracking-tighter leading-none">T09</h1>
+                                <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">#ORD-4825</p>
+                            </div>
+                            <span class="font-mono text-xl font-bold tabular-nums text-slate-600">00:45</span>
+                        </div>
+                        <div class="p-4 space-y-4 flex-1">
+                            <div class="flex items-start gap-3">
+                                <span class="material-symbols-outlined text-xl text-slate-300">radio_button_unchecked</span>
+                                <div class="flex-1">
+                                    <div class="flex justify-between items-center">
+                                        <p class="font-bold text-slate-800 text-sm">Cobb Salad</p>
+                                        <span class="bg-slate-100 text-slate-500 text-[9px] px-1.5 py-0.5 rounded font-black uppercase">COLD</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="p-2 bg-slate-50 border-t border-slate-100 mt-auto">
+                            <button class="w-full bg-amber-500 text-white font-black text-[10px] uppercase tracking-widest py-3.5 rounded-md transition-tactile">
+                                ACCEPT ORDER
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- COOKING COLUMN -->
+            <section class="flex flex-col h-full overflow-hidden">
+                <div class="h-12 px-5 flex items-center justify-between bg-slate-50 border-b border-slate-200 sticky top-0 z-10 shrink-0">
+                    <h3 class="font-black text-slate-900 text-xs tracking-widest uppercase">Currently Cooking</h3>
+                    <span class="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">4</span>
+                </div>
+                <div class="flex-1 overflow-y-auto p-4 space-y-4 hide-scrollbar pb-16">
+                    
+                    <!-- Card 1 (LATE) -->
+                    <div class="bg-white rounded-lg shadow-sm border-l-4 border-l-rose-500 border border-rose-200 overflow-hidden order-card">
+                        <div class="p-4 flex justify-between items-baseline bg-rose-50/30 border-b border-rose-100">
+                            <div>
+                                <h1 class="text-2xl font-black text-slate-900 tracking-tighter leading-none">T03</h1>
+                                <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">#ORD-4799</p>
+                            </div>
+                            <div class="text-right">
+                                <span class="font-mono text-xl font-bold tabular-nums text-rose-600 block">14:14</span>
+                                <span class="text-[9px] text-rose-500 font-black uppercase tracking-widest">LATE +7M</span>
+                            </div>
+                        </div>
+                        <div class="p-4 space-y-4 flex-1">
+                            <div class="flex items-start gap-3 opacity-50">
+                                <span class="material-symbols-outlined fill text-xl text-blue-600">check_circle</span>
+                                <div class="flex-1">
+                                    <div class="flex justify-between items-center">
+                                        <p class="font-bold text-slate-800 text-sm line-through">Ribeye Steak - Med Rare</p>
+                                        <span class="bg-slate-100 text-slate-500 text-[9px] px-1.5 py-0.5 rounded font-black uppercase">HOT</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <span class="material-symbols-outlined text-xl text-slate-300">radio_button_unchecked</span>
+                                <div class="flex-1">
+                                    <div class="flex justify-between items-center">
+                                        <p class="font-bold text-slate-800 text-sm">Sea Bass En Papillote</p>
+                                        <span class="bg-slate-100 text-slate-500 text-[9px] px-1.5 py-0.5 rounded font-black uppercase">HOT</span>
+                                    </div>
+                                    <p class="text-[10px] text-rose-600 font-black uppercase tracking-widest mt-1">ALLERGY: NO WALNUTS</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="p-2 bg-slate-50 border-t border-slate-100 flex gap-2 mt-auto">
+                            <button class="flex-1 border border-slate-300 text-slate-600 font-black text-[10px] uppercase tracking-widest py-3.5 rounded-md transition-tactile">
+                                BUMP
+                            </button>
+                            <button class="flex-[2] bg-tertiary text-white font-black text-[10px] uppercase tracking-widest py-3.5 rounded-md transition-tactile">
+                                MARK READY
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Card 2 -->
+                    <div class="bg-white rounded-lg shadow-sm border-l-4 border-l-blue-600 overflow-hidden order-card">
+                        <div class="p-4 flex justify-between items-baseline bg-slate-50/50 border-b border-slate-100">
+                            <div>
+                                <h1 class="text-2xl font-black text-slate-900 tracking-tighter leading-none">T07</h1>
+                                <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">#ORD-4812</p>
+                            </div>
+                            <span class="font-mono text-xl font-bold tabular-nums text-slate-600">08:22</span>
+                        </div>
+                        <div class="p-4 space-y-4 flex-1">
+                            <div class="flex items-start gap-3">
+                                <span class="material-symbols-outlined text-xl text-slate-300">radio_button_unchecked</span>
+                                <div class="flex-1">
+                                    <div class="flex justify-between items-center">
+                                        <p class="font-bold text-slate-800 text-sm">Spicy Miso Ramen x2</p>
+                                        <span class="bg-slate-100 text-slate-500 text-[9px] px-1.5 py-0.5 rounded font-black uppercase">HOT</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="p-2 bg-slate-50 border-t border-slate-100 flex gap-2 mt-auto">
+                            <button class="flex-1 border border-slate-300 text-slate-600 font-black text-[10px] uppercase tracking-widest py-3.5 rounded-md transition-tactile">
+                                BUMP
+                            </button>
+                            <button class="flex-[2] bg-tertiary text-white font-black text-[10px] uppercase tracking-widest py-3.5 rounded-md transition-tactile">
+                                MARK READY
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- READY COLUMN -->
+            <section class="flex flex-col h-full overflow-hidden">
+                <div class="h-12 px-5 flex items-center justify-between bg-slate-50 border-b border-slate-200 sticky top-0 z-10 shrink-0">
+                    <h3 class="font-black text-slate-900 text-xs tracking-widest uppercase">Ready To Serve</h3>
+                    <span class="bg-emerald-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">2</span>
+                </div>
+                <div class="flex-1 overflow-y-auto p-4 space-y-4 hide-scrollbar pb-16">
+                    
+                    <!-- Card 1 -->
+                    <div class="bg-white rounded-lg shadow-sm border-l-4 border-l-emerald-600 overflow-hidden order-card">
+                        <div class="p-4 flex justify-between items-baseline bg-emerald-50/30 border-b border-emerald-100">
+                            <div>
+                                <h1 class="text-2xl font-black text-slate-900 tracking-tighter leading-none">T11</h1>
+                                <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">#ORD-4780</p>
+                            </div>
+                            <div class="text-right">
+                                <span class="font-mono text-xl font-bold tabular-nums text-rose-600 block">11:50</span>
+                                <span class="text-[9px] text-rose-500 font-black uppercase tracking-widest">LATE</span>
+                            </div>
+                        </div>
+                        <div class="p-4 space-y-4 flex-1">
+                            <div class="flex items-start gap-3">
+                                <span class="material-symbols-outlined fill text-xl text-emerald-600">check_circle</span>
+                                <div class="flex-1">
+                                    <div class="flex justify-between items-center">
+                                        <p class="font-bold text-slate-400 text-sm">Margherita Pizza (Family)</p>
+                                        <span class="bg-slate-100 text-slate-500 text-[9px] px-1.5 py-0.5 rounded font-black uppercase">HOT</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <span class="material-symbols-outlined fill text-xl text-emerald-600">check_circle</span>
+                                <div class="flex-1">
+                                    <div class="flex justify-between items-center">
+                                        <p class="font-bold text-slate-400 text-sm">Garlic Focaccia</p>
+                                        <span class="bg-slate-100 text-slate-500 text-[9px] px-1.5 py-0.5 rounded font-black uppercase">HOT</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="p-2 bg-slate-50 border-t border-slate-100 mt-auto">
+                            <button class="w-full bg-tertiary text-white font-black text-xs uppercase tracking-widest py-3.5 rounded-md flex items-center justify-center gap-2 transition-tactile">
+                                <span class="material-symbols-outlined text-lg">check</span>
+                                CLEAR / SERVED
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="fixed bottom-0 w-full h-8 z-50 bg-white border-t border-slate-200 px-8 flex justify-between items-center shrink-0">
+        <div class="flex items-center gap-6">
+            <span class="text-[10px] font-bold tracking-widest uppercase text-slate-500">AVG TICKET: <span class="text-amber-600 font-black">8M 24S</span></span>
+            <span class="text-[10px] font-bold tracking-widest uppercase text-slate-500">ITEMS: <span class="text-slate-900">42</span></span>
+            <span class="text-[10px] font-bold tracking-widest uppercase text-slate-500">SERVERS: <span class="text-slate-900">4 ACTIVE</span></span>
+        </div>
+        <div class="flex items-center gap-6">
+            <div class="flex items-center gap-2">
+                <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.4)]"></span>
+                <span class="text-[10px] font-bold tracking-widest uppercase text-slate-500">REALTIME: CONNECTED</span>
+            </div>
+            <span class="text-[10px] font-bold tracking-widest uppercase text-slate-300">TABLEOS KDS V2.4</span>
+        </div>
+    </footer>
+
+</body>
+</html>
