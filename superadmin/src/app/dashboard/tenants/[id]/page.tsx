@@ -141,7 +141,7 @@ export default function TenantDetailPage() {
       {/* ── Hero Header ──────────────────────────────────────────────────── */}
       <div className="bg-[#141414] border border-[#2A2A2A] rounded-[16px] p-8 relative overflow-hidden">
         {/* Red left accent */}
-        <div className="absolute top-0 left-0 w-[3px] h-full bg-linear-to-b from-[#C0272D] via-[#C0272D88] to-transparent" />
+        <div className="absolute top-0 left-0 w-[3px] h-full bg-gradient-to-b from-[#C0272D] via-[#C0272D88] to-transparent" />
         {/* Subtle grid background */}
         <div className="absolute inset-0 opacity-[0.02]"
           style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }}
@@ -150,7 +150,7 @@ export default function TenantDetailPage() {
         <div className="relative flex flex-wrap gap-8 justify-between items-start">
           {/* Left: identity */}
           <div className="flex gap-6 items-center">
-            <div className="w-20 h-20 rounded-2xl bg-linear-to-br from-[#C0272D] to-[#8B0000] flex items-center justify-center text-3xl font-black text-white shadow-2xl shadow-[#C0272D30] shrink-0">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#C0272D] to-[#8B0000] flex items-center justify-center text-3xl font-black text-white shadow-2xl shadow-[#C0272D30] shrink-0">
               {initials}
             </div>
             <div className="space-y-2">

@@ -113,7 +113,6 @@ export default function OnboardPage() {
         pin: formData.pin,
         billingCycle: formData.billingCycle,
       }
-      console.log('=== SENDING TO API ===', JSON.stringify(payload, null, 2))
 
       const response = await fetch('/api/onboard', {
         method: 'POST',

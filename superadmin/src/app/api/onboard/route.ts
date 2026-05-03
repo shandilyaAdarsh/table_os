@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
@@ -12,7 +13,7 @@ function generateSlug(restaurantName: string): string {
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
-  const suffix = Math.random().toString(36).substring(2, 6) // 4-char random
+  const suffix = randomBytes(2).toString('hex') // 4-char random
   return `${base}-${suffix}`
 }
 
@@ -214,4 +215,3 @@ export async function POST(req: NextRequest) {
     )
   }
 }
-

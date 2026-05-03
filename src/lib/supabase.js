@@ -7,6 +7,12 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('[Supabase] CRITICAL: VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY is missing from environment variables!')
 }
 
-export const supabase = (supabaseUrl && supabaseAnonKey) 
-  ? createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = (supabaseUrl && supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+    realtime: {
+      params: {
+        eventsPerSecond: 10
+      }
+    }
+  })
   : null
