@@ -100,7 +100,7 @@ body {
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 .order-card {
-  min-height: 340px;
+  height: 480px;
   display: flex;
   flex-direction: column;
   transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.2s cubic-bezier(0.2, 0, 0, 1);

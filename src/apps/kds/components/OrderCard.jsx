@@ -180,6 +180,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
         justifyContent: 'space-between',
         alignItems:     'flex-start',
         borderBottom:   '1px solid rgba(219,194,176,0.3)',
+        flexShrink:     0,
       }}>
         <div>
           {/* Customer Name */}
@@ -265,7 +266,14 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
       </div>
 
       {/* ── ITEMS LIST ── */}
-      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}>
+      <div style={{ 
+        padding: '16px', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        gap: '14px', 
+        flex: 1, 
+        overflowY: 'auto' 
+      }}>
         {items.map((item, idx) => {
           const isPending  = status === 'pending';
           const isSelected = selectedItems.includes(item.id);
@@ -410,6 +418,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
           padding:    '8px',
           background: '#F2F4F6',
           borderTop:  '1px solid rgba(219,194,176,0.3)',
+          flexShrink: 0,
         }}>
 
         {/* PENDING → CANCEL + ACCEPT */}
