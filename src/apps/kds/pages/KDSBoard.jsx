@@ -1,621 +1,636 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useOrderStore } from '../../../store/index.js';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useOrderStore, useAuthStore } from '../../../store/index.js';
 import OrderCard from '../components/OrderCard.jsx';
-import { Bell, BellOff, Settings, Activity, Sun, Moon, X, Wifi, Printer, Radio, History } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
+/* ═══════════════════════════════════════════════════
+   KDSBoard — connects to Supabase realtime
+═══════════════════════════════════════════════════ */
 const KDSBoard = () => {
-  const orders = useOrderStore(state => state.orders);
-  const isLoading = useOrderStore(state => state.isLoading);
-  const fetchOrders = useOrderStore(state => state.fetchOrders);
-  const subscribeRealtime = useOrderStore(state => state.subscribeRealtime);
+  const liveOrders        = useOrderStore(s => s.liveOrders);
+  const historyOrders     = useOrderStore(s => s.historyOrders);
+  const isLoading         = useOrderStore(s => s.isLoading);
+  const fetchOrders       = useOrderStore(s => s.fetchOrders);
+  const fetchHistory      = useOrderStore(s => s.fetchHistory);
+  const totalOrdersToday  = useOrderStore(s => s.totalOrdersToday);
+  const subscribeRealtime = useOrderStore(s => s.subscribeRealtime);
+  const tenantId          = useAuthStore(s => s.tenantId);
+  const user              = useAuthStore(s => s.user);
+  const navigate          = useNavigate();
 
+  const [mobileCol, setMobileCol]         = useState('pending');
+  const [currentTime, setCurrentTime]     = useState('');
+  const [isMuted, setIsMuted]             = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState('connecting'); // connecting | connected | disconnected
+  const [activeTab, setActiveTab]         = useState('Live Orders'); // 'Live Orders' | 'Order History'
+  const [confirmModal, setConfirmModal]   = useState(null); // { title, message, onConfirm }
+  const [historySearch, setHistorySearch] = useState('');
+  const [historySort, setHistorySort]     = useState('newest'); // newest | oldest
+  const [historyFilter, setHistoryFilter] = useState('day'); // day | week | month | all
+  const prevOrderCount                    = useRef(0);
+
+  /* ── Dev fallback (inline) ─────────────────────── */
+  const effectiveTenantId = tenantId || import.meta.env.VITE_TENANT_ID;
+  const effectiveUser     = user || (effectiveTenantId ? { name: 'KDS Terminal', role: 'kitchen' } : null);
+
+  /* ── Initial fetch + Realtime subscription ──────── */
+  /* ── Initial fetch ──────── */
   useEffect(() => {
-    console.log('[KDSBoard] Mounted. isLoading:', isLoading);
-  }, []);
+    if (!effectiveTenantId) return;
 
-  // States
-  const [mobileCol, setMobileCol] = useState('pending');
-  const [currentTime, setCurrentTime] = useState('');
-  const [isDark, setIsDark] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showActivity, setShowActivity] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-  const [orderHistory, setOrderHistory] = useState([]);
-  
-  const removeOrder = useOrderStore(state => state.removeOrder);
+    if (activeTab === 'Live Orders') {
+      if (liveOrders.length === 0) setRealtimeStatus('connecting');
+      fetchOrders().then(() => setRealtimeStatus('connected'));
+    } else {
+      if (historyOrders.length === 0) setRealtimeStatus('connecting');
+      fetchHistory().then(() => setRealtimeStatus('connected'));
+    }
 
-  const handleClear = (order) => {
-    setOrderHistory(prev => [{
-      ...order,
-      clearedAt: new Date().toLocaleTimeString('en-GB'),
-      clearedDate: new Date().toLocaleDateString('en-GB'),
-    }, ...prev]);
-    removeOrder(order.id);
-  };
+    const probe = setInterval(() => {
+      if (document.visibilityState === 'visible' && activeTab === 'Live Orders') {
+        fetchOrders().catch(() => setRealtimeStatus('disconnected'));
+      }
+    }, 60_000);
 
-  // Theme Object
-  const theme = {
-    bg:         isDark ? '#0C0C0C' : '#F5F5F5',
-    surface:    isDark ? '#1E1E1E' : '#FFFFFF',
-    surface2:   isDark ? '#161616' : '#EEEEEE',
-    border:     isDark ? '#2A2A2A' : '#E0E0E0',
-    text:       isDark ? '#FFFFFF' : '#111111',
-    textMuted:  isDark ? '#6B7280' : '#9CA3AF',
-    headerBg:   isDark ? '#111111' : '#FFFFFF',
-    divider:    isDark ? '#2A2A2A' : '#E5E7EB',
-    colHeader:  isDark ? '#0D0D0D' : '#F0F0F0',
-  };
+    return () => clearInterval(probe);
+  }, [tenantId, activeTab]);
 
-  // Supabase: initial fetch + Realtime subscription
+  /* ── Realtime subscription (Independent of tab) ── */
   useEffect(() => {
-    console.log('[KDSBoard] Component mounted. FETCHING...');
-    if (!fetchOrders) return console.error('fetchOrders MISSING');
-    fetchOrders();
-    const unsubscribe = subscribeRealtime ? subscribeRealtime() : null;
-    return () => unsubscribe && unsubscribe();
-  }, [fetchOrders, subscribeRealtime]);
+    if (!effectiveTenantId || !subscribeRealtime) return;
+    const unsub = subscribeRealtime();
+    return () => unsub && unsub();
+  }, [tenantId]);
 
-
-
-  // Live Clock logic
+  /* ── Page Visibility API: re-sync when tab regains focus ── */
   useEffect(() => {
-    const tick = () => setCurrentTime(new Date().toLocaleTimeString('en-GB'));
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && effectiveTenantId) {
+        if (activeTab === 'Live Orders') {
+          fetchOrders();
+        } else {
+          fetchHistory();
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [tenantId, activeTab]);
+
+  /* ── Live clock ─────────────────────────────────── */
+  useEffect(() => {
+    const tick = () =>
+      setCurrentTime(new Date().toLocaleTimeString('en-GB', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+      }));
     tick();
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
+    const iv = setInterval(tick, 1000);
+    return () => clearInterval(iv);
   }, []);
 
-  // Audio Notification Utility
+  /* ── New-order audio alert ──────────────────────── */
   const playOrderSound = () => {
     if (isMuted) return;
     try {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const oscillator = audioCtx.createOscillator();
-      const gainNode = audioCtx.createGain();
-
-      oscillator.connect(gainNode);
-      gainNode.connect(audioCtx.destination);
-
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
-      oscillator.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.1); // A4
-      
-      gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-
-      oscillator.start();
-      oscillator.stop(audioCtx.currentTime + 0.3);
-    } catch (e) {
-      console.warn('Audio alert failed', e);
-    }
+      const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      osc.start(); osc.stop(ctx.currentTime + 0.5);
+    } catch (e) { /* browser blocked audio context */ }
   };
 
-  // Sound Alert Effect
   useEffect(() => {
-    const hasNew = orders.some(o => o.isNew);
-    if (hasNew) {
-      playOrderSound();
-    }
-  }, [orders.map(o => o.id).join(','), orders.some(o => o.isNew)]);
+    const curr = liveOrders.filter(o => o.status === 'pending').length;
+    if (curr > prevOrderCount.current) playOrderSound();
+    prevOrderCount.current = curr;
+  }, [liveOrders.length]);
 
-  // Clean up "new order" flag after 3 seconds
-  useEffect(() => {
-    orders.forEach(order => {
-      if (order.isNew) {
-        setTimeout(() => {
-          useOrderStore.getState().setOrderNew(order.id);
-        }, 3000);
-      }
-    });
-  }, [orders]);
+  /* ── Derived stats ──────────────────────────────── */
+  const pendingCount = liveOrders.filter(o => o.status === 'pending').length;
+  const cookingCount = liveOrders.filter(o => o.status === 'cooking').length;
+  const readyCount   = liveOrders.filter(o => o.status === 'ready').length;
 
-  // Stats Logic - No stations filter anymore, use all orders
-  const incomingCount = orders.filter(o => o.status === 'pending').length;
-  const cookingCount = orders.filter(o => o.status === 'cooking').length;
-  const readyCount = orders.filter(o => o.status === 'ready').length;
-  const servedCount = orderHistory.length;
+  /* ── Column definitions ─────────────────────────── */
+  const columns = [
+    { status: 'pending', title: 'PENDING ORDERS',    count: pendingCount, badgeBg: '#8D4B00', emptyIcon: 'hourglass_empty' },
+    { status: 'cooking', title: 'CURRENTLY COOKING', count: cookingCount, badgeBg: '#2D5FA3', emptyIcon: 'whatshot'        },
+    { status: 'ready',   title: 'READY TO SERVE',    count: readyCount,   badgeBg: '#006948', emptyIcon: 'check_circle'    },
+  ];
 
-  const renderColumn = (status, title, count) => (
-    <div 
-      key={status}
-      className={mobileCol !== status ? 'hidden md:flex' : 'flex'}
-      style={{ 
-        flex: 1,
-        minWidth: 0,
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        borderRight: `1px solid ${theme.border}`
-      }}
-    >
-      <div 
-        className="sticky top-0 z-10 px-4 py-3 flex items-center justify-between shrink-0"
-        style={{ background: theme.colHeader, borderBottom: `1px solid ${theme.border}` }}
-      >
-        <span className="text-xs font-mono font-bold tracking-widest uppercase" style={{ color: theme.textMuted }}>
-          {title}
-        </span>
-        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full" style={{ background: theme.border, color: theme.text }}>
-          {count}
-        </span>
-      </div>
+  /* ── Realtime dot colour ────────────────────────── */
+  const dotColor = {
+    connecting:   '#F59E0B',
+    connected:    '#00C47D',
+    disconnected: '#BA1A1A',
+  }[realtimeStatus];
 
-      <div 
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          padding: '12px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '12px',
-        }}
-      >
-        {orders.filter(o => o.status === status).map(order => (
-          <OrderCard key={order.id} {...order} isDark={isDark} theme={theme} onClear={handleClear} />
-        ))}
-        {orders.filter(o => o.status === status).length === 0 && (
-          <div style={{ flex: 1, display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'center', border: `2px dashed ${theme.border}`, borderRadius: '16px', opacity: 0.2 }}>
-            <span className="uppercase tracking-widest text-xs font-bold font-mono" style={{ color: theme.textMuted }}>
-              No {title}
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  const dotLabel = {
+    connecting:   'Syncing…',
+    connected:    'Realtime: Connected',
+    disconnected: 'Realtime: Reconnecting',
+  }[realtimeStatus];
 
-  if (isLoading) {
+
+  /* ── Loading screen ─────────────────────────────── */
+  if (isLoading && liveOrders.length === 0 && historyOrders.length === 0) {
     return (
-      <div className="font-body h-screen w-screen flex items-center justify-center flex-col gap-4 select-none transition-colors duration-300"
-           style={{ background: '#111111', color: '#FFFFFF' }}>
-        <Activity size={40} className="animate-spin text-amber-500" />
-        <div className="flex flex-col items-center gap-1">
-          <span className="font-mono text-sm tracking-[0.3em] text-amber-500 uppercase font-black">Syncing Network...</span>
-          <span className="font-mono text-[10px] text-zinc-500 uppercase">Station Alpha-1 // TableOS</span>
+      <div style={{
+        height: '100vh', width: '100vw',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        gap: '16px', background: '#F2F4F6',
+        fontFamily: '"Inter", sans-serif',
+      }}>
+        <div style={{
+          width: '56px', height: '56px',
+          background: 'linear-gradient(15deg, #8D4B00, #B15F00)',
+          borderRadius: '16px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          marginBottom: '8px',
+        }}>
+          <span style={{ fontSize: '22px', fontWeight: 900, color: '#FFF' }}>T</span>
         </div>
-        <button 
-          onClick={() => window.location.reload()}
-          className="mt-8 px-4 py-2 border border-zinc-800 rounded-lg text-zinc-500 text-[10px] font-mono hover:bg-zinc-900 transition-colors cursor-pointer"
-        >
-          FORCE REFRESH
-        </button>
+        <Loader2 size={28} style={{ color: '#8D4B00', animation: 'spin 1s linear infinite' }} />
+        <span style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#887364' }}>
+          Syncing Terminal…
+        </span>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
+  /* ═══════════════════════════════════════════════ */
   return (
-    <div className="font-body h-screen w-screen flex flex-col overflow-hidden select-none transition-colors duration-300"
-         style={{ background: theme.bg, color: theme.text }}>
-      
-      {/* ━━━ HEADER — FULL REDESIGN ━━━ */}
-      <header 
-        style={{ background: theme.headerBg, borderBottom: `1px solid ${theme.border}` }}
-        className="px-6 py-4 flex items-center justify-between sticky top-0 z-20 shrink-0"
-      >
-        {/* LEFT */}
-        <div className="flex items-center gap-3">
-          <Radio size={20} color="#D97706" />
-          <div className="flex flex-col">
-            <span className="font-mono font-black text-xl text-[#D97706]">TABLEOS</span>
-            <span style={{ color: theme.textMuted }} className="text-[10px] font-mono tracking-widest block">
-              STATION ALPHA-1
+    <div style={{ minHeight: '100vh', background: '#F7F9FB', fontFamily: '"Inter", sans-serif', color: '#191C1E', userSelect: 'none', overflow: 'hidden' }}>
+
+      {/* ━━━ HEADER ━━━ */}
+      <header style={{
+        position: 'fixed', top: 0, left: 0, right: 0,
+        zIndex: 50, height: '64px',
+        background: '#FFFFFF',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 32px',
+        boxShadow: '0px 1px 0px #E6E8EA',
+      }}>
+        {/* Left: logo + status pills */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '28px' }}>
+          <h1 style={{ fontSize: '22px', fontWeight: 900, letterSpacing: '-0.04em', color: '#8D4B00', lineHeight: 1 }}>
+            TableOS
+          </h1>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '10px',
+            padding: '6px 14px',
+            background: '#FFF4EC', color: '#8D4B00',
+            borderRadius: '12px',
+            border: '1px solid #F5D19A',
+            boxShadow: '0 1px 2px rgba(141,75,0,0.05)'
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>analytics</span>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '9px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.8, lineHeight: 1 }}>Orders Today</span>
+              <span style={{ fontSize: '16px', fontWeight: 900, lineHeight: 1.1 }}>{totalOrdersToday}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: clock + controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '28px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              padding: '2px 8px',
+              background: realtimeStatus === 'connected' ? '#E8F6F1' : '#FFF4EC',
+              color: realtimeStatus === 'connected' ? '#006948' : '#8D4B00',
+              border: `1px solid ${realtimeStatus === 'connected' ? '#B2DFCC' : '#F5D19A'}`,
+              borderRadius: '4px',
+              fontSize: '10px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase',
+            }}>
+              {realtimeStatus === 'connecting' ? '⟳ SYNC' : 'LIVE'}
+            </div>
+            <span style={{
+              fontFamily: '"Inter", monospace',
+              fontVariantNumeric: 'tabular-nums',
+              fontSize: '22px', fontWeight: 700,
+              letterSpacing: '-0.02em', color: '#191C1E',
+            }}>
+              {currentTime}
             </span>
           </div>
-        </div>
 
-        {/* CENTER */}
-        <div className="hidden md:block absolute left-1/2 -translate-x-1/2 pointer-events-none text-center">
-          <span style={{ color: theme.text }} className="font-mono font-black text-4xl tracking-wider">
-            {currentTime}
-          </span>
-        </div>
-
-        {/* RIGHT */}
-        <div className="flex items-center gap-2">
-          {/* Default view wifi/pulse */}
-          <div className="hidden md:flex items-center gap-2 mr-4">
-            <div className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse"></div>
-            <span className="text-sm font-mono text-green-400">LIVE</span>
-          </div>
-
-          <button onClick={() => setIsDark(!isDark)}
-            style={{ background: theme.surface2, border: `1px solid ${theme.border}` }}
-            className="p-2 rounded-xl transition-all cursor-pointer hover:opacity-80">
-            {isDark ? <Sun size={16} color="#D97706" /> : <Moon size={16} color="#6B7280" />}
-          </button>
-
-          <button onClick={() => setIsMuted(!isMuted)} 
-            style={{ background: theme.surface2, border: `1px solid ${theme.border}` }}
-            className="p-2 rounded-xl transition-all cursor-pointer hover:opacity-80">
-            {isMuted ? <BellOff size={16} style={{ color: theme.textMuted }} /> : <Bell size={16} style={{ color: theme.textMuted }} />}
-          </button>
-
-          {/* Activity Button */}
-          <button onClick={() => { setShowActivity(!showActivity); setShowSettings(false); setShowHistory(false); }}
-            className="relative p-2 rounded-xl transition-all cursor-pointer hover:opacity-80"
-            style={{ background: theme.surface2, border: `1px solid ${theme.border}` }}>
-            <Activity size={16} style={{ color: theme.textMuted }} />
-            {orders.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-amber-500 text-black text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center font-mono animate-pulse">
-                {orders.length}
-              </span>
-            )}
-          </button>
-
-          {/* History Button (before Settings) */}
-          <button
-            onClick={() => { setShowHistory(!showHistory); setShowActivity(false); setShowSettings(false); }}
-            className="relative p-2 rounded-xl transition-all cursor-pointer hover:opacity-80"
-            style={{ background: theme.surface2, border: `1px solid ${theme.border}` }}
-          >
-            <History size={16} style={{ color: theme.textMuted }} />
-            {orderHistory.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-blue-500 text-white
-                                text-[9px] font-black rounded-full w-4 h-4
-                                flex items-center justify-center font-mono">
-                {orderHistory.length > 99 ? '99+' : orderHistory.length}
-              </span>
-            )}
-          </button>
-
-          {/* Settings Button */}
-          <button onClick={() => { setShowSettings(!showSettings); setShowActivity(false); setShowHistory(false); }}
-            style={{ background: theme.surface2, border: `1px solid ${theme.border}` }}
-            className="p-2 rounded-xl transition-all cursor-pointer hover:opacity-80">
-            <Settings size={16} style={{ color: theme.textMuted }} />
-          </button>
-        </div>
-
-        {/* HISTORY PANEL */}
-        {showHistory && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center"
-            style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
-            onClick={() => setShowHistory(false)}
-          >
-            <div
-              className="w-full max-w-2xl mx-4 rounded-2xl shadow-2xl 
-                         flex flex-col max-h-[80vh]"
-              style={{ background: theme.surface, border: `1px solid ${theme.border}` }}
-              onClick={e => e.stopPropagation()}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {/* Mute toggle */}
+            <span
+              className="material-symbols-outlined"
+              title={isMuted ? 'Unmute' : 'Mute alerts'}
+              onClick={() => setIsMuted(m => !m)}
+              style={{ fontSize: '22px', color: isMuted ? '#BA1A1A' : '#887364', cursor: 'pointer' }}
             >
-              {/* Panel Header */}
-              <div className="flex items-center justify-between p-5"
-                style={{ borderBottom: `1px solid ${theme.border}` }}>
-                <div className="flex items-center gap-3">
-                  <History size={18} color="#D97706" />
-                  <span className="font-mono font-black text-lg"
-                    style={{ color: theme.text }}>
-                    Order History
-                  </span>
-                  <span className="bg-blue-500 text-white text-xs font-mono 
-                                   font-bold px-2 py-0.5 rounded-full">
-                    {orderHistory.length} orders
-                  </span>
-                </div>
-                <button onClick={() => setShowHistory(false)}>
-                  <X size={18} style={{ color: theme.textMuted }} />
-                </button>
-              </div>
+              {isMuted ? 'notifications_off' : 'notifications'}
+            </span>
 
-              {/* Panel Body */}
-              <div className="overflow-y-auto flex-1 p-4">
-                {orderHistory.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 gap-3">
-                    <History size={32} style={{ color: theme.textMuted }} />
-                    <p className="font-mono text-sm" style={{ color: theme.textMuted }}>
-                      No completed orders yet
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-3">
-                    {orderHistory.map((order, idx) => (
-                      <div
-                        key={idx}
-                        className="rounded-xl p-4 flex flex-col gap-2"
-                        style={{
-                          background: theme.surface2,
-                          border: `1px solid ${theme.border}`,
-                          borderLeft: '4px solid #4ADE80',
-                        }}
-                      >
-                        {/* Order top row */}
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-3">
-                            <span className="font-mono font-black text-base"
-                              style={{ color: theme.text }}>
-                              {order.id}
-                            </span>
-                            <span className="text-xs font-mono font-bold 
-                                             bg-green-900 text-green-400 
-                                             px-2 py-0.5 rounded-full">
-                              SERVED
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs font-mono"
-                              style={{ color: theme.textMuted }}>
-                              TABLE {order.tableNum}
-                            </span>
-                            <span className="text-xs font-mono"
-                              style={{ color: theme.textMuted }}>
-                              {order.clearedAt}
-                            </span>
-                          </div>
-                        </div>
+            {/* Manual refresh */}
+            <span
+              className="material-symbols-outlined"
+              title="Refresh orders"
+              onClick={() => {
+                setRealtimeStatus('connecting');
+                if (activeTab === 'Live Orders') {
+                  fetchOrders().then(() => setRealtimeStatus('connected'));
+                } else {
+                  fetchHistory(historyFilter).then(() => setRealtimeStatus('connected'));
+                }
+              }}
+              style={{ fontSize: '22px', color: '#887364', cursor: 'pointer' }}
+            >
+              refresh
+            </span>
 
-                        {/* Items */}
-                        <div className="flex flex-col gap-1">
-                          {order.items.map((item, i) => (
-                            <div key={i} className="flex gap-2 text-sm">
-                              <span style={{ color: theme.textMuted }}
-                                    className="font-mono w-6">
-                                {item.qty}x
-                              </span>
-                              <span style={{ color: theme.text }}>
-                                {item.name}
-                              </span>
-                              <span className="text-[10px] font-mono px-1.5 py-0.5 
-                                               rounded bg-[#2A2A2A] text-gray-400 
-                                               self-center">
-                                {item.station}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Note if exists */}
-                        {order.note && (
-                          <p className="text-xs text-amber-500 italic">
-                            📝 {order.note}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Panel Footer */}
-              {orderHistory.length > 0 && (
-                <div className="p-4 flex justify-between items-center"
-                  style={{ borderTop: `1px solid ${theme.border}` }}>
-                  <span className="text-xs font-mono" style={{ color: theme.textMuted }}>
-                    {orderHistory.length} orders completed today
-                  </span>
-                  <button
-                    onClick={() => setOrderHistory([])}
-                    className="text-xs font-mono font-bold px-4 py-2 rounded-xl
-                               bg-red-900 text-red-400 hover:bg-red-800 transition-colors cursor-pointer">
-                    CLEAR HISTORY
-                  </button>
-                </div>
-              )}
-            </div>
           </div>
-        )}
-
-        {/* ACTIVITY PANEL */}
-        {showActivity && (
-          <div className="absolute top-16 right-4 w-72 rounded-2xl shadow-2xl p-4 transition-all z-50"
-            style={{ background: theme.surface, border: `1px solid ${theme.border}` }}>
-            <div className="flex justify-between items-center mb-3">
-              <span className="font-mono font-bold text-sm" style={{ color: theme.text }}>Live Activity</span>
-              <button className="cursor-pointer" onClick={() => setShowActivity(false)}>
-                <X size={14} style={{ color: theme.textMuted }} />
-              </button>
-            </div>
-            {orders.length === 0 && (
-              <p className="text-xs font-mono py-2 text-center" style={{ color: theme.textMuted }}>No active orders</p>
-            )}
-            {orders.slice(0,5).map(o => (
-              <div key={o.id} className="flex justify-between items-center py-2"
-                style={{ borderBottom: `1px solid ${theme.border}` }}>
-                <span className="font-mono text-xs font-bold text-[#D97706]">
-                  {String(o.id).startsWith('#') ? o.id : `#${o.id}`}
-                </span>
-                <span className="text-xs font-mono" style={{ color: theme.textMuted }}>
-                  TBL {o.tableNum}
-                </span>
-                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full
-                  ${o.status === 'pending' ? 'bg-amber-900 text-amber-400' :
-                    o.status === 'cooking' ? 'bg-orange-900 text-orange-400' :
-                    'bg-green-900 text-green-400'}`}>
-                  {o.status.toUpperCase()}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* SETTINGS PANEL */}
-        {showSettings && (
-          <div className="absolute top-16 right-4 w-72 rounded-2xl shadow-2xl p-4 transition-all z-50"
-            style={{ background: theme.surface, border: `1px solid ${theme.border}` }}>
-            
-            <div className="flex justify-between items-center mb-4">
-              <span className="font-mono font-bold text-sm" style={{ color: theme.text }}>Settings</span>
-              <button className="cursor-pointer" onClick={() => setShowSettings(false)}>
-                <X size={14} style={{ color: theme.textMuted }} />
-              </button>
-            </div>
-
-            {/* Sound */}
-            <div className="flex justify-between items-center py-3" style={{ borderBottom: `1px solid ${theme.border}` }}>
-              <span className="text-xs font-mono" style={{ color: theme.textMuted }}>Sound Alerts</span>
-              <button onClick={() => setIsMuted(!isMuted)}
-                className={`text-[10px] font-bold px-3 py-1 rounded-full font-mono cursor-pointer transition-colors ${isMuted ? 'bg-red-900 text-red-400' : 'bg-green-900 text-green-400'}`}>
-                {isMuted ? 'MUTED' : 'ON'}
-              </button>
-            </div>
-
-            {/* Theme */}
-            <div className="flex justify-between items-center py-3" style={{ borderBottom: `1px solid ${theme.border}` }}>
-              <span className="text-xs font-mono" style={{ color: theme.textMuted }}>Theme</span>
-              <button onClick={() => setIsDark(!isDark)}
-                className="text-[10px] font-bold px-3 py-1 rounded-full font-mono bg-[#2A2A2A] text-gray-400 cursor-pointer transition-colors hover:text-white">
-                {isDark ? 'DARK' : 'LIGHT'}
-              </button>
-            </div>
-
-            {/* WiFi */}
-            <div className="flex justify-between items-center py-3" style={{ borderBottom: `1px solid ${theme.border}` }}>
-              <div className="flex items-center gap-2">
-                <Wifi size={14} className="text-green-400" />
-                <span className="text-xs font-mono" style={{ color: theme.textMuted }}>WiFi Signal</span>
-              </div>
-              <div className="flex items-end gap-0.5 h-4">
-                {[2,3,4,5,6].map((h,i) => (
-                  <div key={i} className="w-1 bg-green-400 rounded-sm" style={{ height: `${h * 2.5}px`, opacity: i > 3 ? 0.3 : 1 }} />
-                ))}
-              </div>
-            </div>
-
-            {/* Printer */}
-            <div className="flex justify-between items-center py-3">
-              <div className="flex items-center gap-2">
-                <Printer size={14} className="text-green-400" />
-                <span className="text-xs font-mono" style={{ color: theme.textMuted }}>Printer</span>
-              </div>
-              <span className="text-[10px] font-mono font-bold text-green-400 bg-green-900 px-2 py-0.5 rounded-full">
-                ONLINE
-              </span>
-            </div>
-
-            <p className="text-[10px] font-mono text-center mt-3" style={{ color: theme.textMuted }}>
-              STATION ALPHA-1 · TableOS KDS v1.0
-            </p>
-          </div>
-        )}
+        </div>
       </header>
 
-      {/* ━━━ STATS BAR ━━━ */}
-      <section 
-        style={{ background: theme.surface2, borderBottom: `1px solid ${theme.border}` }}
-        className="grid grid-cols-4 divide-x shrink-0"
-      >
-        <div className="flex flex-col items-center justify-center py-3 md:py-4" style={{ borderColor: theme.border }}>
-          <span className="text-2xl md:text-4xl font-black font-mono text-[#F5A623]">{incomingCount}</span>
-          <span className="text-[9px] md:text-[10px] font-mono tracking-widest uppercase mt-1" style={{ color: theme.textMuted }}>INCOMING</span>
+      {/* ━━━ SIDEBAR ━━━ */}
+      <aside style={{
+        position: 'fixed', left: 0, top: '64px',
+        width: '232px', height: 'calc(100vh - 64px)',
+        background: '#F2F4F6',
+        display: 'flex', flexDirection: 'column',
+        padding: '24px 16px', gap: '4px',
+      }}>
+        <div style={{ padding: '0 8px', marginBottom: '28px' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#8D4B00', lineHeight: 1, letterSpacing: '-0.02em' }}>
+            Main Kitchen
+          </h2>
+          {/* Station/Role info removed as requested */}
         </div>
-        <div className="flex flex-col items-center justify-center py-3 md:py-4" style={{ borderColor: theme.border }}>
-          <span className="text-2xl md:text-4xl font-black font-mono text-[#FF8C42]">{cookingCount}</span>
-          <span className="text-[9px] md:text-[10px] font-mono tracking-widest uppercase mt-1" style={{ color: theme.textMuted }}>COOKING</span>
-        </div>
-        <div className="flex flex-col items-center justify-center py-3 md:py-4" style={{ borderColor: theme.border }}>
-          <span className="text-2xl md:text-4xl font-black font-mono text-green-400">{readyCount}</span>
-          <span className="text-[9px] md:text-[10px] font-mono tracking-widest uppercase mt-1" style={{ color: theme.textMuted }}>READY</span>
-        </div>
-        <div className="flex flex-col items-center justify-center py-3 md:py-4" style={{ borderColor: theme.border }}>
-          <span className="text-2xl md:text-4xl font-black font-mono text-gray-500">{servedCount}</span>
-          <span className="text-[9px] md:text-[10px] font-mono tracking-widest uppercase mt-1" style={{ color: theme.textMuted }}>SERVED</span>
-        </div>
-      </section>
 
-      {/* ━━━ KANBAN BOARD ━━━ */}
-      <main className="flex-1 flex flex-col min-h-0 w-full overflow-hidden">
-        
-        {/* Mobile Column Selector Tabs */}
-        <div className="flex border-b md:hidden shrink-0" style={{ borderColor: theme.border, background: theme.surface2 }}>
+        <nav style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           {[
-            { id: 'pending', label: 'INCOMING' },
-            { id: 'cooking', label: 'COOKING' },
-            { id: 'ready', label: 'READY' }
-          ].map(col => (
-            <button
-              key={col.id}
-              onClick={() => setMobileCol(col.id)}
-              className={`flex-1 py-3 text-xs font-mono font-bold text-center transition-colors cursor-pointer ${
-                mobileCol === col.id ? 'border-b-2 border-amber-500 text-amber-500' : ''
-              }`}
-              style={{ color: mobileCol !== col.id ? theme.textMuted : undefined }}
-            >
-              {col.label}
-            </button>
-          ))}
-        </div>
+            { icon: 'restaurant',  label: 'Live Orders'   },
+            { icon: 'history',     label: 'Order History' },
+          ].map(({ icon, label }) => {
+            const active = activeTab === label;
+            return (
+              <div
+                key={label}
+                onClick={() => setActiveTab(label)}
+                className="cubic-transition"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '12px',
+                  padding: '10px 12px',
+                  background:   active ? '#FFFFFF' : 'transparent',
+                  color:        active ? '#8D4B00' : '#554336',
+                  borderRadius: '8px',
+                  fontWeight:   active ? 700 : 500,
+                  fontSize:     '14px',
+                  cursor:       'pointer',
+                  boxShadow:    active ? '0 1px 4px rgba(15,23,42,0.06)' : 'none',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>{icon}</span>
+                {label}
+              </div>
+            );
+          })}
+        </nav>
 
-        {/* Board Container */}
-        <div 
-          className="flex-1 overflow-hidden"
-          style={{ display: 'flex', flexDirection: 'row' }}
-        >
-          {renderColumn('pending', 'INCOMING', incomingCount)}
-          {renderColumn('cooking', 'COOKING', cookingCount)}
-          {renderColumn('ready', 'READY', readyCount)}
+        <div style={{ marginTop: 'auto' }}>
+          {/* Removed Manual Order button as requested */}
         </div>
+      </aside>
+
+      {/* ━━━ MAIN BOARD ━━━ */}
+      <main style={{ marginLeft: '232px', paddingTop: '64px', height: '100vh', display: 'flex', flexDirection: 'column', background: '#F7F9FB' }}>
+        {activeTab === 'Live Orders' ? (
+          <div style={{
+            flex: 1,
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr 1fr',
+            overflow: 'hidden',
+            marginBottom: '0px',
+          }}>
+            {columns.map(({ status, title, count, badgeBg, emptyIcon }, colIdx) => {
+              const colOrders = liveOrders.filter(o => o.status === status);
+              const isActive  = mobileCol === status;
+              const colBg = colIdx === 1 ? '#F2F4F6' : '#F7F9FB';
+
+              return (
+                <section
+                  key={status}
+                  className={isActive ? '' : 'hidden-mobile'}
+                  style={{
+                    display:       'flex',
+                    flexDirection: 'column',
+                    height:        '100%',
+                    overflow:      'hidden',
+                    background:    colBg,
+                    borderRight:   colIdx < 2 ? '1px solid #E6E8EA' : 'none',
+                  }}
+                >
+                  {/* Column header */}
+                  <div style={{
+                    height: '48px', padding: '0 20px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    background: colBg,
+                    borderBottom: '1px solid #E6E8EA',
+                    position: 'sticky', top: 0, zIndex: 10,
+                  }}>
+                    <h3 style={{
+                      fontSize: '10px', fontWeight: 900,
+                      textTransform: 'uppercase', letterSpacing: '0.2em',
+                      color: '#554336',
+                    }}>{title}</h3>
+                    <span style={{
+                      background: badgeBg, color: '#FFFFFF',
+                      fontSize: '10px', fontWeight: 700,
+                      padding: '2px 8px', borderRadius: '9999px',
+                    }}>{count}</span>
+                  </div>
+
+                  {/* Scrollable order list */}
+                  <div
+                    className="hide-scrollbar"
+                    style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}
+                  >
+                    {colOrders.length === 0 ? (
+                      <div style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        height: '180px',
+                        border: '2px dashed #DBC2B0', borderRadius: '12px', opacity: 0.5,
+                      }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: '32px', color: '#887364', marginBottom: '8px' }}>
+                          {emptyIcon}
+                        </span>
+                        <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#887364', textAlign: 'center' }}>
+                          No active<br />{title.toLowerCase()}
+                        </span>
+                      </div>
+                    ) : (
+                      colOrders.map(order => <OrderCard key={order.id} order={order} setConfirmModal={setConfirmModal} />)
+                    )}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        ) : (
+          /* ━━━ HISTORY VIEW ━━━ */
+          <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div style={{
+              padding: '16px 32px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              borderBottom: '1px solid #E6E8EA',
+              background: '#FFFFFF',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+                <h3 style={{ fontSize: '12px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#554336' }}>
+                  Order History
+                </h3>
+                {/* Search / Filter */}
+                <div style={{ position: 'relative' }}>
+                  <span className="material-symbols-outlined" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '18px', color: '#887364' }}>
+                    search
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Search Table #..."
+                    value={historySearch}
+                    onChange={(e) => setHistorySearch(e.target.value)}
+                    style={{
+                      padding: '8px 12px 8px 38px',
+                      borderRadius: '8px',
+                      border: '1px solid #E6E8EA',
+                      fontSize: '13px',
+                      background: '#F7F9FB',
+                      width: '200px',
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Filters & Sort */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+                {/* Date Filters */}
+                <div style={{ 
+                  display: 'flex', 
+                  background: '#F2F4F6', 
+                  padding: '4px', 
+                  borderRadius: '10px',
+                  gap: '2px'
+                }}>
+                  {['day', 'week', 'month', 'all'].map(f => (
+                    <button
+                      key={f}
+                      onClick={() => {
+                        setHistoryFilter(f);
+                        fetchHistory(f);
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '7px',
+                        border: 'none',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        cursor: 'pointer',
+                        background: historyFilter === f ? '#FFFFFF' : 'transparent',
+                        color: historyFilter === f ? '#8D4B00' : '#887364',
+                        boxShadow: historyFilter === f ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#887364', textTransform: 'uppercase' }}>Sort:</span>
+                  <select
+                    value={historySort}
+                    onChange={(e) => setHistorySort(e.target.value)}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #E6E8EA',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      color: '#554336',
+                      background: '#FFFFFF'
+                    }}
+                  >
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div
+              className="hide-scrollbar"
+              style={{
+                flex: 1, overflowY: 'auto', padding: '32px',
+                display: 'flex', flexDirection: 'column', gap: '40px'
+              }}
+            >
+              {(() => {
+                let filtered = historyOrders.filter(o => 
+                  o.tableNum?.toString().includes(historySearch) || 
+                  o.customerName?.toLowerCase().includes(historySearch.toLowerCase()) ||
+                  o.items?.some(it => it.name.toLowerCase().includes(historySearch.toLowerCase()))
+                );
+                
+                if (historySort === 'newest') {
+                  filtered = [...filtered].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                } else {
+                  filtered = [...filtered].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                }
+
+                if (filtered.length === 0) {
+                  return (
+                    <div style={{ textAlign: 'center', padding: '64px', color: '#887364' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: '48px', opacity: 0.3, marginBottom: '16px' }}>
+                        inventory_2
+                      </span>
+                      <p style={{ fontWeight: 600 }}>No historical orders found matching your criteria.</p>
+                    </div>
+                  );
+                }
+
+                // Group by day
+                const groups = filtered.reduce((acc, order) => {
+                  const date = new Date(order.createdAt);
+                  const today = new Date();
+                  const yesterday = new Date();
+                  yesterday.setDate(today.getDate() - 1);
+
+                  let dateStr = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+                  if (date.toDateString() === today.toDateString()) dateStr = 'Today';
+                  else if (date.toDateString() === yesterday.toDateString()) dateStr = 'Yesterday';
+
+                  if (!acc[dateStr]) acc[dateStr] = [];
+                  acc[dateStr].push(order);
+                  return acc;
+                }, {});
+
+                return Object.entries(groups).map(([date, orders]) => (
+                  <div key={date} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <h4 style={{ fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#887364', whiteSpace: 'nowrap' }}>
+                        {date}
+                      </h4>
+                      <div style={{ height: '1px', flex: 1, background: '#E6E8EA' }} />
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: '#887364', background: '#F2F4F6', padding: '2px 8px', borderRadius: '9999px' }}>
+                        {orders.length} Orders
+                      </span>
+                    </div>
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', 
+                      gap: '24px' 
+                    }}>
+                      {orders.map(order => (
+                        <OrderCard 
+                          key={order.id}
+                          order={order} 
+                          isHistory={true} 
+                          setConfirmModal={setConfirmModal}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+        )}
       </main>
 
-      {/* Floating WiFi + Printer Status */}
-      <div
-        className="hidden md:flex"
-        style={{
-          position: 'fixed',
-          bottom: '16px',
-          right: '16px',
-          zIndex: 50,
-          background: isDark ? '#1E1E1E' : '#FFFFFF',
-          border: `1px solid ${theme.border}`,
-          borderRadius: '16px',
-          padding: '10px 14px',
-          alignItems: 'center',
-          gap: '16px',
-          boxShadow: isDark
-            ? '0 4px 20px rgba(0,0,0,0.5)'
-            : '0 4px 20px rgba(0,0,0,0.12)',
-        }}
-      >
-        {/* WiFi */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Wifi size={14} color="#4ADE80" />
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '14px' }}>
-            {[3, 5, 8, 11, 14].map((h, i) => (
-              <div
-                key={i}
+      {/* ━━━ MOBILE BOTTOM NAV ━━━ */}
+      <nav className="mobile-nav" style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0,
+        background: '#FFFFFF',
+        borderTop: '1px solid #E6E8EA',
+        padding: '8px 16px',
+        zIndex: 55,
+        display: 'flex',
+        justifyContent: 'space-around', alignItems: 'center',
+      }}>
+        {columns.map(({ status, title, emptyIcon }) => {
+          const active = mobileCol === status;
+          const icons  = { pending: 'pause_circle', cooking: 'local_fire_department', ready: 'check_circle' };
+          return (
+            <div key={status} onClick={() => setMobileCol(status)} style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              padding: '8px 20px',
+              background: active ? '#FFF4EC' : 'transparent',
+              color: active ? '#8D4B00' : '#887364',
+              borderRadius: '10px', cursor: 'pointer',
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>{icons[status]}</span>
+              <span style={{ fontSize: '9px', fontWeight: 900, letterSpacing: '0.15em', textTransform: 'uppercase', marginTop: '2px' }}>
+                {status.charAt(0).toUpperCase() + status.slice(1)}
+              </span>
+            </div>
+          );
+        })}
+      </nav>
+      
+      {/* ━━━ CUSTOM CONFIRM MODAL ━━━ */}
+      {confirmModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          backdropFilter: 'blur(4px)',
+        }}>
+          <div style={{
+            background: '#FFFFFF', borderRadius: '12px', width: '90%', maxWidth: '400px',
+            padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
+            textAlign: 'center',
+          }}>
+            <div style={{
+              width: '48px', height: '48px', background: '#FEF2F2', borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
+            }}>
+              <span className="material-symbols-outlined" style={{ color: '#DC2626', fontSize: '24px' }}>warning</span>
+            </div>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, marginBottom: '8px', color: '#111827' }}>
+              {confirmModal.title}
+            </h3>
+            <p style={{ fontSize: '14px', color: '#6B7280', marginBottom: '24px', lineHeight: 1.5 }}>
+              {confirmModal.message}
+            </p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => setConfirmModal(null)}
                 style={{
-                  width: '3px',
-                  height: `${h}px`,
-                  background: '#4ADE80',
-                  borderRadius: '2px',
+                  flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #E5E7EB',
+                  background: '#FFFFFF', color: '#374151', fontWeight: 600, fontSize: '14px', cursor: 'pointer',
                 }}
-              />
-            ))}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { confirmModal.onConfirm(); setConfirmModal(null); }}
+                style={{
+                  flex: 1, padding: '12px', borderRadius: '8px', border: 'none',
+                  background: '#DC2626', color: '#FFFFFF', fontWeight: 600, fontSize: '14px', cursor: 'pointer',
+                }}
+              >
+                Yes, Cancel Order
+              </button>
+            </div>
           </div>
-          <span
-            style={{
-              fontSize: '9px',
-              fontFamily: 'monospace',
-              fontWeight: 'bold',
-              color: theme.textMuted,
-              letterSpacing: '0.1em',
-            }}
-          >
-            WIFI
-          </span>
         </div>
-
-        {/* Divider */}
-        <div style={{ width: '1px', height: '20px', background: theme.border }} />
-
-        {/* Printer */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Printer size={14} color="#4ADE80" />
-          <span
-            style={{
-              fontSize: '9px',
-              fontFamily: 'monospace',
-              fontWeight: 'bold',
-              color: '#4ADE80',
-              letterSpacing: '0.1em',
-            }}
-          >
-            ONLINE
-          </span>
-        </div>
-      </div>
-
+      )}
     </div>
   );
 };

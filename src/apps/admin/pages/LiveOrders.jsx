@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../../lib/supabase.js';
+import { useAuthStore } from '../../../store/authStore.js';
 
-const TENANT_ID = '11111111-1111-1111-1111-111111111111';
+// const TENANT_ID = '...'; // Removed hardcoded ID
+
 
 // Local ticking timer for elapsed time
 const ElapsedTimer = ({ createdAt }) => {
@@ -102,6 +104,7 @@ const OrderCard = ({ order, onAction }) => {
 };
 
 export default function LiveOrders() {
+  const { tenantId: TENANT_ID } = useAuthStore();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('All');
@@ -111,7 +114,7 @@ export default function LiveOrders() {
       .from('orders')
       .select('*, order_items(name, qty)')
       .eq('tenant_id', TENANT_ID)
-      .not('status', 'in', '("served","cancelled")')
+      .not('status', 'in', '("served","cancelled","rejected")')
       .order('created_at', { ascending: false });
 
     if (data) {

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabase.js';
+import { useAuthStore } from '../../../store/authStore.js';
 
-const TENANT_ID = '11111111-1111-1111-1111-111111111111';
+// const TENANT_ID = '...'; 
+
 
 const CATEGORIES = ['All', 'Starters', 'Mains', 'Sides', 'Desserts', 'Beverages'];
 const STATIONS = ['HOT', 'GRILL', 'FRY', 'COLD', 'BAR', 'BREAD'];
@@ -16,6 +18,7 @@ const formatCurrency = (amount) => {
 };
 
 export default function MenuManagement() {
+  const { tenantId: TENANT_ID } = useAuthStore();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   

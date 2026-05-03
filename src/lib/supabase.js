@@ -16,5 +16,3 @@ export const supabase = (supabaseUrl && supabaseAnonKey)
     }
   })
   : null
-
-export const TENANT_ID = import.meta.env.VITE_TENANT_ID || '00000000-0000-0000-0000-000000000000'

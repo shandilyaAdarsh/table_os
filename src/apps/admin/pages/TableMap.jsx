@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabase.js';
+import { useAuthStore } from '../../../store/authStore.js';
 
-const TENANT_ID = '11111111-1111-1111-1111-111111111111';
+// const TENANT_ID = '...'; // Removed hardcoded ID
 
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-IN', {
@@ -20,6 +21,7 @@ const formatElapsed = (createdAt) => {
 };
 
 export default function TableMap() {
+  const { tenantId: TENANT_ID } = useAuthStore();
   const [tables, setTables] = useState([]);
   const [orders, setOrders] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null);
@@ -40,7 +42,7 @@ export default function TableMap() {
         .from('orders')
         .select('*, order_items(*)')
         .eq('tenant_id', TENANT_ID)
-        .not('status', 'in', '("served","cancelled")');
+        .not('status', 'in', '("served","cancelled","rejected")');
         
       if (ordersData) setOrders(ordersData);
     };
@@ -70,7 +72,7 @@ export default function TableMap() {
           .from('orders')
           .select('*, order_items(*)')
           .eq('tenant_id', TENANT_ID)
-          .not('status', 'in', '("served","cancelled")')
+          .not('status', 'in', '("served","cancelled","rejected")')
           .then(({ data }) => setOrders(data || []));
       })
       .subscribe();

@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../../lib/supabase.js';
+import { useAuthStore } from '../../../store/authStore.js';
 import KPIRow from '../components/KPIRow.jsx';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
 } from 'recharts';
 
-const TENANT_ID = '11111111-1111-1111-1111-111111111111';
+// const TENANT_ID = '...'; // Removed hardcoded ID
+
 
 // Format Hour, e.g., 17 -> "5 PM"
 const formatHour = (hour) => {
@@ -27,6 +29,7 @@ const STATION_COLORS = {
 };
 
 export default function Analytics() {
+  const { tenantId: TENANT_ID } = useAuthStore();
   const [ordersPerHour, setOrdersPerHour] = useState([]);
   const [topDishes, setTopDishes] = useState([]);
   const [stationStats, setStationStats] = useState([]);
@@ -44,7 +47,7 @@ export default function Analytics() {
         .from('orders')
         .select('created_at, status')
         .eq('tenant_id', TENANT_ID)
-        .neq('status', 'cancelled');
+        .not('status', 'in', '("cancelled","rejected")');
       
       if (ordersErr) throw ordersErr;
 
@@ -72,7 +75,7 @@ export default function Analytics() {
           orders!inner(tenant_id, status)
         `)
         .eq('orders.tenant_id', TENANT_ID)
-        .neq('orders.status', 'cancelled');
+        .not('orders.status', 'in', '("cancelled","rejected")');
 
       if (itemsErr) throw itemsErr;
 

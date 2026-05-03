@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../../lib/supabase.js';
+import { useAuthStore } from '../../../store/authStore.js';
 import { QRCodeCanvas } from 'qrcode.react';
 
-const TENANT_ID = '11111111-1111-1111-1111-111111111111';
-const TENANT_SLUG = 'grand-spice';
+// const TENANT_ID = '...'; 
+// const TENANT_SLUG = '...';
 
 export default function QRManager() {
+  const { tenantId: TENANT_ID, tenant } = useAuthStore();
+  const TENANT_SLUG = tenant?.slug || 'demo';
   const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(true);
 

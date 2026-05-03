@@ -1,145 +1,131 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase, TENANT_ID } from '../../../lib/supabase.js';
-import { useAdminStore } from '../../../store/index.js';
-import { Delete } from 'lucide-react';
+// src/apps/admin/AdminLogin.jsx
+import { useState } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { useAuthStore } from '../../../store/authStore'
 
 export default function AdminLogin() {
-  const [pin, setPin] = useState('');
-  const [isError, setIsError] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const login = useAdminStore(state => state.login);
-  const navigate = useNavigate();
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const { login, isLoading, error } = useAuthStore()
+  const navigate = useNavigate()
+  const location = useLocation()
 
-  useEffect(() => {
-    if (pin.length === 4) {
-      handleLogin();
-    }
-  }, [pin]);
+  // Redirect to original destination after login, or default dashboard
+  const from = location.state?.from?.pathname ?? '/admin'
 
-  const handleLogin = async () => {
-    setIsLoading(true);
-    setIsError(false);
-    
+  const handleSubmit = async () => {
+    if (!email.trim()) return
+    if (!password.trim()) return
+
     try {
-      // Query staff table
-      const { data, error } = await supabase
-        .from('staff')
-        .select('*')
-        .eq('pin', pin)
-        .eq('tenant_id', '11111111-1111-1111-1111-111111111111')
-        .eq('is_active', true)
-        .in('role', ['owner', 'manager'])
-        .single();
-
-      if (error || !data) {
-        throw new Error('Invalid PIN or unauthorized role');
+      const result = await login({ email, password })
+      if (result.success) {
+        navigate(from, { replace: true })
       }
-
-      // Success
-      login(data);
-      navigate('/admin');
-    } catch (err) {
-      console.error('Login error:', err);
-      setIsError(true);
-      setPin(''); // Clear PIN
-      // Remove shake class after animation completes
-      setTimeout(() => setIsError(false), 500);
-    } finally {
-      setIsLoading(false);
+    } catch {
+      // Error state is already set in auth store for UI display.
     }
-  };
-
-  const handleNumberClick = (num) => {
-    if (pin.length < 4 && !isLoading) {
-      setPin(prev => prev + num);
-      setIsError(false);
-    }
-  };
-
-  const handleBackspace = () => {
-    if (!isLoading) {
-      setPin(prev => prev.slice(0, -1));
-      setIsError(false);
-    }
-  };
-
-  const renderDots = () => {
-    return (
-      <div className="flex justify-center gap-4 mb-8">
-        {[0, 1, 2, 3].map((index) => (
-          <div
-            key={index}
-            className={`w-4 h-4 rounded-full border-2 transition-all ${
-              index < pin.length 
-                ? 'bg-[#D69E2E] border-[#D69E2E]' 
-                : 'bg-transparent border-gray-400'
-            }`}
-          />
-        ))}
-      </div>
-    );
-  };
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#1A365D] selection:bg-[#D69E2E] selection:text-white font-body">
-      <div 
-        className={`bg-white p-10 rounded-2xl shadow-2xl w-full max-w-sm flex flex-col items-center ${isError ? 'animate-shake' : ''}`}
-      >
-        <div className="mb-2 text-[#D69E2E] font-black tracking-widest text-xl">
-          TABLEOS
-        </div>
-        <h1 className="text-2xl font-bold text-[#1A365D] mb-8">Admin Login</h1>
+    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
+      {/* Background subtle pattern */}
+      <div className="absolute inset-0 opacity-5"
+        style={{
+          backgroundImage: `radial-gradient(circle at 1px 1px, #D69E2E 1px, transparent 0)`,
+          backgroundSize: '32px 32px'
+        }}
+      />
 
-        {renderDots()}
+      <div className="relative w-full max-w-sm">
+        {/* Logo / Brand */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-amber-400 mb-4">
+            <span className="text-2xl font-black text-gray-900">T</span>
+          </div>
+          <h1 className="text-white text-2xl font-bold tracking-tight">TableOS Admin</h1>
+          <p className="text-gray-500 text-sm mt-1">Sign in to your restaurant dashboard</p>
+        </div>
 
-        {isError && (
-          <p className="text-red-500 text-sm font-semibold mb-4 animate-pulse">
-            Invalid PIN. Try again.
-          </p>
-        )}
-        
-        {isLoading && !isError && (
-          <p className="text-[#D69E2E] text-sm font-semibold mb-4 animate-pulse">
-            Verifying...
-          </p>
-        )}
-        
-        {/* Numpad */}
-        <div className="grid grid-cols-3 gap-4 w-full px-4">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-            <button
-              key={num}
-              onClick={() => handleNumberClick(num.toString())}
-              disabled={isLoading}
-              className="h-16 rounded-xl bg-gray-50 text-2xl font-medium text-[#1A365D] border border-gray-200 hover:bg-gray-100 hover:border-[#D69E2E] active:bg-gray-200 transition-all cursor-pointer disabled:opacity-50"
-            >
-              {num}
-            </button>
-          ))}
-          {/* Empty bottom-left cell */}
-          <div />
-          
+        {/* Card */}
+        <div className="bg-gray-900 rounded-3xl p-6 shadow-2xl border border-gray-800">
+
+          {/* Email Field */}
+          <div className="mb-6">
+            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+              Email Address
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+              placeholder="owner@yourrestaurant.com"
+              className="w-full bg-gray-800 text-white placeholder-gray-600 px-4 py-3 rounded-xl border border-gray-700 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/20 transition-all text-sm"
+              autoComplete="email"
+              autoFocus
+            />
+          </div>
+
+          {/* Password Field */}
+          <div className="mb-5">
+            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">
+              Password
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                placeholder="Enter your password"
+                className="w-full bg-gray-800 text-white placeholder-gray-600 px-4 py-3 pr-24 rounded-xl border border-gray-700 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/20 transition-all text-sm"
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-200"
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="mb-4 px-4 py-3 bg-red-900/40 border border-red-700/50 rounded-xl">
+              <p className="text-red-400 text-sm text-center">{error}</p>
+            </div>
+          )}
+
           <button
-            onClick={() => handleNumberClick('0')}
-            disabled={isLoading}
-            className="h-16 rounded-xl bg-gray-50 text-2xl font-medium text-[#1A365D] border border-gray-200 hover:bg-gray-100 hover:border-[#D69E2E] active:bg-gray-200 transition-all cursor-pointer disabled:opacity-50"
+            type="button"
+            onClick={handleSubmit}
+            disabled={isLoading || !email.trim() || !password.trim()}
+            className="w-full h-12 rounded-xl bg-amber-400 text-gray-900 font-semibold hover:bg-amber-300 disabled:bg-gray-700 disabled:text-gray-500 transition-all"
           >
-            0
+            {isLoading ? (
+              <span className="inline-block w-5 h-5 border-2 border-gray-900 border-t-transparent rounded-full animate-spin" />
+            ) : 'Sign In'}
           </button>
-          
+
           <button
-            onClick={handleBackspace}
-            disabled={isLoading || pin.length === 0}
-            className="h-16 rounded-xl bg-gray-100 text-[#1A365D] flex items-center justify-center border border-gray-200 hover:bg-gray-200 hover:border-red-400 active:bg-gray-300 transition-all cursor-pointer disabled:opacity-50"
-            aria-label="Backspace"
+            type="button"
+            onClick={() => setShowPassword(v => !v)}
+            className="w-full mt-4 text-xs text-gray-600 hover:text-gray-400 transition-colors"
           >
-            <Delete size={24} />
+            {showPassword ? 'Hide password' : 'Show password'}
           </button>
         </div>
+
+        {/* Footer */}
+        <p className="text-center text-gray-700 text-xs mt-6">
+          Forgot your PIN? Contact{' '}
+          <span className="text-amber-600">support@tableos.in</span>
+        </p>
       </div>
-      
-      {/* Tailwind Shake Animation Definition inside index.css will be needed or inline style. Let's add it to index.css */}
     </div>
-  );
+  )
 }

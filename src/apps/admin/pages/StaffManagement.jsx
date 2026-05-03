@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../../lib/supabase.js';
+import { useAuthStore } from '../../../store/authStore.js';
 
-const TENANT_ID = '11111111-1111-1111-1111-111111111111';
+// const TENANT_ID = '...'; // Removed hardcoded ID
 
 // We map generic colors to the available tailwind semantic equivalents where possible, 
 // or use fallback colors that fit the theme
@@ -27,6 +28,7 @@ const PinCell = ({ pin }) => {
 };
 
 export default function StaffManagement() {
+  const { tenantId: TENANT_ID } = useAuthStore();
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
