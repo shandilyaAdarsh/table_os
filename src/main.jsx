@@ -32,7 +32,11 @@ import {
   ItemDetail, 
   OrderConfirmation, 
   OrderTracking, 
-  PaymentScreen 
+  PaymentScreen,
+  OrdersPage,
+  ProfilePage,
+  CartPage,
+  CheckIn
 } from './apps/customer/index'
 
 // Waiter / Staff
@@ -104,6 +108,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/menu/confirmed/:id" element={<OrderConfirmation />} />
           <Route path="/menu/track/:orderId" element={<OrderTracking />} />
           <Route path="/menu/pay" element={<PaymentScreen />} />
+          <Route path="/menu/orders" element={<OrdersPage />} />
+          <Route path="/menu/profile" element={<ProfilePage />} />
+          <Route path="/menu/cart" element={<CartPage />} />
+          <Route path="/menu/checkin" element={<CheckIn />} />
 
           {/* Admin Dashboard */}
           <Route path="/admin/login" element={<AdminLogin />} />

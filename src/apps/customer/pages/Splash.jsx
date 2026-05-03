@@ -6,7 +6,7 @@ export default function Splash() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    const timer = setTimeout(() => navigate('/customer/browse'), 2000)
+    const timer = setTimeout(() => navigate('/menu/browse'), 2000)
     return () => clearTimeout(timer)
   }, [navigate])
 
@@ -20,7 +20,7 @@ export default function Splash() {
         transition={{ duration: 0.6, ease: 'easeOut' }}
         style={{ width: 100, height: 100, background: '#FFFFFF', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 32, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}
       >
-        <span style={{ color: '#1B2B4B', fontSize: 44, fontWeight: 900 }}>S</span>
+        <span style={{ color: '#1B2B4B', fontSize: 44, fontWeight: 900 }}>G</span>
       </motion.div>
 
       {/* Restaurant name */}
@@ -30,7 +30,7 @@ export default function Splash() {
         transition={{ delay: 0.3, duration: 0.6 }}
         style={{ color: 'white', fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', textAlign: 'center', margin: 0 }}
       >
-        Stitch Kitchen
+        The Grand Spice
       </motion.h1>
 
       {/* Tagline */}

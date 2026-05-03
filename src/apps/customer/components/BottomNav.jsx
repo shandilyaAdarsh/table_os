@@ -4,10 +4,10 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import AssistModal from './AssistModal'
 
 const NAV_ITEMS = [
-  { label: 'Menu',    icon: 'restaurant_menu', path: '/customer/browse', isModal: false },
+  { label: 'Menu',    icon: 'restaurant_menu', path: '/menu/browse', isModal: false },
   { label: 'Assist',  icon: 'room_service',    path: null,           isModal: true },
-  { label: 'Orders',  icon: 'receipt_long',    path: '/customer/orders', isModal: false },
-  { label: 'Profile', icon: 'person',          path: '/customer/profile',isModal: false },
+  { label: 'Orders',  icon: 'receipt_long',    path: '/menu/orders', isModal: false },
+  { label: 'Profile', icon: 'person',          path: '/menu/profile',isModal: false },
 ]
 
 export function BottomNav({ visible = true }) {

@@ -12,7 +12,7 @@ export function CartBar({ visible = true, onOpen }) {
 
   const handleClick = () => {
     if (onOpen) onOpen()
-    else navigate('/customer/cart')
+    else navigate('/menu/cart')
   }
 
   return (

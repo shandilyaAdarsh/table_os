@@ -51,7 +51,7 @@ export default function PaymentScreen() {
         
         setSuccess(true)
         setTimeout(() => {
-          navigate(`/customer/receipt/${id}`)
+          navigate(`/menu/receipt/${id}`)
         }, 500)
       } catch (err) {
          setErrorMsg('Payment failed, try again')
@@ -73,7 +73,7 @@ export default function PaymentScreen() {
      return (
        <div style={{ minHeight: '100vh', background: '#F9FAFB', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>
          <h1 style={{ fontSize: 20, fontWeight: 800, color: '#1B2B4B', marginBottom: 8 }}>Order not found</h1>
-         <button onClick={() => navigate('/customer/browse')} style={{ marginTop: 16, padding: '12px 32px', background: '#1B2B4B', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, cursor: 'pointer' }}>Back to Menu</button>
+         <button onClick={() => navigate('/menu/browse')} style={{ marginTop: 16, padding: '12px 32px', background: '#1B2B4B', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, cursor: 'pointer' }}>Back to Menu</button>
        </div>
      )
   }
@@ -279,7 +279,7 @@ export function ReceiptScreen() {
       </div>
 
       <button 
-        onClick={() => navigate('/customer/browse')}
+        onClick={() => navigate('/menu/browse')}
         style={{ width: '100%', py: 18, background: '#1B2B4B', color: 'white', border: 'none', borderRadius: 16, padding: '18px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer', boxShadow: '0 10px 30px rgba(27,43,75,0.2)' }}
       >
         Explore More

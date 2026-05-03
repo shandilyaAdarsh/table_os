@@ -134,7 +134,7 @@ export default function Cart() {
         {/* Place Order CTA Sticky Footer */}
         <div style={{ position: 'absolute', bottom: 0, width: '100%', background: 'white', padding: '20px 24px 40px', boxSizing: 'border-box', borderTop: '1px solid #F3F4F6' }}>
            <button
-             onClick={() => navigate('/customer/pay')}
+             onClick={() => navigate('/menu/pay')}
              style={{ 
                width: '100%', background: '#1B2B4B', color: 'white', 
                padding: '18px 0', borderRadius: 16, border: 'none', 

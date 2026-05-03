@@ -215,7 +215,7 @@ function OrderCard({ order }) {
 
   return (
     <div
-      onClick={isActive ? () => navigate('/customer/track/' + order.id) : undefined}
+      onClick={isActive ? () => navigate('/menu/track/' + order.id) : undefined}
       onTouchStart={isActive ? e => e.currentTarget.style.transform = 'scale(0.97)' : undefined}
       onTouchEnd={isActive ? e => e.currentTarget.style.transform = 'scale(1)' : undefined}
       style={{ 

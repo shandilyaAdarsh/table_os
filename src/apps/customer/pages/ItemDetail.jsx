@@ -65,7 +65,7 @@ export default function ItemDetail() {
         Item not found
       </p>
       <button 
-        onClick={() => navigate('/customer/browse')}
+        onClick={() => navigate('/menu/browse')}
         style={{
           background: '#1B2B4B', color: 'white',
           border: 'none', padding: '12px 24px',

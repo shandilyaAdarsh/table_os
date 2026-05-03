@@ -27,7 +27,7 @@ export default function ProfilePage() {
   const handleLeave = () => {
     if (confirm('Are you sure you want to end this session? You will need to check in again.')) {
       localStorage.removeItem('customerSession')
-      window.location.href = `/customer/browse?table=${getTableNum()}`
+      window.location.href = `/menu/browse?table=${getTableNum()}`
     }
   }
 
