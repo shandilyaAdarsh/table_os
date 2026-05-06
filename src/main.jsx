@@ -185,26 +185,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 
           {/* SuperAdmin */}
           <Route path="/superadmin/login" element={<SuperAdminLogin />} />
-          <Route path="/superadmin" element={
-            <ProtectedRoute allowedRoles={['superadmin']} redirectTo="/superadmin/login">
-              <SuperAdminDashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/superadmin/tenants" element={
-            <ProtectedRoute allowedRoles={['superadmin']} redirectTo="/superadmin/login">
-              <TenantList />
-            </ProtectedRoute>
-          } />
-          <Route path="/superadmin/tenant/:id" element={
-            <ProtectedRoute allowedRoles={['superadmin']} redirectTo="/superadmin/login">
-              <TenantDetail />
-            </ProtectedRoute>
-          } />
-          <Route path="/superadmin/onboard" element={
-            <ProtectedRoute allowedRoles={['superadmin']} redirectTo="/superadmin/login">
-              <OnboardWizard />
-            </ProtectedRoute>
-          } />
+          <Route path="/superadmin" element={<SuperAdminDashboard />} />
+          <Route path="/superadmin/tenants" element={<TenantList />} />
+          <Route path="/superadmin/tenant/:id" element={<TenantDetail />} />
+          <Route path="/superadmin/onboard" element={<OnboardWizard />} />
 
           <Route path="*" element={<Navigate to="/menu" replace />} />
         </Routes>
