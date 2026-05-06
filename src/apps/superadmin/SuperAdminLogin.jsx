@@ -4,9 +4,12 @@ import { useNavigate } from 'react-router-dom';
 export default function SuperAdminLogin() {
   const navigate = useNavigate();
   
+  React.useEffect(() => {
+    navigate('/superadmin');
+  }, [navigate]);
+
   const handleLogin = (e) => {
     e.preventDefault();
-    // For now, simple mock login
     navigate('/superadmin');
   };
 
