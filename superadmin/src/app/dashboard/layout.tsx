@@ -20,10 +20,10 @@ export default function DashboardLayout({
   }, [router])
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-[#131313]">
       <Sidebar />
-      <div className="flex-1 ml-[240px]">
-        <Topbar title="Dashboard Overview" />
+      <div className="flex-1 ml-[260px]">
+        <Topbar title="Infrastructure Hub" />
         <main className="pt-16">{children}</main>
       </div>
     </div>

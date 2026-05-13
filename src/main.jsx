@@ -46,11 +46,7 @@ import {
   StaffTableDetail 
 } from './apps/staff/index'
 
-// SuperAdmin
-import SuperAdminLogin from './apps/superadmin/SuperAdminLogin'
-import SuperAdminDashboard from './apps/superadmin/SuperAdminDashboard'
-import { TenantList, TenantDetail } from './apps/superadmin/Tenants'
-import OnboardWizard from './apps/superadmin/OnboardWizard'
+
 
 /**
  * AuthGate: Synchronizes Zustand with Supabase Auth state 
@@ -183,12 +179,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             </ProtectedRoute>
           } />
 
-          {/* SuperAdmin */}
-          <Route path="/superadmin/login" element={<SuperAdminLogin />} />
-          <Route path="/superadmin" element={<SuperAdminDashboard />} />
-          <Route path="/superadmin/tenants" element={<TenantList />} />
-          <Route path="/superadmin/tenant/:id" element={<TenantDetail />} />
-          <Route path="/superadmin/onboard" element={<OnboardWizard />} />
+
 
           <Route path="*" element={<Navigate to="/menu" replace />} />
         </Routes>
