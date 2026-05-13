@@ -16,34 +16,34 @@ interface TooltipState { x: number; y: number; label: string; value: number }
 function PlanBadge({ plan }: { plan: string }) {
   const p = plan.toLowerCase()
   if (p === 'enterprise') return (
-    <span className="px-3 py-1 bg-[#C0272D1A] text-[#ffb3ae] border border-[#C0272D33] text-[10px] font-bold uppercase tracking-tighter rounded-full">Enterprise</span>
+    <span className="px-2.5 py-0.5 bg-[#C0272D1A] text-[#ffb3ae] border border-[#C0272D33] text-[9px] font-bold uppercase tracking-widest rounded-full">Enterprise</span>
   )
   if (p === 'pro') return (
-    <span className="px-3 py-1 bg-[#353534] text-[#e3bebb] border border-[#2A2A2A] text-[10px] font-bold uppercase tracking-tighter rounded-full">Pro</span>
+    <span className="px-2.5 py-0.5 bg-[#1C1B1B] text-[#e3bebb] border border-[#2A2A2A] text-[9px] font-bold uppercase tracking-widest rounded-full">Pro</span>
   )
   return (
-    <span className="px-3 py-1 bg-[#0e0e0e] text-[#555555] border border-[#2A2A2A] text-[10px] font-bold uppercase tracking-tighter rounded-full">Starter</span>
+    <span className="px-2.5 py-0.5 bg-[#0e0e0e] text-[#555555] border border-[#2A2A2A] text-[9px] font-bold uppercase tracking-widest rounded-full">Starter</span>
   )
 }
 
 function StatusDot({ status }: { status: string }) {
   const s = status.toLowerCase()
   if (s === 'active') return (
-    <div className="flex items-center gap-2">
-      <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)] animate-pulse" />
-      <span className="text-xs text-[#e3bebb]">Active</span>
+    <div className="flex items-center gap-1.5">
+      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)] animate-pulse" />
+      <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Active</span>
     </div>
   )
   if (s === 'trial') return (
-    <div className="flex items-center gap-2">
-      <div className="w-2 h-2 rounded-full bg-amber-500" />
-      <span className="text-xs text-[#e3bebb]">Trial</span>
+    <div className="flex items-center gap-1.5">
+      <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+      <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Trial</span>
     </div>
   )
   return (
-    <div className="flex items-center gap-2">
-      <div className="w-2 h-2 rounded-full bg-[#ffb4ab]" />
-      <span className="text-xs text-[#e3bebb]">Suspended</span>
+    <div className="flex items-center gap-1.5">
+      <div className="w-1.5 h-1.5 rounded-full bg-[#ffb4ab]" />
+      <span className="text-[10px] font-bold text-red-400 uppercase tracking-wider">Suspended</span>
     </div>
   )
 }
@@ -190,37 +190,47 @@ export default function DashboardPage() {
   })
 
   return (
-    <div className="px-8 py-8 pb-12">
+    <div className="px-8 py-8 pb-12 bg-[#131313] min-h-screen">
 
-      {/* Notification bell — fixed top right */}
-      <div className="fixed top-0 right-0 z-50 h-16 flex items-center pr-8">
-        <div className="relative" ref={notifRef}>
-          <button
+      {/* Header Section */}
+      <header className="mb-10 flex justify-between items-end">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-extrabold text-[#F5F5F5] tracking-tighter">Platform Control Center</h1>
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+            <p className="text-[10px] font-bold text-[#555555] uppercase tracking-[0.2em]">Live System Telemetry · {new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }).toUpperCase()}</p>
+          </div>
+        </div>
+        
+        {/* Top Actions */}
+        <div className="flex items-center gap-4" ref={notifRef}>
+           <button
             onClick={() => setNotifOpen(v => !v)}
-            className="relative w-10 h-10 flex items-center justify-center rounded-[10px] hover:bg-[#2A2A2A] transition-colors"
+            className="relative w-10 h-10 flex items-center justify-center rounded-xl bg-[#1C1B1B] border border-[#2A2A2A] hover:border-[#C0272D]/50 transition-all group"
           >
-            <span className="material-symbols-outlined text-[#e3bebb]">notifications</span>
+            <span className="material-symbols-outlined text-[#555] group-hover:text-[#F5F5F5] transition-colors">notifications</span>
             {activity.length > 0 && (
-              <span className="absolute top-2 right-2 w-2 h-2 bg-[#C0272D] rounded-full" />
+              <span className="absolute top-2 right-2 w-2 h-2 bg-[#C0272D] rounded-full shadow-[0_0_8px_rgba(192,39,45,0.4)]" />
             )}
           </button>
+          
           {notifOpen && (
-            <div className="absolute right-0 top-12 w-96 bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl shadow-2xl z-50 overflow-hidden">
-              <div className="px-4 py-3 border-b border-[#2A2A2A]">
-                <p className="text-sm font-bold text-[#F5F5F5]">Recent Activity</p>
+            <div className="absolute right-8 top-24 w-96 bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl shadow-2xl z-50 overflow-hidden">
+              <div className="px-4 py-3 border-b border-[#2A2A2A] bg-[#1C1B1B]">
+                <p className="text-xs font-bold text-[#F5F5F5] uppercase tracking-widest">System Alerts</p>
               </div>
               <div className="max-h-80 overflow-y-auto divide-y divide-[#2A2A2A]">
-                {activity.length === 0 && <p className="px-4 py-4 text-xs text-[#555]">No recent activity</p>}
+                {activity.length === 0 && <p className="px-4 py-4 text-[10px] text-[#555] text-center uppercase tracking-widest font-bold">No recent alerts</p>}
                 {activity.map((a: any, i: number) => (
-                  <div key={i} className="px-4 py-3 hover:bg-[#2A2A2A] transition-colors">
+                  <div key={i} className="px-4 py-3 hover:bg-[#202020] transition-colors">
                     <div className="flex items-start gap-3">
                       <div className="w-7 h-7 rounded-lg bg-[#C0272D]/10 border border-[#C0272D]/20 flex items-center justify-center shrink-0 mt-0.5">
                         <span className="text-xs">{a.type === 'new_tenant' ? '🍽️' : '📦'}</span>
                       </div>
                       <div>
-                        <p className="text-xs font-semibold text-[#F5F5F5]">{a.title}</p>
-                        <p className="text-[11px] text-[#555] mt-0.5">{a.message}</p>
-                        <p className="text-[10px] text-[#333] mt-1">
+                        <p className="text-xs font-bold text-[#F5F5F5] leading-tight">{a.title}</p>
+                        <p className="text-[10px] text-[#555] mt-0.5 leading-relaxed">{a.message}</p>
+                        <p className="text-[9px] font-mono text-[#333] mt-1.5 uppercase tracking-tighter">
                           {new Date(a.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                         </p>
                       </div>
@@ -231,7 +241,7 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
-      </div>
+      </header>
 
       {/* Tooltip — fixed overlay */}
       {tooltip && (
@@ -247,103 +257,105 @@ export default function DashboardPage() {
       {/* KPI Grid */}
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {/* Total Restaurants */}
-        <div className="bg-[#201f1f] rounded-[10px] p-6 border border-[#2A2A2A] relative overflow-hidden group hover:bg-[#2a2a2a] transition-all">
-          <p className="text-[0.6875rem] font-bold text-[#555555] uppercase tracking-widest mb-4">Total Restaurants</p>
-          <div className="flex items-end gap-2">
-            <h2 className="text-[48px] font-bold font-mono text-[#e5e2e1] leading-none">
+        <div className="bg-[#1C1B1B] rounded-[14px] p-6 border border-[#2A2A2A] relative overflow-hidden group hover:border-[#C0272D]/30 transition-all duration-300">
+          <p className="text-[10px] font-bold text-[#555555] uppercase tracking-[0.2em] mb-4">Total Restaurants</p>
+          <div className="flex items-end gap-3">
+            <h2 className="text-5xl font-black text-[#F5F5F5] leading-none tracking-tighter">
               {loading ? '—' : formatCount(metrics?.total_tenants ?? 0)}
             </h2>
-            <span className="text-xs text-emerald-500 font-mono mb-2 flex items-center gap-1">
-              <span className="material-symbols-outlined text-xs">arrow_upward</span>+{metrics?.new_tenants_this_month ?? 0}
-            </span>
+            <div className="mb-1">
+              <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded flex items-center gap-1">
+                <span className="material-symbols-outlined text-[10px] font-black">arrow_upward</span>{metrics?.new_tenants_this_month ?? 0}
+              </span>
+            </div>
           </div>
-          <p className="text-[10px] text-[#555555] mt-2">
-            {loading ? '—' : `${metrics?.active_tenants ?? 0} active · ${metrics?.new_tenants_this_month ?? 0} new this month`}
-          </p>
-          <span className="material-symbols-outlined absolute -right-4 -bottom-4 text-[120px] opacity-[0.03] group-hover:opacity-[0.05] transition-opacity">store</span>
+          <div className="mt-4 flex items-center gap-3">
+            <div className="flex -space-x-2">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="w-5 h-5 rounded-full border-2 border-[#1C1B1B] bg-[#2A2A2A] flex items-center justify-center text-[8px] font-bold text-[#555]">
+                  {String.fromCharCode(65 + i)}
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] font-medium text-[#555555] uppercase tracking-wider">
+               {metrics?.active_tenants ?? 0} Active Nodes
+            </p>
+          </div>
         </div>
 
-        {/* Platform MRR */}
-        <div className="bg-[#201f1f] rounded-[10px] p-6 border border-[#C0272D]/30 relative overflow-hidden group hover:bg-[#2a2a2a] transition-all shadow-[0_0_40px_rgba(192,39,45,0.08)]">
-          <div className="absolute inset-0 bg-linear-to-br from-[#C0272D1A] to-transparent pointer-events-none" />
-          <p className="text-[0.6875rem] font-bold text-[#ffb3ae] tracking-widest uppercase mb-4">Platform MRR</p>
-          <div className="flex items-end gap-2">
-            <h2 className="text-[48px] font-bold font-mono text-[#e5e2e1] leading-none">
+        {/* Platform Revenue */}
+        <div className="bg-[#1C1B1B] rounded-[14px] p-6 border border-[#C0272D]/40 relative overflow-hidden group hover:border-[#C0272D]/60 transition-all duration-300 shadow-[0_0_50px_rgba(192,39,45,0.05)]">
+          <div className="absolute top-0 right-0 p-3">
+            <span className="material-symbols-outlined text-[#C0272D] text-lg opacity-40">payments</span>
+          </div>
+          <p className="text-[10px] font-bold text-[#ffb3ae] uppercase tracking-[0.2em] mb-4">Platform MRR</p>
+          <div className="flex flex-col">
+            <h2 className="text-5xl font-black text-[#F5F5F5] leading-none tracking-tighter">
               {loading ? '—' : formatINR(metrics?.total_mrr ?? 0)}
             </h2>
+            <div className="mt-4 flex items-center gap-2">
+               <span className="text-[9px] font-bold text-[#ffb3ae] bg-[#C0272D1A] px-2 py-0.5 rounded uppercase tracking-wider">
+                +{formatINR(metrics?.new_mrr_this_month ?? 0)} Target Delta
+              </span>
+            </div>
           </div>
-          <p className="text-[10px] font-mono text-[#555555] mt-2 italic">
-            {loading ? '—' : `+${formatINR(metrics?.new_mrr_this_month ?? 0)} this month`}
-          </p>
         </div>
 
-        {/* Orders Today */}
-        <div className="bg-[#201f1f] rounded-[10px] p-6 border border-[#2A2A2A] relative overflow-hidden group hover:bg-[#2a2a2a] transition-all">
-          <p className="text-[0.6875rem] font-bold text-[#555555] uppercase tracking-widest mb-4">Orders Today</p>
-          <div className="flex items-end gap-2">
-            <h2 className="text-[48px] font-bold font-mono text-[#e5e2e1] leading-none">
+        {/* Orders Throughput */}
+        <div className="bg-[#1C1B1B] rounded-[14px] p-6 border border-[#2A2A2A] relative overflow-hidden group hover:border-[#C0272D]/30 transition-all duration-300">
+          <p className="text-[10px] font-bold text-[#555555] uppercase tracking-[0.2em] mb-4">Daily Throughput</p>
+          <div className="flex items-end gap-3">
+            <h2 className="text-5xl font-black text-[#F5F5F5] leading-none tracking-tighter">
               {loading ? '—' : formatCount(metrics?.orders_today ?? 0)}
             </h2>
-            <span className="text-xs text-emerald-500 font-mono mb-2 flex items-center gap-1">
-              <span className="material-symbols-outlined text-xs">trending_up</span>
-            </span>
+            <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded mb-1 uppercase tracking-wider">Orders</span>
           </div>
-          <p className="text-[10px] text-[#555555] mt-2">
-            {loading ? '—' : `${metrics?.orders_this_week ?? 0} this week`}
+          <div className="mt-4 h-1 w-full bg-[#2A2A2A] rounded-full overflow-hidden">
+            <div className="h-full bg-emerald-500 rounded-full w-[65%]" />
+          </div>
+          <p className="text-[9px] font-bold text-[#333] mt-2 uppercase tracking-widest">
+            {metrics?.orders_this_week ?? 0} Cumulative (7D)
           </p>
-          <span className="material-symbols-outlined absolute -right-4 -bottom-4 text-[120px] opacity-[0.03] group-hover:opacity-[0.05] transition-opacity">receipt_long</span>
         </div>
 
-        {/* System Health */}
-        <div className="bg-[#201f1f] rounded-[10px] p-6 border border-[#2A2A2A] relative overflow-hidden group hover:bg-[#2a2a2a] transition-all">
-          <div className="flex justify-between items-start mb-4">
-            <p className="text-[0.6875rem] font-bold text-[#555555] uppercase tracking-widest">
-              System Health
-            </p>
+        {/* System Vitals */}
+        <div className="bg-[#1C1B1B] rounded-[14px] p-6 border border-[#2A2A2A] relative overflow-hidden group hover:border-[#C0272D]/30 transition-all duration-300">
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-[10px] font-bold text-[#555555] uppercase tracking-[0.2em]">System Vitals</p>
             {health && (
-              <span className="text-[9px] font-mono text-[#555] flex items-center gap-1">
-                <span className={`w-1.5 h-1.5 rounded-full ${health.overall === 'ok' ? 'bg-emerald-400 animate-pulse' : health.overall === 'degraded' ? 'bg-amber-400 animate-pulse' : 'bg-[#C0272D]'}`} />
-                LIVE
+              <span className={`text-[8px] font-black px-1.5 py-0.5 rounded border ${health.overall === 'ok' ? 'text-emerald-500 border-emerald-500/30' : 'text-[#C0272D] border-[#C0272D]/30'}`}>
+                {health.overall.toUpperCase()}
               </span>
             )}
           </div>
 
-          <h2 className={`text-[48px] font-bold font-mono leading-none ${
-            healthLoading ? 'text-[#555]' :
-            health?.overall === 'ok' ? 'text-emerald-400' :
-            health?.overall === 'degraded' ? 'text-amber-400' : 'text-[#C0272D]'
-          }`}>
-            {healthLoading ? '—' : `${health?.percentage ?? 0}%`}
-          </h2>
+          <div className="flex items-baseline gap-1">
+            <h2 className={`text-5xl font-black leading-none tracking-tighter ${
+              healthLoading ? 'text-[#333]' :
+              health?.overall === 'ok' ? 'text-emerald-400' : 'text-[#C0272D]'
+            }`}>
+              {healthLoading ? '—' : `${health?.percentage ?? 0}%`}
+            </h2>
+            <span className="text-[10px] font-bold text-[#555] uppercase">Uptime</span>
+          </div>
 
-          {/* Service indicators */}
-          <div className="mt-4 grid grid-cols-2 gap-y-2 gap-x-3">
+          <div className="mt-5 grid grid-cols-4 gap-2">
             {health && ([
-              { key: 'db',      label: 'Database' },
-              { key: 'orders',  label: 'Orders'   },
-              { key: 'auth',    label: 'Auth'     },
-              { key: 'storage', label: 'Storage'  },
-            ] as const).map(({ key, label }) => {
+              { key: 'db',      icon: 'database' },
+              { key: 'orders',  icon: 'sync'     },
+              { key: 'auth',    icon: 'lock'     },
+              { key: 'storage', icon: 'cloud'    },
+            ] as const).map(({ key, icon }) => {
               const svc = health.services[key]
-              const color = svc.status === 'ok' ? 'bg-emerald-400' : svc.status === 'degraded' ? 'bg-amber-400' : 'bg-[#C0272D]'
-              const textColor = svc.status === 'ok' ? 'text-emerald-400' : svc.status === 'degraded' ? 'text-amber-400' : 'text-[#C0272D]'
+              const color = svc.status === 'ok' ? 'bg-emerald-500' : 'bg-[#C0272D]'
               return (
-                <div key={key} className="flex items-center gap-1.5">
-                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${color}`} />
-                  <span className="text-[9px] font-mono text-[#555]">{label}</span>
-                  <span className={`text-[9px] font-mono ml-auto ${textColor}`}>
-                    {svc.status === 'down' ? 'DOWN' : `${svc.latencyMs}ms`}
-                  </span>
+                <div key={key} className="flex flex-col items-center gap-1.5 p-1.5 bg-[#0D0D0D] rounded-lg border border-[#2A2A2A]" title={`${key.toUpperCase()}: ${svc.latencyMs}ms`}>
+                  <span className="material-symbols-outlined text-[12px] text-[#555]">{icon}</span>
+                  <div className={`w-1.5 h-1.5 rounded-full ${color} ${svc.status === 'ok' ? 'shadow-[0_0_5px_rgba(16,185,129,0.5)]' : ''}`} />
                 </div>
               )
             })}
           </div>
-
-          {health && (
-            <p className="text-[9px] font-mono text-[#333] mt-3">
-              Last checked {new Date(health.checkedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-            </p>
-          )}
         </div>
       </section>
 
@@ -351,48 +363,26 @@ export default function DashboardPage() {
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
 
         {/* MRR Growth Chart */}
-        <div className="lg:col-span-2 bg-[#201f1f] rounded-[10px] p-8 border border-[#2A2A2A]">
+        <div className="lg:col-span-2 bg-[#1C1B1B] rounded-[14px] p-8 border border-[#2A2A2A]">
           {/* Header */}
-          <div className="flex justify-between items-start mb-6">
+          <div className="flex justify-between items-start mb-8">
             <div>
-              <h3 className="text-lg font-bold tracking-tight text-[#e5e2e1]">MRR Growth</h3>
-              <p className="text-xs text-[#555555]">Cumulative MRR across all tenants</p>
+              <h3 className="text-xl font-black tracking-tight text-[#F5F5F5]">MRR Trajectory</h3>
+              <p className="text-[10px] font-bold text-[#555555] uppercase tracking-widest mt-1">Platform-wide Revenue Accumulation</p>
             </div>
-            <div className="flex flex-col items-end gap-2">
-              {/* Range toggles */}
-              <div className="flex gap-1">
+            <div className="flex items-center gap-2">
+               <div className="flex bg-[#0D0D0D] rounded-lg p-1 border border-[#2A2A2A]">
                 {(['1M','3M','6M','1Y'] as const).map(r => (
                   <button
                     key={r}
                     onClick={() => setChartRange(r)}
-                    className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-tighter rounded border transition-colors ${
+                    className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-tighter rounded-md transition-all ${
                       chartRange === r
-                        ? 'bg-[#C0272D] text-white border-[#C0272D]'
-                        : 'bg-[#1c1b1b] text-[#555555] border-[#2A2A2A] hover:text-[#F5F5F5]'
+                        ? 'bg-[#C0272D] text-white'
+                        : 'text-[#555555] hover:text-[#F5F5F5]'
                     }`}
                   >
                     {r}
-                  </button>
-                ))}
-              </div>
-              {/* Chart type toggles */}
-              <div className="flex gap-1">
-                {([
-                  { type: 'area', icon: 'area_chart' },
-                  { type: 'line', icon: 'show_chart' },
-                  { type: 'bar',  icon: 'bar_chart'  },
-                ] as const).map(({ type, icon }) => (
-                  <button
-                    key={type}
-                    onClick={() => setChartType(type)}
-                    title={type}
-                    className={`w-7 h-7 flex items-center justify-center rounded border transition-colors ${
-                      chartType === type
-                        ? 'bg-[#C0272D]/20 text-[#ffb3ae] border-[#C0272D]/40'
-                        : 'bg-[#1c1b1b] text-[#555555] border-[#2A2A2A] hover:text-[#F5F5F5]'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-sm">{icon}</span>
                   </button>
                 ))}
               </div>
@@ -400,19 +390,19 @@ export default function DashboardPage() {
           </div>
 
           {/* SVG Chart */}
-          <div className="h-[220px] w-full relative">
-            <div className="flex h-full gap-3">
+          <div className="h-[240px] w-full relative">
+            <div className="flex h-full gap-4">
               {/* Y-axis */}
-              <div className="flex flex-col justify-between pb-7 text-right shrink-0 w-14">
+              <div className="flex flex-col justify-between pb-7 text-right shrink-0 w-16">
                 {yLabels.map((v, i) => (
-                  <span key={i} className="font-mono text-[9px] text-[#555555]">{formatINR(Math.round(v))}</span>
+                  <span key={i} className="font-mono text-[9px] font-bold text-[#333]">{formatINR(Math.round(v))}</span>
                 ))}
               </div>
               {/* Chart area */}
               <div className="flex-1 flex flex-col min-w-0">
                 <svg
                   ref={svgRef}
-                  className="w-full flex-1 cursor-crosshair"
+                  className="w-full flex-1 cursor-crosshair overflow-visible"
                   viewBox={`0 0 ${chartW} ${chartH}`}
                   preserveAspectRatio="none"
                   onMouseMove={handleSvgMouseMove}
@@ -420,7 +410,7 @@ export default function DashboardPage() {
                 >
                   <defs>
                     <linearGradient id="mrrGrad" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="0%" stopColor="#C0272D" stopOpacity="0.35" />
+                      <stop offset="0%" stopColor="#C0272D" stopOpacity="0.2" />
                       <stop offset="100%" stopColor="#C0272D" stopOpacity="0" />
                     </linearGradient>
                   </defs>
@@ -431,21 +421,21 @@ export default function DashboardPage() {
                       key={i}
                       x1="0" y1={chartH - v * (chartH - 16) - 8}
                       x2={chartW} y2={chartH - v * (chartH - 16) - 8}
-                      stroke="#2A2A2A" strokeWidth="1"
+                      stroke="#2A2A2A" strokeWidth="1" strokeDasharray="4 4"
                     />
                   ))}
 
                   {/* Area chart */}
                   {chartType === 'area' && pts.length > 1 && (
                     <>
-                      <path d={areaD} fill="url(#mrrGrad)" />
-                      <path d={pathD} fill="none" stroke="#C0272D" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d={areaD} fill="url(#mrrGrad)" className="transition-all duration-700" />
+                      <path d={pathD} fill="none" stroke="#C0272D" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
                     </>
                   )}
 
                   {/* Line chart */}
                   {chartType === 'line' && pts.length > 1 && (
-                    <path d={pathD} fill="none" stroke="#C0272D" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d={pathD} fill="none" stroke="#C0272D" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
                   )}
 
                   {/* Bar chart */}
@@ -459,8 +449,8 @@ export default function DashboardPage() {
                         width={barWidth}
                         height={bh}
                         fill="#C0272D"
-                        fillOpacity="0.7"
-                        rx="3"
+                        fillOpacity="0.6"
+                        rx="4"
                       />
                     )
                   })}
@@ -471,17 +461,17 @@ export default function DashboardPage() {
                     if (nearest < 0) return null
                     return (
                       <>
-                        <line x1={pts[nearest].x} y1="0" x2={pts[nearest].x} y2={chartH} stroke="#C0272D" strokeWidth="1" strokeDasharray="4 4" strokeOpacity="0.5" />
-                        <circle cx={pts[nearest].x} cy={pts[nearest].y} r="5" fill="#C0272D" stroke="#201f1f" strokeWidth="2" />
+                        <line x1={pts[nearest].x} y1="0" x2={pts[nearest].x} y2={chartH} stroke="#C0272D" strokeWidth="1" strokeDasharray="4 4" strokeOpacity="0.4" />
+                        <circle cx={pts[nearest].x} cy={pts[nearest].y} r="6" fill="#C0272D" stroke="#1C1B1B" strokeWidth="3" shadow="0 0 10px rgba(192,39,45,0.5)" />
                       </>
                     )
                   })()}
                 </svg>
 
                 {/* X-axis labels */}
-                <div className="flex justify-between mt-2 px-1">
+                <div className="flex justify-between mt-4 px-1">
                   {filteredChart.map((d, i) => (
-                    <span key={i} className="font-mono text-[9px] text-[#555555]">{d.label}</span>
+                    <span key={i} className="font-mono text-[9px] font-black text-[#555] uppercase">{d.label}</span>
                   ))}
                 </div>
               </div>
@@ -490,70 +480,69 @@ export default function DashboardPage() {
         </div>
 
         {/* Plan Distribution Donut */}
-        <div className="bg-[#201f1f] rounded-[10px] p-8 border border-[#2A2A2A] flex flex-col">
-          <h3 className="text-lg font-bold tracking-tight text-[#e5e2e1] mb-1">Plan Distribution</h3>
-          <p className="text-xs text-[#555555] mb-6">Subscriber tier analytics</p>
-          <div className="flex-1 flex flex-col justify-center items-center relative">
-            <svg className="w-44 h-44 transform -rotate-90">
+        <div className="bg-[#1C1B1B] rounded-[14px] p-8 border border-[#2A2A2A] flex flex-col">
+          <h3 className="text-xl font-black tracking-tight text-[#F5F5F5] mb-1">Tier Segmentation</h3>
+          <p className="text-[10px] font-bold text-[#555555] uppercase tracking-widest mb-8">Subscriber Composition</p>
+          <div className="flex-1 flex flex-col justify-center items-center relative py-4">
+            <svg className="w-48 h-48 transform -rotate-90">
               {donutSegs.map((seg, i) => (
                 <circle
                   key={i}
-                  cx="88" cy="88"
-                  r="70"
+                  cx="96" cy="96"
+                  r="75"
                   fill="transparent"
                   stroke={hoveredPlan === seg.label ? '#ff4444' : seg.color}
                   strokeDasharray={`${seg.dash} ${circumference - seg.dash}`}
                   strokeDashoffset={circumference - (donutSegs.slice(0, i).reduce((s, d) => s + d.dash, 0))}
-                  strokeWidth={hoveredPlan === seg.label ? 28 : 22}
+                  strokeWidth={hoveredPlan === seg.label ? 26 : 20}
                   strokeLinecap="butt"
-                  className="transition-all duration-200 cursor-pointer"
+                  className="transition-all duration-300 cursor-pointer"
                   onMouseEnter={() => setHoveredPlan(seg.label)}
                   onMouseLeave={() => setHoveredPlan(null)}
                 />
               ))}
               {totalPlan === 0 && (
-                <circle cx="88" cy="88" r="70" fill="transparent" stroke="#2A2A2A" strokeWidth="22" />
+                <circle cx="96" cy="96" r="75" fill="transparent" stroke="#2A2A2A" strokeWidth="20" />
               )}
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
               {hoveredPlan ? (
                 <>
-                  <span className="text-2xl font-bold font-mono text-[#e5e2e1]">
+                  <span className="text-3xl font-black font-mono text-[#F5F5F5] tracking-tighter">
                     {planData.find(p => p.label === hoveredPlan)?.value ?? 0}
                   </span>
-                  <span className="text-[10px] text-[#ffb3ae] uppercase tracking-tighter font-bold">{hoveredPlan}</span>
-                  <span className="text-[9px] text-[#555] mt-0.5">
+                  <span className="text-[9px] font-black text-[#C0272D] uppercase tracking-widest">{hoveredPlan}</span>
+                  <span className="text-[10px] font-mono text-[#555] mt-1">
                     {Math.round(((planData.find(p => p.label === hoveredPlan)?.value ?? 0) / totalPlan) * 100)}%
                   </span>
                 </>
               ) : (
                 <>
-                  <span className="text-3xl font-bold font-mono text-[#e5e2e1]">
+                  <span className="text-4xl font-black font-mono text-[#F5F5F5] tracking-tighter">
                     {loading ? '—' : formatCount(metrics?.total_tenants ?? 0)}
                   </span>
-                  <span className="text-[10px] text-[#555555] uppercase tracking-tighter font-bold">Tenants</span>
+                  <span className="text-[9px] font-black text-[#555] uppercase tracking-widest mt-1">Aggregate</span>
                 </>
               )}
             </div>
           </div>
-          <div className="space-y-3 mt-6">
+          <div className="space-y-4 mt-8">
             {planData.map((d, i) => {
               const pct = totalPlan > 0 ? Math.round((d.value / totalPlan) * 100) : 0
-              const colors = ['#555555', '#888888', '#C0272D']
               return (
                 <div
                   key={i}
-                  className={`flex justify-between items-center cursor-pointer rounded px-1 py-0.5 transition-colors ${hoveredPlan === d.label ? 'bg-[#2A2A2A]' : ''}`}
+                  className={`flex justify-between items-center group cursor-pointer p-2 rounded-lg transition-all ${hoveredPlan === d.label ? 'bg-[#0D0D0D] border border-[#2A2A2A]' : 'border border-transparent'}`}
                   onMouseEnter={() => setHoveredPlan(d.label)}
                   onMouseLeave={() => setHoveredPlan(null)}
                 >
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[i] }} />
-                    <span className="text-xs text-[#e3bebb]">{d.label}</span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />
+                    <span className={`text-[10px] font-bold uppercase tracking-widest ${hoveredPlan === d.label ? 'text-[#F5F5F5]' : 'text-[#555]'}`}>{d.label}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[10px] text-[#555]">{d.value}</span>
-                    <span className="font-mono text-xs text-[#e5e2e1]">{loading ? '—' : `${pct}%`}</span>
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-mono text-[10px] font-bold text-[#333]">{d.value}</span>
+                    <span className="font-mono text-sm font-black text-[#F5F5F5]">{loading ? '—' : `${pct}%`}</span>
                   </div>
                 </div>
               )
@@ -562,90 +551,70 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* Recent Tenants Table */}
-      <section className="bg-[#201f1f] rounded-[10px] overflow-hidden border border-[#2A2A2A]">
-        <div className="px-8 py-6 flex justify-between items-center">
-          <h3 className="text-lg font-bold tracking-tight text-[#e5e2e1]">Recent Tenants</h3>
+      {/* Recent Activity Section */}
+      <section className="bg-[#1C1B1B] rounded-[14px] overflow-hidden border border-[#2A2A2A]">
+        <div className="px-8 py-6 border-b border-[#2A2A2A] flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-[#C0272D]">rocket_launch</span>
+            <h3 className="text-lg font-black tracking-tight text-[#F5F5F5]">Recent Operations</h3>
+          </div>
           <button
             onClick={() => router.push('/dashboard/tenants')}
-            className="text-xs font-bold text-[#ffb3ae] uppercase tracking-widest hover:underline transition-all"
+            className="px-4 py-2 bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg text-[10px] font-black uppercase tracking-widest text-[#555] hover:text-[#F5F5F5] hover:border-[#C0272D]/50 transition-all"
           >
-            View All
+            Full Audit Log
           </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
-            <thead className="bg-[#1c1b1b] border-y border-[#2A2A2A]/50">
+            <thead className="bg-[#0D0D0D]/50">
               <tr>
-                {['Restaurant Name', 'Plan', 'MRR', 'Status', 'Joined', 'Actions'].map((h, i) => (
-                  <th key={h} className={`px-8 py-4 text-[10px] font-bold text-[#555555] uppercase tracking-widest ${i === 5 ? 'text-right' : ''}`}>{h}</th>
+                {['Restaurant Node', 'Tier', 'MRR Value', 'Status', 'Deployed', 'Actions'].map((h, i) => (
+                  <th key={h} className={`px-8 py-5 text-[9px] font-black text-[#333] uppercase tracking-[0.2em] ${i === 5 ? 'text-right' : ''}`}>{h}</th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#2A2A2A]/30">
+            <tbody className="divide-y divide-[#2A2A2A]/40">
               {loading && (
-                <tr><td colSpan={6} className="px-8 py-8 text-xs text-[#555] text-center">Loading...</td></tr>
+                <tr><td colSpan={6} className="px-8 py-10 text-[10px] text-[#555] text-center uppercase tracking-widest font-bold animate-pulse">Initializing Data Stream...</td></tr>
               )}
               {!loading && tenants.length === 0 && (
-                <tr><td colSpan={6} className="px-8 py-8 text-xs text-[#555] text-center">No tenants found</td></tr>
+                <tr><td colSpan={6} className="px-8 py-10 text-[10px] text-[#555] text-center uppercase tracking-widest font-bold">No data found</td></tr>
               )}
               {tenants.map((t) => {
                 const initials = t.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
-                const joined = new Date(t.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase()
+                const joined = new Date(t.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }).toUpperCase()
                 return (
-                  <tr key={t.id} className="hover:bg-[#2a2a2a] transition-colors group">
+                  <tr key={t.id} className="hover:bg-[#202020] transition-colors group">
                     <td className="px-8 py-5">
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-lg bg-[#2A2A2A] flex items-center justify-center text-xs font-bold text-[#e5e2e1]">
+                        <div className="w-10 h-10 rounded-xl bg-[#0D0D0D] border border-[#2A2A2A] flex items-center justify-center text-xs font-black text-[#C0272D] group-hover:border-[#C0272D]/30 transition-all">
                           {initials}
                         </div>
                         <div className="flex flex-col">
-                          <span className="text-sm font-bold text-[#e5e2e1] capitalize">{t.name}</span>
-                          <span className="text-[10px] font-mono text-[#555555]">{t.slug}</span>
+                          <span className="text-sm font-black text-[#F5F5F5] tracking-tight">{t.name}</span>
+                          <span className="text-[10px] font-mono font-bold text-[#333] uppercase">{t.slug}</span>
                         </div>
                       </div>
                     </td>
                     <td className="px-8 py-5"><PlanBadge plan={t.plan} /></td>
-                    <td className="px-8 py-5 font-mono text-sm text-emerald-500 font-bold">{formatINR(t.mrr)}</td>
+                    <td className="px-8 py-5 font-mono text-sm text-emerald-500 font-black">{formatINR(t.mrr)}</td>
                     <td className="px-8 py-5"><StatusDot status={t.status} /></td>
-                    <td className="px-8 py-5 font-mono text-xs text-[#555555]">{joined}</td>
+                    <td className="px-8 py-5 font-mono text-[10px] font-black text-[#333] uppercase">{joined}</td>
                     <td className="px-8 py-5 text-right">
-                      <div className="flex justify-end items-center gap-2 relative">
+                      <div className="flex justify-end items-center gap-2">
                         <button
                           onClick={() => router.push(`/dashboard/tenants/${t.id}`)}
-                          className="px-3 py-1 text-[10px] font-bold uppercase text-[#e5e2e1] hover:bg-[#353534] transition-colors rounded border border-[#2A2A2A]"
+                          className="w-8 h-8 flex items-center justify-center bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg text-[#555] hover:text-[#C0272D] hover:border-[#C0272D]/50 transition-all"
                         >
-                          View
+                          <span className="material-symbols-outlined text-sm">visibility</span>
                         </button>
-                        <div
-                          ref={el => { actionRefs.current[t.id] = el }}
-                          className="relative"
+                        <button
+                           onClick={() => setActionMenu(prev => prev === t.id ? null : t.id)}
+                           className="w-8 h-8 flex items-center justify-center bg-[#0D0D0D] border border-[#2A2A2A] rounded-lg text-[#555] hover:text-[#F5F5F5] hover:border-[#2A2A2A] transition-all"
                         >
-                          <button
-                            onClick={() => setActionMenu(prev => prev === t.id ? null : t.id)}
-                            className="p-1 hover:bg-[#353534] rounded transition-colors"
-                          >
-                            <span className="material-symbols-outlined text-sm text-[#555555]">more_vert</span>
-                          </button>
-                          {actionMenu === t.id && (
-                            <div className="absolute right-0 top-8 w-40 bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl shadow-2xl z-50 overflow-hidden">
-                              {[
-                                { label: 'View Details', icon: 'open_in_new', action: () => router.push(`/dashboard/tenants/${t.id}`) },
-                                { label: 'Edit Tenant',  icon: 'edit',        action: () => router.push(`/dashboard/tenants/${t.id}/edit`) },
-                                { label: t.status === 'active' ? 'Suspend' : 'Activate', icon: t.status === 'active' ? 'block' : 'check_circle', action: () => {} },
-                              ].map(item => (
-                                <button
-                                  key={item.label}
-                                  onClick={() => { item.action(); setActionMenu(null) }}
-                                  className="w-full flex items-center gap-2 px-4 py-2.5 text-xs text-[#e3bebb] hover:bg-[#2A2A2A] transition-colors text-left"
-                                >
-                                  <span className="material-symbols-outlined text-sm text-[#555]">{item.icon}</span>
-                                  {item.label}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                          <span className="material-symbols-outlined text-sm">more_horiz</span>
+                        </button>
                       </div>
                     </td>
                   </tr>
