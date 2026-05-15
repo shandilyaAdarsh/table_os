@@ -6,11 +6,12 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
-import pinoHttp from 'pino-http';
 import { corsOrigins, env } from './config/env';
-import { logger } from './utils/logger';
 import { authRouter } from './modules/auth/auth.router';
-import { errorHandler } from './middleware/error.middleware';
+import { tenantRouter } from './modules/tenants/tenant.router';
+import { rbacRouter } from './modules/rbac/rbac.router';
+import { errorMiddleware } from './middleware/error.middleware';
+import { loggingMiddleware } from './middleware/logging.middleware';
 
 export function createApp(): express.Application {
   const app = express();
@@ -35,27 +36,17 @@ export function createApp(): express.Application {
   );
 
   // ─── Request logging ───────────────────────────────────────
-  app.use(
-    pinoHttp({
-      logger,
-      // Redact sensitive fields from logs
-      redact: ['req.headers.authorization', 'req.body.password', 'req.body.new_password'],
-      customLogLevel: (_req, res) => {
-        if (res.statusCode >= 500) return 'error';
-        if (res.statusCode >= 400) return 'warn';
-        return 'info';
-      },
-    })
-  );
+  app.use(loggingMiddleware);
 
   // ─── Body parsing ──────────────────────────────────────────
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-  // ─── Trust proxy (for X-Forwarded-For in containerized/reverse-proxied envs) ─
-  if (env.NODE_ENV !== 'development') {
-    app.set('trust proxy', 1);
-  }
+  // ─── Trust proxy ───────────────────────────────────────────
+  // Always enabled so req.ip is authoritative (first hop from reverse proxy).
+  // In development without a proxy, this is safe — Express falls back to
+  // the direct connection address when no X-Forwarded-For header is present.
+  app.set('trust proxy', 1);
 
   // ─── Health check ──────────────────────────────────────────
   app.get('/health', (_req, res) => {
@@ -68,10 +59,11 @@ export function createApp(): express.Application {
   });
 
   // ─── Routes ────────────────────────────────────────────────
-  app.use('/auth', authRouter);
+  app.use('/auth',    authRouter);
+  app.use('/tenants', tenantRouter);
+  app.use('/rbac',    rbacRouter);
 
   // Future modules registered here:
-  // app.use('/tenants', tenantsRouter);
   // app.use('/staff', staffRouter);
   // app.use('/menu', menuRouter);
 
@@ -84,7 +76,7 @@ export function createApp(): express.Application {
   });
 
   // ─── Global error handler — MUST be last ───────────────────
-  app.use(errorHandler);
+  app.use(errorMiddleware);
 
   return app;
 }

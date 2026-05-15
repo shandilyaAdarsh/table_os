@@ -1,32 +1,38 @@
 // ============================================================
 // src/middleware/auth.middleware.ts
 // Request authentication and authorization middleware.
-// NEVER trusts frontend auth state. Always verifies JWT server-side
-// against both Supabase Auth AND our admin_profiles table.
+// Validates JWT server-side against Supabase Auth + admin_profiles.
+// All tenant/permission context is extracted from verified server data.
+// NEVER trusts frontend-provided values.
 // ============================================================
 
 import type { Request, Response, NextFunction } from 'express';
 import { validateAccessToken } from '../modules/auth/services/auth.service';
 import { findActiveDeviceSession } from '../modules/auth/repositories/auth.repository';
+import { resolvePermissions } from '../utils/permission-checker';
+import { touchSession } from '../modules/rbac/services/session.service';
 import {
   AuthenticationError,
   ForbiddenError,
   SessionRevokedError,
   MustChangePasswordError,
 } from '../shared/errors/AppError';
-import type { AdminRole, AuthenticatedUser } from '../types/auth.types';
-import { moduleLogger } from '../utils/logger';
+import type { AuthContext, Permission, Role } from '../types/rbac.types';
+import { ROLES, ROLE_HIERARCHY } from '../types/rbac.types';
+import { logger } from '../shared/utils/logger';
 
-const log = moduleLogger('auth-middleware');
-
-// ─── Extend Express Request ───────────────────────────────────
+// ─── Augment Express Request ──────────────────────────────────
 
 declare global {
   namespace Express {
     interface Request {
-      auth: AuthenticatedUser;
+      /**
+       * Verified, server-sourced auth context.
+       * NEVER populate from req.body or req.query.
+       */
+      context:           AuthContext & { full_name: string; must_change_password: boolean };
       device_fingerprint: string;
-      ip_address: string;
+      ip_address:         string;
     }
   }
 }
@@ -34,13 +40,19 @@ declare global {
 // ─── authenticate ─────────────────────────────────────────────
 
 /**
- * Validates Bearer JWT and cross-checks with admin_profiles.
- * Populates req.auth with the authenticated user context.
- * Verifies device session integrity to prevent replay attacks.
+ * Core authentication middleware.
+ *
+ * Flow:
+ * 1. Extract Bearer token
+ * 2. Validate JWT via Supabase Auth (server-side — not decoded locally)
+ * 3. Cross-check admin_profiles in DB
+ * 4. Verify device session integrity (anti-replay)
+ * 5. Resolve granular permissions via DB RPC + cache
+ * 6. Populate req.context from verified server data only
  */
 export async function authenticate(
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ): Promise<void> {
   try {
@@ -52,45 +64,60 @@ export async function authenticate(
 
     const token = authHeader.slice(7);
     const deviceFingerprint = req.headers['x-device-fingerprint'] as string | undefined;
-    const deviceSessionId = req.headers['x-device-session-id'] as string | undefined;
+    const deviceSessionId   = req.headers['x-device-session-id']  as string | undefined;
 
     if (!deviceFingerprint) {
-      throw new AuthenticationError('Missing device fingerprint');
+      throw new AuthenticationError('Missing X-Device-Fingerprint header');
     }
 
-    // 1. Validate JWT via Supabase + cross-check admin_profiles
+    // ── Step 1: Validate JWT via Supabase (cryptographic + DB cross-check)
     const validation = await validateAccessToken(token);
 
     if (!validation.valid || !validation.user_id) {
       throw new AuthenticationError(validation.error ?? 'Invalid or expired token');
     }
 
-    // 2. Verify device session integrity (anti-replay)
+    // ── Step 2: Verify device session integrity (anti-replay)
     if (deviceSessionId) {
       const deviceSession = await findActiveDeviceSession(deviceSessionId, deviceFingerprint);
 
       if (!deviceSession) {
-        log.warn(
+        logger.warn(
           { userId: validation.user_id, deviceSessionId },
           'Device session not found or revoked'
         );
         throw new SessionRevokedError();
       }
+
+      // Touch last_activity_at — async, non-blocking
+      void touchSession(deviceSessionId);
     }
 
-    // 3. Populate request context — must_change_password comes from DB, never JWT
-    req.auth = {
-      id: validation.user_id,
-      email: validation.email!,
-      role: validation.role!,
-      tenant_id: validation.tenant_id ?? null,
-      full_name: validation.full_name ?? '',
+    // ── Step 3: Resolve granular permissions
+    const permissions = await resolvePermissions(
+      validation.user_id,
+      validation.tenant_id ?? null
+    );
+
+    // ── Step 4: Populate request context from VERIFIED server data only
+    const context: Request['context'] = {
+      id:                   validation.user_id,
+      userId:               validation.user_id,
+      email:                validation.email!,
+      role:                 validation.role as Role,
+      tenantId:             validation.tenant_id ?? null,
+      tenant_id:            validation.tenant_id ?? null,
+      branchIds:            validation.branch_ids ?? [],
+      permissions,
+      device_session_id:    deviceSessionId,
+      full_name:            validation.full_name ?? '',
       must_change_password: validation.must_change_password ?? false,
-      device_session_id: deviceSessionId,
     };
 
+    req.context           = context;
     req.device_fingerprint = deviceFingerprint;
-    req.ip_address = (req.headers['x-forwarded-for'] as string) ?? req.ip ?? '';
+    // req.ip is set by Express using trust proxy — never read X-Forwarded-For manually
+    req.ip_address = req.ip ?? '';
 
     next();
   } catch (err) {
@@ -101,44 +128,161 @@ export async function authenticate(
 // ─── requireRole ─────────────────────────────────────────────
 
 /**
- * Require one or more roles to access a route.
- * Usage: router.get('/admin', authenticate, requireRole('SUPER_ADMIN'), handler)
+ * Exact-role guard. Prefer requireMinRole for hierarchical checks.
+ * Use requirePermission for fine-grained capability checks.
  */
-export function requireRole(...allowedRoles: AdminRole[]) {
+export function requireRole(...allowedRoles: Role[]) {
   return (req: Request, _res: Response, next: NextFunction): void => {
-    if (!req.auth) return next(new AuthenticationError());
+    if (!req.context) return next(new AuthenticationError());
 
-    if (!allowedRoles.includes(req.auth.role)) {
-      return next(
-        new ForbiddenError(
-          `Role '${req.auth.role}' not permitted. Required: ${allowedRoles.join(', ')}`
-        )
-      );
+    if (req.context.role === ROLES.SUPER_ADMIN || allowedRoles.includes(req.context.role)) {
+      return next();
     }
 
-    next();
+    return next(
+      new ForbiddenError(
+        `Role '${req.context.role}' is not permitted. Required: ${allowedRoles.join(', ')}`
+      )
+    );
+  };
+}
+
+// ─── requireMinRole ───────────────────────────────────────────
+
+/**
+ * Hierarchy-aware role guard.
+ * Passes if the user's role has a hierarchy score >= the required role.
+ *
+ * Example: requireMinRole(ROLES.MANAGER) allows MANAGER, RESTAURANT_ADMIN, SUPER_ADMIN.
+ */
+export function requireMinRole(minimumRole: Role) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    if (!req.context) return next(new AuthenticationError());
+
+    const userLevel    = ROLE_HIERARCHY[req.context.role] ?? 0;
+    const requiredLevel = ROLE_HIERARCHY[minimumRole] ?? 0;
+
+    if (userLevel >= requiredLevel) {
+      return next();
+    }
+
+    return next(
+      new ForbiddenError(
+        `Minimum role '${minimumRole}' required. Your role: '${req.context.role}'`
+      )
+    );
+  };
+}
+
+// ─── requirePermission ────────────────────────────────────────
+
+/**
+ * Single-permission guard. SUPER_ADMIN bypasses all permission checks.
+ */
+export function requirePermission(permission: Permission) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    if (!req.context) return next(new AuthenticationError());
+
+    if (req.context.role === ROLES.SUPER_ADMIN) return next();
+
+    if (req.context.permissions.has(permission)) return next();
+
+    return next(new ForbiddenError(`Missing permission: ${permission}`));
+  };
+}
+
+// ─── requireAllPermissions ────────────────────────────────────
+
+/**
+ * AND-combination permission guard — user must have ALL listed permissions.
+ */
+export function requireAllPermissions(...perms: Permission[]) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    if (!req.context) return next(new AuthenticationError());
+
+    if (req.context.role === ROLES.SUPER_ADMIN) return next();
+
+    const missing = perms.filter((p) => !req.context.permissions.has(p));
+
+    if (missing.length === 0) return next();
+
+    return next(new ForbiddenError(`Missing permissions: ${missing.join(', ')}`));
+  };
+}
+
+// ─── requireAnyPermission ─────────────────────────────────────
+
+/**
+ * OR-combination permission guard — user must have AT LEAST ONE listed permission.
+ */
+export function requireAnyPermission(...perms: Permission[]) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    if (!req.context) return next(new AuthenticationError());
+
+    if (req.context.role === ROLES.SUPER_ADMIN) return next();
+
+    const hasAny = perms.some((p) => req.context.permissions.has(p));
+
+    if (hasAny) return next();
+
+    return next(
+      new ForbiddenError(`Requires at least one of: ${perms.join(', ')}`)
+    );
   };
 }
 
 // ─── requireTenantAccess ──────────────────────────────────────
 
 /**
- * Enforce tenant scoping. SUPER_ADMIN bypasses.
- * Usage: router.get('/:tenantId/data', authenticate, requireTenantAccess(), handler)
+ * Guards a tenant-scoped route.
+ * SECURITY: Only reads tenant ID from ROUTE PARAMS — never from body or query.
+ * Prevents tenant-hopping.
  */
 export function requireTenantAccess(tenantIdParam = 'tenantId') {
   return (req: Request, _res: Response, next: NextFunction): void => {
-    if (!req.auth) return next(new AuthenticationError());
+    if (!req.context) return next(new AuthenticationError());
 
-    // SUPER_ADMIN can access any tenant
-    if (req.auth.role === 'SUPER_ADMIN') return next();
+    if (req.context.role === ROLES.SUPER_ADMIN) return next();
 
-    const requestedTenantId =
-      (req.params[tenantIdParam] as string | undefined) ??
-      (req.body as Record<string, unknown>)?.tenant_id;
+    // Only trust route params — never body or query
+    const requestedTenantId = req.params[tenantIdParam] as string | undefined;
 
-    if (!requestedTenantId || req.auth.tenant_id !== requestedTenantId) {
+    if (!requestedTenantId || req.context.tenantId !== requestedTenantId) {
       return next(new ForbiddenError('Access to this tenant is not permitted'));
+    }
+
+    next();
+  };
+}
+
+// ─── requireBranchAccess ─────────────────────────────────────
+
+/**
+ * Guards a branch-scoped route.
+ * Checks that the branch param is within the user's authorized branch IDs.
+ * RESTAURANT_ADMIN and SUPER_ADMIN bypass this check.
+ */
+export function requireBranchAccess(branchIdParam = 'branchId') {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    if (!req.context) return next(new AuthenticationError());
+
+    // Super admin and restaurant admin can access all branches
+    if (
+      req.context.role === ROLES.SUPER_ADMIN ||
+      req.context.role === ROLES.RESTAURANT_ADMIN ||
+      req.context.role === ROLES.MANAGER
+    ) {
+      return next();
+    }
+
+    const requestedBranchId = req.params[branchIdParam] as string | undefined;
+
+    if (!requestedBranchId) {
+      return next(new ForbiddenError('Branch ID is required'));
+    }
+
+    if (!req.context.branchIds.includes(requestedBranchId)) {
+      return next(new ForbiddenError('Access to this branch is not permitted'));
     }
 
     next();
@@ -147,28 +291,33 @@ export function requireTenantAccess(tenantIdParam = 'tenantId') {
 
 // ─── requirePasswordChanged ───────────────────────────────────
 
-/**
- * Block route access if must_change_password is set.
- * Apply after authenticate on all protected routes.
- */
 export function requirePasswordChanged(
   req: Request,
   _res: Response,
   next: NextFunction
 ): void {
-  if (req.auth?.must_change_password) {
+  if (req.context?.must_change_password) {
     return next(new MustChangePasswordError());
   }
   next();
 }
 
-// ─── Convenience exports ──────────────────────────────────────
+// ─── Convenience role sets ────────────────────────────────────
 
-export const superAdminOnly = requireRole('SUPER_ADMIN');
+export const superAdminOnly = requireRole(ROLES.SUPER_ADMIN);
 
-export const adminPanelAccess = requireRole(
-  'SUPER_ADMIN',
-  'RESTAURANT_ADMIN',
-  'MANAGER',
-  'STAFF'
+export const adminOrAbove = requireMinRole(ROLES.RESTAURANT_ADMIN);
+
+export const managerOrAbove = requireMinRole(ROLES.MANAGER);
+
+/** All operational roles that interact with the restaurant daily */
+export const operationalStaff = requireRole(
+  ROLES.SUPER_ADMIN,
+  ROLES.RESTAURANT_ADMIN,
+  ROLES.MANAGER,
+  ROLES.CASHIER,
+  ROLES.SERVER,
+  ROLES.KITCHEN,
+  ROLES.CUSTOMER_SUPPORT,
+  ROLES.STAFF,
 );

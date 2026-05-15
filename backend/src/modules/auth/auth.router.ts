@@ -11,6 +11,7 @@ import {
   forgotPassword,
   resetPassword,
   getSession,
+  listSessions,
 } from './controllers/auth.controller';
 import {
   authenticate,
@@ -20,18 +21,21 @@ import {
 const router = Router();
 
 // ─── Public routes ────────────────────────────────────────────
-router.post('/login', login);
+router.post('/login',           login);
 router.post('/forgot-password', forgotPassword);
 
 // ─── Reset password — requires JWT from email link ────────────
-// authenticate validates the short-lived reset token; no requirePasswordChanged here
+// authenticate validates the short-lived reset JWT.
+// requirePasswordChanged is intentionally omitted here.
 router.post('/reset-password', authenticate, resetPassword);
 
 // ─── Token refresh — validated via device session, not Bearer ─
+// No authenticate middleware — uses refresh_token + device session.
 router.post('/refresh', refreshToken);
 
 // ─── Authenticated routes ─────────────────────────────────────
-router.post('/logout', authenticate, logoutHandler);
-router.get('/session', authenticate, requirePasswordChanged, getSession);
+router.post('/logout',    authenticate,                              logoutHandler);
+router.get( '/session',   authenticate, requirePasswordChanged,      getSession);
+router.get( '/sessions',  authenticate, requirePasswordChanged,      listSessions);
 
 export { router as authRouter };

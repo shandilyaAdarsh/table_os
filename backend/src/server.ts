@@ -6,7 +6,7 @@
 
 import { env } from './config/env'; // Must be first — validates env before anything else
 import { createApp } from './app';
-import { logger } from './utils/logger';
+import { logger } from './shared/utils/logger';
 
 const app = createApp();
 const PORT = env.PORT;

@@ -1,7 +1,7 @@
 // ============================================================
 // src/modules/auth/controllers/auth.controller.ts
-// HTTP handlers. Thin layer: validate → service → respond.
-// No business logic here — delegate everything to auth.service.
+// HTTP handlers — thin layer: validate → service → respond.
+// No business logic. All auth decisions in service/middleware.
 // ============================================================
 
 import type { Request, Response, NextFunction } from 'express';
@@ -22,9 +22,12 @@ import {
 } from '../validators/auth.validators';
 import { AuthenticationError } from '../../../shared/errors/AppError';
 import { env } from '../../../config/env';
+import { ResponseFormatter } from '../../../shared/utils/response-formatter';
+import { listUserSessions } from '../../rbac/services/session.service';
 
+/** Use req.ip — trust proxy is set in app.ts */
 function getIp(req: Request): string {
-  return (req.headers['x-forwarded-for'] as string) ?? req.ip ?? '';
+  return req.ip ?? '';
 }
 
 function getUa(req: Request): string {
@@ -35,9 +38,9 @@ function getUa(req: Request): string {
 
 export async function login(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const body = validate(LoginSchema, req.body);
+    const body   = validate(LoginSchema, req.body);
     const result = await loginWithEmail(body, getIp(req), getUa(req));
-    res.status(200).json({ success: true, data: result });
+    res.status(200).json(ResponseFormatter.success(result, 'Login successful'));
   } catch (err) {
     next(err);
   }
@@ -53,14 +56,14 @@ export async function logoutHandler(
   try {
     const body = validate(LogoutSchema, req.body);
     await logout(
-      req.auth.id,
-      req.auth.tenant_id,
-      body.device_session_id ?? req.auth.device_session_id,
+      req.context.id,
+      req.context.tenantId,
+      body.device_session_id ?? req.context.device_session_id,
       body.revoke_all_sessions ?? false,
       getIp(req),
       getUa(req)
     );
-    res.status(200).json({ success: true, message: 'Logged out successfully' });
+    res.status(200).json(ResponseFormatter.success(null, 'Logged out successfully'));
   } catch (err) {
     next(err);
   }
@@ -74,13 +77,13 @@ export async function refreshToken(
   next: NextFunction
 ): Promise<void> {
   try {
-    const body = validate(RefreshTokenSchema, req.body);
+    const body            = validate(RefreshTokenSchema, req.body);
     const deviceSessionId = req.headers['x-device-session-id'] as string | undefined;
 
-    if (!deviceSessionId) throw new AuthenticationError('Missing x-device-session-id header');
+    if (!deviceSessionId) throw new AuthenticationError('Missing X-Device-Session-Id header');
 
     const result = await refreshAccessToken(body, getIp(req), getUa(req), deviceSessionId);
-    res.status(200).json({ success: true, data: result });
+    res.status(200).json(ResponseFormatter.success(result));
   } catch (err) {
     next(err);
   }
@@ -94,14 +97,16 @@ export async function forgotPassword(
   next: NextFunction
 ): Promise<void> {
   try {
-    const body = validate(ForgotPasswordSchema, req.body);
+    const body       = validate(ForgotPasswordSchema, req.body);
     const redirectTo = `${env.ADMIN_FRONTEND_URL}/auth/reset-password`;
     await requestPasswordReset(body.email, redirectTo, getIp(req), getUa(req));
     // Always 200 — anti-enumeration
-    res.status(200).json({
-      success: true,
-      message: 'If an account exists with that email, a reset link has been sent.',
-    });
+    res.status(200).json(
+      ResponseFormatter.success(
+        null,
+        'If an account exists with that email, a reset link has been sent.'
+      )
+    );
   } catch (err) {
     next(err);
   }
@@ -115,13 +120,11 @@ export async function resetPassword(
   next: NextFunction
 ): Promise<void> {
   try {
-    // req.auth is set by authenticate middleware (user has temp JWT from reset email link)
     const body = validate(ResetPasswordSchema, req.body);
-    await completePasswordReset(req.auth.id, body.new_password, getIp(req), getUa(req));
-    res.status(200).json({
-      success: true,
-      message: 'Password updated. Please log in with your new password.',
-    });
+    await completePasswordReset(req.context.id, body.new_password, getIp(req), getUa(req));
+    res.status(200).json(
+      ResponseFormatter.success(null, 'Password updated. Please log in with your new password.')
+    );
   } catch (err) {
     next(err);
   }
@@ -129,14 +132,25 @@ export async function resetPassword(
 
 // ─── GET /auth/session ────────────────────────────────────────
 
-export async function getSession(
+export async function getSession(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    res.status(200).json(ResponseFormatter.success({ user: req.context }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── GET /auth/sessions ───────────────────────────────────────
+// Lists all active sessions for the authenticated user.
+
+export async function listSessions(
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
   try {
-    // req.auth already validated by authenticate middleware
-    res.status(200).json({ success: true, data: { user: req.auth } });
+    const sessions = await listUserSessions(req.context.id, req.context.device_session_id);
+    res.status(200).json(ResponseFormatter.success(sessions));
   } catch (err) {
     next(err);
   }

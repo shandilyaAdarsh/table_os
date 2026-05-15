@@ -4,17 +4,27 @@
 // All operational errors extend AppError — unexpected errors do not.
 // ============================================================
 
+import { ErrorCode } from './error-codes';
+
 export class AppError extends Error {
   public readonly statusCode: number;
   public readonly code: string;
   public readonly isOperational: boolean;
+  public readonly details?: any;
 
-  constructor(message: string, statusCode: number, code: string, isOperational = true) {
+  constructor(
+    message: string,
+    statusCode: number,
+    code: string | ErrorCode,
+    isOperational = true,
+    details?: any
+  ) {
     super(message);
     this.name = this.constructor.name;
     this.statusCode = statusCode;
     this.code = code;
     this.isOperational = isOperational;
+    this.details = details;
     Object.setPrototypeOf(this, new.target.prototype);
     Error.captureStackTrace(this, this.constructor);
   }
