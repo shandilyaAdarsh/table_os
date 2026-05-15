@@ -14,9 +14,7 @@ import type {
 } from '../../../types/auth.types';
 import { hashToken } from '../../../shared/utils/crypto';
 import { env } from '../../../config/env';
-import { moduleLogger } from '../../../utils/logger';
-
-const log = moduleLogger('auth-repository');
+import { logger as log } from '../../../shared/utils/logger';
 
 // ─── Admin Profiles ───────────────────────────────────────────
 

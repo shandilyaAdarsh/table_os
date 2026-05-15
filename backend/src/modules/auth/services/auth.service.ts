@@ -36,9 +36,8 @@ import type {
   TokenValidationResult,
 } from '../../../types/auth.types';
 import { env } from '../../../config/env';
-import { moduleLogger } from '../../../utils/logger';
-
-const log = moduleLogger('auth-service');
+import { logger as log } from '../../../shared/utils/logger';
+import { resolvePermissions } from '../../../utils/permission-checker';
 
 // ─── Login ────────────────────────────────────────────────────
 
@@ -178,9 +177,13 @@ export async function loginWithEmail(
 
   const user: AuthenticatedUser = {
     id: profile.id,
+    userId: profile.id,
     email: authData.user.email!,
     role: profile.role,
     tenant_id: profile.tenant_id,
+    tenantId: profile.tenant_id,
+    branchIds: (authData.user.app_metadata?.branch_ids as string[]) ?? [],
+    permissions: await resolvePermissions(profile.id, profile.tenant_id),
     full_name: profile.full_name,
     must_change_password: profile.must_change_password,
     device_session_id: deviceSession.id,
@@ -380,7 +383,8 @@ export async function validateAccessToken(accessToken: string): Promise<TokenVal
     user_id: data.user.id,
     email: data.user.email,
     role: profile.role,
-    tenant_id: profile.tenant_id,
+    tenant_id: (data.user.app_metadata?.tenant_id as string) ?? null,
+    branch_ids: (data.user.app_metadata?.branch_ids as string[]) ?? [],
     full_name: profile.full_name,
     must_change_password: profile.must_change_password,
   };

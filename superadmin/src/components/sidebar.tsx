@@ -18,8 +18,36 @@ export default function Sidebar() {
   const router = useRouter()
 
   const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/login')
+    try {
+      const fingerprint = btoa(`${navigator.userAgent}-${navigator.language}-${screen.width}x${screen.height}`).substring(0, 32);
+      const deviceSessionId = localStorage.getItem('device_session_id');
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+      // 1. Get current session token
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (session && deviceSessionId) {
+        // 2. Revoke in backend
+        await fetch(`${API_BASE_URL}/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+            'X-Device-Fingerprint': fingerprint,
+          },
+          body: JSON.stringify({
+            device_session_id: deviceSessionId,
+          }),
+        });
+      }
+    } catch (err) {
+      console.error('Logout revocation failed:', err);
+    } finally {
+      // 3. Always clear local state
+      localStorage.removeItem('device_session_id');
+      await supabase.auth.signOut();
+      router.push('/login');
+    }
   }
 
   return (

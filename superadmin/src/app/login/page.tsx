@@ -17,34 +17,57 @@ export default function LoginPage() {
     setError('')
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+      // Simple device fingerprinting
+      const fingerprint = btoa(`${navigator.userAgent}-${navigator.language}-${screen.width}x${screen.height}`).substring(0, 32);
+      
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-      if (error) {
-        setError(error.message)
-        return
+      const res = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          device_fingerprint: fingerprint,
+        }),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok || !result.success) {
+        setError(result.error?.message || 'Authentication failed');
+        return;
       }
 
-      // Check role via server-side API to bypass RLS issues
-      const roleRes = await fetch('/api/check-role', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: data.user.id })
-      })
+      const { access_token, refresh_token, user, device_session_id } = result.data;
 
-      const roleData = await roleRes.json()
+      // 1. Hydrate frontend Supabase client so RLS works
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token,
+        refresh_token,
+      });
 
-      if (!roleRes.ok || roleData.role !== 'superadmin') {
-        await supabase.auth.signOut()
-        setError('Access denied. This portal is restricted to SuperAdmins only.')
-        return
+      if (sessionError) {
+        setError('Session synchronization failed');
+        return;
+      }
+
+      // 2. Store device session ID for future refresh/logout calls
+      localStorage.setItem('device_session_id', device_session_id);
+
+      // 3. Final role check (optional, but good for UX)
+      if (user.role !== 'SUPER_ADMIN') {
+        await supabase.auth.signOut();
+        setError('Access denied. This portal is restricted to SuperAdmins only.');
+        return;
       }
 
       router.push('/dashboard')
     } catch (err) {
-      setError('An unexpected error occurred.')
+      console.error('Login error:', err);
+      setError('Connection to security terminal failed.');
     } finally {
       setLoading(false)
     }

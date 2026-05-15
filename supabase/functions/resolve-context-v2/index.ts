@@ -40,7 +40,7 @@ Deno.serve(async (req: Request) => {
   );
 
   const { data: profile, error: profileError } = await adminClient
-    .from("profiles")
+    .from("admin_profiles")
     .select(
       "id, role, full_name, is_active, must_change_password, tenant_id, tenants(id, name, slug, plan, status, is_active, next_billing_date)",
     )

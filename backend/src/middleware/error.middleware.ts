@@ -1,69 +1,54 @@
-// ============================================================
-// src/middleware/error.middleware.ts
-// Global error handler. Must be registered LAST in Express.
-// Maps AppError subclasses → structured JSON. Never leaks internals.
-// ============================================================
+import { Request, Response, NextFunction } from 'express';
+import { AppError } from '../shared/errors/AppError';
+import { ErrorCode } from '../shared/errors/error-codes';
+import { ResponseFormatter } from '../shared/utils/response-formatter';
+import { logger } from '../shared/utils/logger';
 
-import type { Request, Response, NextFunction } from 'express';
-import {
-  AppError,
-  ValidationError,
-  RateLimitError,
-  AccountLockedError,
-} from '../shared/errors/AppError';
-import { moduleLogger } from '../utils/logger';
+/**
+ * Centralized error handling middleware.
+ */
+export const errorMiddleware = (
+  err: any,
+  req: Request,
+  res: Response,
+  _next: NextFunction
+) => {
+  let statusCode = 500;
+  let errorCode = ErrorCode.INTERNAL_SERVER_ERROR;
+  let message = 'Internal Server Error';
+  let details = undefined;
 
-const log = moduleLogger('error-handler');
-
-interface ErrorResponse {
-  success: false;
-  error: {
-    code: string;
-    message: string;
-    fields?: Record<string, string>;
-    retry_after?: number;
-    locked_until?: string;
-  };
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function errorHandler(err: Error, req: Request, res: Response, _next: NextFunction): void {
-  // Operational (expected) errors — safe to surface to client
-  if (err instanceof AppError && err.isOperational) {
-    const body: ErrorResponse = {
-      success: false,
-      error: {
-        code: err.code,
-        message: err.message,
-      },
-    };
-
-    if (err instanceof ValidationError) {
-      body.error.fields = err.fields;
-    }
-
-    if (err instanceof RateLimitError) {
-      body.error.retry_after = err.retry_after;
-      res.setHeader('Retry-After', String(err.retry_after));
-    }
-
-    if (err instanceof AccountLockedError && err.locked_until) {
-      body.error.locked_until = err.locked_until.toISOString();
-    }
-
-    log.warn({ code: err.code, status: err.statusCode, path: req.path }, err.message);
-    res.status(err.statusCode).json(body);
-    return;
+  if (err instanceof AppError) {
+    statusCode = err.statusCode;
+    errorCode = err.code as ErrorCode;
+    message = err.message;
+    details = (err as any).fields || err.details;
+  } else if (err.name === 'ZodError') {
+    statusCode = 422;
+    errorCode = ErrorCode.VALIDATION_ERROR;
+    message = 'Validation failed';
+    details = err.errors;
   }
 
-  // Unexpected / programming errors — never leak internals
-  log.error({ err, path: req.path, method: req.method }, 'Unhandled error');
+  // Log error — NEVER include req.body (may contain passwords/PII)
+  if (statusCode >= 500) {
+    logger.error({ 
+      err: { message: err.message, code: err.code, stack: err.stack },
+      req: { method: req.method, url: req.url }
+    }, 'Unhandled Exception');
+  } else {
+    logger.warn({ 
+      err: { message, errorCode, details }, 
+      req: { method: req.method, url: req.url } 
+    }, 'Operational Error');
+  }
 
-  res.status(500).json({
-    success: false,
-    error: {
-      code: 'INTERNAL_ERROR',
-      message: 'An unexpected error occurred. Please try again later.',
-    },
-  });
-}
+  const response = ResponseFormatter.error(
+    errorCode,
+    message,
+    details,
+    err.stack
+  );
+
+  res.status(statusCode).json(response);
+};

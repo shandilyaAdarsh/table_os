@@ -1,24 +1,19 @@
 // ============================================================
 // src/types/auth.types.ts
 // Canonical auth type definitions.
-// Architecture: admin_profiles owns role + permissions.
-// Future: platform_users (all auth.users mirror) and
-//         tenant_users (per-tenant membership) will layer on top.
 // ============================================================
 
-// ─── Roles ────────────────────────────────────────────────────
+import type { Role, Permission, AuthContext, ROLE_HIERARCHY } from './rbac.types';
+export { Role, AuthContext, Permission };
 
-export type AdminRole = 'SUPER_ADMIN' | 'RESTAURANT_ADMIN' | 'MANAGER' | 'STAFF';
+export { ROLE_HIERARCHY };
 
-export const ROLE_HIERARCHY: Record<AdminRole, number> = {
-  SUPER_ADMIN: 100,
-  RESTAURANT_ADMIN: 50,
-  MANAGER: 30,
-  STAFF: 10,
-};
-
-export function hasMinimumRole(userRole: AdminRole, requiredRole: AdminRole): boolean {
-  return ROLE_HIERARCHY[userRole] >= ROLE_HIERARCHY[requiredRole];
+export function hasMinimumRole(
+  userRole: Role,
+  requiredRole: Role,
+  hierarchy: Record<Role, number>
+): boolean {
+  return hierarchy[userRole] >= hierarchy[requiredRole];
 }
 
 // ─── Audit Event Types ────────────────────────────────────────
@@ -39,13 +34,12 @@ export type AuthEventType =
 
 /**
  * Row shape for `admin_profiles` table.
- * Linked to auth.users by id.
  * SUPER_ADMIN has tenant_id = null.
  */
 export interface AdminProfile {
   id: string;
   tenant_id: string | null;
-  role: AdminRole;
+  role: Role;
   full_name: string;
   phone: string | null;
   is_active: boolean;
@@ -71,8 +65,11 @@ export interface DeviceSession {
   user_agent: string | null;
   ip_address: string | null;
   country_code: string | null;
+  geo_country: string | null;
   is_active: boolean;
   last_token_hash: string | null;
+  last_activity_at: string | null;
+  suspicious_flags: number;
   expires_at: string;
   revoked_at: string | null;
   revoke_reason: string | null;
@@ -124,14 +121,9 @@ export interface LogoutRequest {
 
 // ─── Middleware Context ───────────────────────────────────────
 
-export interface AuthenticatedUser {
-  id: string;
-  email: string;
-  role: AdminRole;
-  tenant_id: string | null;
+export interface AuthenticatedUser extends AuthContext {
   full_name: string;
   must_change_password: boolean;
-  device_session_id?: string;
 }
 
 // ─── Rate Limiting ────────────────────────────────────────────
@@ -149,9 +141,23 @@ export interface TokenValidationResult {
   valid: boolean;
   user_id?: string;
   email?: string;
-  role?: AdminRole;
+  role?: Role;
   tenant_id?: string | null;
+  branch_ids?: string[];
   full_name?: string;
   must_change_password?: boolean;
   error?: string;
+}
+
+// ─── Session Listing ─────────────────────────────────────────
+
+export interface ActiveSessionView {
+  id: string;
+  device_fingerprint: string;
+  user_agent: string | null;
+  ip_address: string | null;
+  created_at: string;
+  expires_at: string;
+  last_activity_at: string | null;
+  is_current: boolean;
 }
