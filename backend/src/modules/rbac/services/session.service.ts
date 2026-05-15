@@ -92,15 +92,18 @@ export interface SuspiciousCheckContext {
 export async function checkAndFlagSuspiciousActivity(
   ctx: SuspiciousCheckContext
 ): Promise<boolean> {
-  const session = await findActiveDeviceSession(ctx.deviceSessionId, ctx.deviceFingerprint);
+  const session: DeviceSession | null = await findActiveDeviceSession(
+    ctx.deviceSessionId,
+    ctx.deviceFingerprint
+  );
   if (!session) return false;
 
-  let newFlags = (session as any).suspicious_flags ?? 0;
+  let newFlags = session.suspicious_flags ?? 0;
   const reasons: string[] = [];
 
   // Country change detection
-  if (ctx.currentGeoCountry && (session as any).geo_country) {
-    if (ctx.currentGeoCountry !== (session as any).geo_country) {
+  if (ctx.currentGeoCountry && session.geo_country) {
+    if (ctx.currentGeoCountry !== session.geo_country) {
       newFlags |= SUSPICIOUS_FLAGS.COUNTRY_CHANGE;
       reasons.push('country_change');
     }

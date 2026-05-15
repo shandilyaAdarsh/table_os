@@ -10,7 +10,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { validateAccessToken } from '../modules/auth/services/auth.service';
 import { findActiveDeviceSession } from '../modules/auth/repositories/auth.repository';
 import { resolvePermissions } from '../utils/permission-checker';
-import { touchSession } from '../modules/rbac/services/session.service';
+import { touchSession, checkAndFlagSuspiciousActivity } from '../modules/rbac/services/session.service';
 import {
   AuthenticationError,
   ForbiddenError,
@@ -30,9 +30,9 @@ declare global {
        * Verified, server-sourced auth context.
        * NEVER populate from req.body or req.query.
        */
-      context:           AuthContext & { full_name: string; must_change_password: boolean };
+      context: AuthContext & { full_name: string; must_change_password: boolean };
       device_fingerprint: string;
-      ip_address:         string;
+      ip_address: string;
     }
   }
 }
@@ -99,7 +99,22 @@ export async function authenticate(
       validation.tenant_id ?? null
     );
 
-    // ── Step 4: Populate request context from VERIFIED server data only
+    // ── Step 4: Suspicious activity detection (device + context anomalies)
+    if (deviceSessionId) {
+      const isValid = await checkAndFlagSuspiciousActivity({
+        deviceSessionId,
+        currentIp: req.ip ?? '',
+        currentUa: req.headers['user-agent'] ?? '',
+        deviceFingerprint: deviceFingerprint!,
+        // geo_country could be added if using a geoip middleware
+      });
+
+      if (!isValid) {
+        throw new SessionRevokedError('Suspicious activity detected - session invalidated');
+      }
+    }
+
+    // ── Step 5: Populate request context from VERIFIED server data only
     const context: Request['context'] = {
       id:                   validation.user_id,
       userId:               validation.user_id,

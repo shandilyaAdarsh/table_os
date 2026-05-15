@@ -19,14 +19,14 @@ import {
 } from '../../middleware/auth.middleware';
 import { ROLES, PERMISSIONS } from '../../types/rbac.types';
 
-const router = Router();
+const router: Router = Router();
 
 // ─── Session management (self) ────────────────────────────────
 // Any authenticated user can list their own sessions
 router.get('/sessions', authenticate, getActiveSessions);
 
 // ─── Tenant-scoped RBAC management ───────────────────────────
-const tenantScoped = Router({ mergeParams: true });
+const tenantScoped: Router = Router({ mergeParams: true });
 
 tenantScoped.use(
   authenticate,

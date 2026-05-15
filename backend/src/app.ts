@@ -10,6 +10,7 @@ import { corsOrigins, env } from './config/env';
 import { authRouter } from './modules/auth/auth.router';
 import { tenantRouter } from './modules/tenants/tenant.router';
 import { rbacRouter } from './modules/rbac/rbac.router';
+import { menuRouter } from './modules/menu/menu.router';
 import { errorMiddleware } from './middleware/error.middleware';
 import { loggingMiddleware } from './middleware/logging.middleware';
 
@@ -62,10 +63,11 @@ export function createApp(): express.Application {
   app.use('/auth',    authRouter);
   app.use('/tenants', tenantRouter);
   app.use('/rbac',    rbacRouter);
+  // Menu routes: /api/tenants/:tenantId/menu/**
+  app.use('/tenants/:tenantId/menu', menuRouter);
 
   // Future modules registered here:
-  // app.use('/staff', staffRouter);
-  // app.use('/menu', menuRouter);
+  // app.use('/tenants/:tenantId/staff', staffRouter);
 
   // ─── 404 handler ───────────────────────────────────────────
   app.use((_req, res) => {
