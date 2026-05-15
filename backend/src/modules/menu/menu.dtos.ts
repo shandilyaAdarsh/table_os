@@ -67,7 +67,7 @@ export interface UpdateMenuCategoryDto {
 export interface SetCategoryBranchVisibilityDto {
   branch_id:  string;
   is_visible: boolean;
-  sort_order?: number;
+  sort_order?: number | null;
 }
 
 // ─── Menu Item DTOs ───────────────────────────────────────────
@@ -121,7 +121,7 @@ export interface CreateModifierGroupDto {
   min_select?:  number;
   max_select?:  number | null;
   sort_order?:  number;
-  options?:     CreateModifierOptionDto[];  // Create with initial options
+  options?:     Omit<CreateModifierOptionDto, 'modifier_group_id'>[];  // Create with initial options
 }
 
 export interface UpdateModifierGroupDto {

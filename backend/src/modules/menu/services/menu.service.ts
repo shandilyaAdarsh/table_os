@@ -21,7 +21,6 @@ import {
   findItemById,
   findItemBySlug,
   findItemBySku,
-  findBranchItemOverride,
   findAllBranchItemOverrides,
   createMenuItem,
   updateMenuItem,
@@ -35,10 +34,8 @@ import {
   findModifierGroupsWithOptions,
   createModifierGroup,
   updateModifierGroup,
-  softDeleteModifierGroup,
   createModifierOption,
   updateModifierOption,
-  softDeleteModifierOption,
   upsertBranchModifierOptionOverride,
   upsertBranchModifierGroupOverride,
   findBranchModifierOverrides,
@@ -92,12 +89,12 @@ export async function createMenuCategory(
 ): Promise<MenuCategory> {
   // Guard: slug uniqueness
   const existing = await findCategoryBySlug(tenantId, dto.slug);
-  if (existing) throw new AppError('CONFLICT', `Category slug '${dto.slug}' already exists`, 409);
+  if (existing) throw new AppError(`Category slug '${dto.slug}' already exists`, 409, 'CONFLICT');
 
   // Guard: parent must belong to same tenant
   if (dto.parent_id) {
     const parent = await findCategoryById(tenantId, dto.parent_id);
-    if (!parent) throw new AppError('NOT_FOUND', 'Parent category not found', 404);
+    if (!parent) throw new AppError('Parent category not found', 404, 'NOT_FOUND');
   }
 
   return createCategory(tenantId, dto, createdBy);
@@ -109,16 +106,16 @@ export async function updateMenuCategory(
   dto: UpdateMenuCategoryDto
 ): Promise<MenuCategory> {
   const existing = await findCategoryById(tenantId, categoryId);
-  if (!existing) throw new AppError('NOT_FOUND', 'Category not found', 404);
+  if (!existing) throw new AppError('Category not found', 404, 'NOT_FOUND');
 
   if (dto.slug && dto.slug !== existing.slug) {
     const slugConflict = await findCategoryBySlug(tenantId, dto.slug);
-    if (slugConflict) throw new AppError('CONFLICT', `Slug '${dto.slug}' is already in use`, 409);
+    if (slugConflict) throw new AppError(`Slug '${dto.slug}' is already in use`, 409, 'CONFLICT');
   }
 
   // Prevent circular parent assignment
   if (dto.parent_id === categoryId) {
-    throw new AppError('VALIDATION_ERROR', 'A category cannot be its own parent', 400);
+    throw new AppError('A category cannot be its own parent', 400, 'VALIDATION_ERROR');
   }
 
   return updateCategory(tenantId, categoryId, dto);
@@ -126,7 +123,7 @@ export async function updateMenuCategory(
 
 export async function deleteMenuCategory(tenantId: string, categoryId: string): Promise<void> {
   const existing = await findCategoryById(tenantId, categoryId);
-  if (!existing) throw new AppError('NOT_FOUND', 'Category not found', 404);
+  if (!existing) throw new AppError('Category not found', 404, 'NOT_FOUND');
   await softDeleteCategory(tenantId, categoryId);
 }
 
@@ -136,7 +133,7 @@ export async function setCategoryVisibilityForBranch(
   dto: SetCategoryBranchVisibilityDto
 ): Promise<void> {
   const existing = await findCategoryById(tenantId, categoryId);
-  if (!existing) throw new AppError('NOT_FOUND', 'Category not found', 404);
+  if (!existing) throw new AppError('Category not found', 404, 'NOT_FOUND');
   await setCategoryBranchVisibility(tenantId, categoryId, dto.branch_id, dto.is_visible, dto.sort_order ?? undefined);
 }
 
@@ -155,7 +152,7 @@ export async function getMenuItemById(
   itemId: string
 ): Promise<MenuItem> {
   const item = await findItemById(tenantId, itemId);
-  if (!item) throw new AppError('NOT_FOUND', 'Menu item not found', 404);
+  if (!item) throw new AppError('Menu item not found', 404, 'NOT_FOUND');
   return item;
 }
 
@@ -166,12 +163,12 @@ export async function createNewMenuItem(
 ): Promise<MenuItem> {
   // Guard: slug uniqueness
   const slugConflict = await findItemBySlug(tenantId, dto.slug);
-  if (slugConflict) throw new AppError('CONFLICT', `Item slug '${dto.slug}' already exists`, 409);
+  if (slugConflict) throw new AppError(`Item slug '${dto.slug}' already exists`, 409, 'CONFLICT');
 
   // Guard: SKU uniqueness
   if (dto.sku) {
     const skuConflict = await findItemBySku(tenantId, dto.sku);
-    if (skuConflict) throw new AppError('CONFLICT', `SKU '${dto.sku}' already exists`, 409);
+    if (skuConflict) throw new AppError(`SKU '${dto.sku}' already exists`, 409, 'CONFLICT');
   }
 
   const item = await createMenuItem(tenantId, dto, createdBy);
@@ -191,16 +188,16 @@ export async function updateExistingMenuItem(
   dto: UpdateMenuItemDto
 ): Promise<MenuItem> {
   const existing = await findItemById(tenantId, itemId);
-  if (!existing) throw new AppError('NOT_FOUND', 'Menu item not found', 404);
+  if (!existing) throw new AppError('Menu item not found', 404, 'NOT_FOUND');
 
   if (dto.slug && dto.slug !== existing.slug) {
     const conflict = await findItemBySlug(tenantId, dto.slug);
-    if (conflict) throw new AppError('CONFLICT', `Slug '${dto.slug}' is already in use`, 409);
+    if (conflict) throw new AppError(`Slug '${dto.slug}' is already in use`, 409, 'CONFLICT');
   }
 
   if (dto.sku && dto.sku !== existing.sku) {
     const conflict = await findItemBySku(tenantId, dto.sku);
-    if (conflict) throw new AppError('CONFLICT', `SKU '${dto.sku}' already in use`, 409);
+    if (conflict) throw new AppError(`SKU '${dto.sku}' already in use`, 409, 'CONFLICT');
   }
 
   return updateMenuItem(tenantId, itemId, dto);
@@ -208,7 +205,7 @@ export async function updateExistingMenuItem(
 
 export async function deleteMenuItem(tenantId: string, itemId: string): Promise<void> {
   const existing = await findItemById(tenantId, itemId);
-  if (!existing) throw new AppError('NOT_FOUND', 'Menu item not found', 404);
+  if (!existing) throw new AppError('Menu item not found', 404, 'NOT_FOUND');
   await softDeleteMenuItem(tenantId, itemId);
 }
 
@@ -218,7 +215,7 @@ export async function linkModifierGroupsToItem(
   groupIds: string[]
 ): Promise<void> {
   const existing = await findItemById(tenantId, itemId);
-  if (!existing) throw new AppError('NOT_FOUND', 'Menu item not found', 404);
+  if (!existing) throw new AppError('Menu item not found', 404, 'NOT_FOUND');
   await replaceItemModifierGroups(tenantId, itemId, groupIds);
 }
 
@@ -231,7 +228,7 @@ export async function setBranchItemOverride(
   dto: SetBranchItemOverrideDto
 ): Promise<void> {
   const item = await findItemById(tenantId, itemId);
-  if (!item) throw new AppError('NOT_FOUND', 'Menu item not found', 404);
+  if (!item) throw new AppError('Menu item not found', 404, 'NOT_FOUND');
 
   if (Object.keys(dto).length === 0) {
     // Empty override = clear override (reset to tenant defaults)

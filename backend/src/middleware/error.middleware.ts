@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import { AppError } from '../shared/errors/AppError';
 import { ErrorCode } from '../shared/errors/error-codes';
 import { ResponseFormatter } from '../shared/utils/response-formatter';
@@ -8,7 +8,7 @@ import { logger } from '../shared/utils/logger';
  * Centralized error handling middleware.
  */
 export const errorMiddleware = (
-  err: any,
+  err: Error | AppError | any,
   req: Request,
   res: Response,
   _next: NextFunction
@@ -22,7 +22,7 @@ export const errorMiddleware = (
     statusCode = err.statusCode;
     errorCode = err.code as ErrorCode;
     message = err.message;
-    details = (err as any).fields || err.details;
+    details = (err as any).fields ?? err.details;
   } else if (err.name === 'ZodError') {
     statusCode = 422;
     errorCode = ErrorCode.VALIDATION_ERROR;

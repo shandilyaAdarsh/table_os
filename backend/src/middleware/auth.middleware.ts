@@ -30,9 +30,9 @@ declare global {
        * Verified, server-sourced auth context.
        * NEVER populate from req.body or req.query.
        */
-      context:           AuthContext & { full_name: string; must_change_password: boolean };
+      context: AuthContext & { full_name: string; must_change_password: boolean };
       device_fingerprint: string;
-      ip_address:         string;
+      ip_address: string;
     }
   }
 }

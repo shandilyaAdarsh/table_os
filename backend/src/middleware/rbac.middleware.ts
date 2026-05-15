@@ -27,7 +27,7 @@ export function assertTenantMembership(tenantIdParam = 'tenantId') {
 
       if (req.context.role === ROLES.SUPER_ADMIN) return next();
 
-      const tenantId = req.params[tenantIdParam] ?? req.context.tenantId;
+      const tenantId = String(req.params[tenantIdParam] ?? req.context.tenantId);
       if (!tenantId) return next(new ForbiddenError('Tenant ID is required'));
 
       await assertTenantMember(req.context.userId, tenantId);
@@ -52,8 +52,8 @@ export function assertBranch(branchIdParam = 'branchId', tenantIdParam = 'tenant
     try {
       if (!req.context) return next(new AuthenticationError());
 
-      const tenantId  = req.params[tenantIdParam] ?? req.context.tenantId;
-      const branchId  = req.params[branchIdParam];
+      const tenantId = String(req.params[tenantIdParam] ?? req.context.tenantId);
+      const branchId = String(req.params[branchIdParam]);
 
       if (!tenantId || !branchId) {
         return next(new ForbiddenError('Tenant ID and Branch ID are required'));

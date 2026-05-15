@@ -4,20 +4,20 @@
 // All operational errors extend AppError — unexpected errors do not.
 // ============================================================
 
-import { ErrorCode } from './error-codes';
+import type { ErrorCode } from './error-codes';
 
 export class AppError extends Error {
   public readonly statusCode: number;
   public readonly code: string;
   public readonly isOperational: boolean;
-  public readonly details?: any;
+  public readonly details?: unknown;
 
   constructor(
     message: string,
     statusCode: number,
     code: string | ErrorCode,
     isOperational = true,
-    details?: any
+    details?: unknown
   ) {
     super(message);
     this.name = this.constructor.name;
@@ -52,8 +52,8 @@ export class SessionExpiredError extends AppError {
 }
 
 export class SessionRevokedError extends AppError {
-  constructor() {
-    super('Session has been revoked.', 401, 'SESSION_REVOKED');
+  constructor(message = 'Session has been revoked.') {
+    super(message, 401, 'SESSION_REVOKED');
   }
 }
 

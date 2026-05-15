@@ -1,4 +1,4 @@
-import { PaginationParams, PaginatedData } from '../types/api-response.types';
+import type { PaginationParams, PaginatedData } from '../types/api-response.types';
 
 /**
  * Utility for handling pagination calculations.

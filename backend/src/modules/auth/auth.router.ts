@@ -18,7 +18,7 @@ import {
   requirePasswordChanged,
 } from '../../middleware/auth.middleware';
 
-const router = Router();
+const router: Router = Router();
 
 // ─── Public routes ────────────────────────────────────────────
 router.post('/login',           login);

@@ -5,7 +5,6 @@
 
 import { supabaseAdmin } from '../../../config/supabase';
 import { logger } from '../../../shared/utils/logger';
-import { AppError } from '../../../shared/errors/AppError';
 import type {
   ItemAvailabilitySchedule,
   ItemTemporaryDisablement,

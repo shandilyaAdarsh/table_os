@@ -3,7 +3,7 @@ import * as service from '../services/tenant.service';
 
 export async function getTenant(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const tenantId = req.params.tenantId;
+    const tenantId = String(req.params.tenantId);
     const tenant = await service.getTenantById(tenantId);
     res.json({ data: tenant });
   } catch (err) {
@@ -13,7 +13,7 @@ export async function getTenant(req: Request, res: Response, next: NextFunction)
 
 export async function listBranches(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const tenantId = req.params.tenantId;
+    const tenantId = String(req.params.tenantId);
     const branches = await service.getTenantBranches(tenantId);
     res.json({ data: branches });
   } catch (err) {
@@ -32,7 +32,7 @@ export async function createTenant(req: Request, res: Response, next: NextFuncti
 
 export async function createBranch(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const tenantId = req.params.tenantId;
+    const tenantId = String(req.params.tenantId);
     const branch = await service.addBranchToTenant({ ...req.body, tenant_id: tenantId });
     res.status(201).json({ data: branch });
   } catch (err) {

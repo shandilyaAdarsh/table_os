@@ -5,8 +5,8 @@
 
 import { supabaseAdmin } from '../../../config/supabase';
 import { logger } from '../../../shared/utils/logger';
-import type { MenuItem, BranchMenuItemOverride, EffectiveMenuItem } from '../menu.types';
-import type { CreateMenuItemDto, UpdateMenuItemDto, MenuItemListQuery, BranchMenuQuery } from '../menu.dtos';
+import type { MenuItem, BranchMenuItemOverride } from '../menu.types';
+import type { CreateMenuItemDto, UpdateMenuItemDto, MenuItemListQuery } from '../menu.dtos';
 
 // ─── Queries ──────────────────────────────────────────────────
 

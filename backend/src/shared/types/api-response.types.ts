@@ -1,20 +1,20 @@
-import { ErrorCode } from '../errors/error-codes';
+import type { ErrorCode } from '../errors/error-codes';
 
 /**
  * Standard API Response Structure
  */
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   message?: string;
   data?: T;
   error?: ApiErrorResponse;
-  meta?: any;
+  meta?: Record<string, unknown>;
 }
 
 export interface ApiErrorResponse {
   code: ErrorCode;
   message: string;
-  details?: any;
+  details?: unknown;
   stack?: string;
 }
 

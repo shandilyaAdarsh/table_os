@@ -131,6 +131,14 @@ export const CreateModifierOptionSchema = z.object({
   sort_order:        sortOrder,
 });
 
+export const UpdateModifierOptionSchema = z.object({
+  name:        z.string().min(1).max(500).optional(),
+  price_delta: z.number().optional(),
+  is_default:  z.boolean().optional(),
+  sort_order:  z.number().int().min(0).optional(),
+  is_active:   z.boolean().optional(),
+});
+
 export const CreateModifierGroupSchema = z.object({
   name:        nonEmpty,
   description: z.string().max(1000).optional(),
