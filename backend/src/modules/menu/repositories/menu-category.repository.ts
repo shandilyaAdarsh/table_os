@@ -7,7 +7,7 @@
 import { supabaseAdmin } from '../../../config/supabase';
 import { logger } from '../../../shared/utils/logger';
 import type { MenuCategory, MenuCategoryBranchVisibility } from '../menu.types';
-import type { CreateMenuCategoryDto, UpdateMenuCategoryDto } from '../menu.dtos';
+import type { CreateMenuCategoryDto, UpdateMenuCategoryDto, MenuCategoryListQuery } from '../menu.dtos';
 
 // ─── Queries ──────────────────────────────────────────────────
 
@@ -25,6 +25,45 @@ export async function findCategoriesByTenant(tenantId: string): Promise<MenuCate
   }
 
   return data ?? [];
+}
+
+export async function listMenuCategories(
+  tenantId: string,
+  query: MenuCategoryListQuery
+): Promise<{ data: MenuCategory[]; total: number }> {
+  let dbQuery = supabaseAdmin
+    .from('menu_categories')
+    .select('*', { count: 'exact' })
+    .eq('tenant_id', tenantId)
+    .is('deleted_at', null);
+
+  if (query.parent_id !== undefined) {
+    if (query.parent_id === null) {
+      dbQuery = dbQuery.is('parent_id', null);
+    } else {
+      dbQuery = dbQuery.eq('parent_id', query.parent_id);
+    }
+  }
+
+  if (query.search) {
+    dbQuery = dbQuery.ilike('name', `%${query.search}%`);
+  }
+
+  const page = query.page ?? 1;
+  const limit = query.limit ?? 50;
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  dbQuery = dbQuery.order('sort_order', { ascending: true }).range(from, to);
+
+  const { data, error, count } = await dbQuery;
+
+  if (error) {
+    logger.error({ err: error, tenantId, query }, 'listMenuCategories failed');
+    throw new Error(`[MenuCategoryRepo] listMenuCategories: ${error.message}`);
+  }
+
+  return { data: data ?? [], total: count ?? 0 };
 }
 
 export async function findCategoryById(
@@ -131,25 +170,44 @@ export async function createCategory(
 export async function updateCategory(
   tenantId: string,
   categoryId: string,
-  dto: UpdateMenuCategoryDto
+  dto: UpdateMenuCategoryDto,
+  updatedBy: string
 ): Promise<MenuCategory> {
+  const { version_num, ...updateData } = dto;
+  
+  // Optimistic locking: Must match existing version_num, then increment
   const { data, error } = await supabaseAdmin
     .from('menu_categories')
-    .update({ ...dto })
+    .update({ 
+      ...updateData,
+      updated_by: updatedBy,
+      version_num: version_num + 1 
+    })
     .eq('tenant_id', tenantId)
     .eq('id', categoryId)
+    .eq('version_num', version_num)
     .is('deleted_at', null)
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) throw new Error(`[MenuCategoryRepo] updateCategory: ${error.message}`);
+  if (!data) throw new Error(`[MenuCategoryRepo] updateCategory: Concurrency conflict or category not found`);
+  
   return data;
 }
 
-export async function softDeleteCategory(tenantId: string, categoryId: string): Promise<void> {
+export async function softDeleteCategory(
+  tenantId: string, 
+  categoryId: string,
+  deletedBy: string
+): Promise<void> {
   const { error } = await supabaseAdmin
     .from('menu_categories')
-    .update({ deleted_at: new Date().toISOString(), is_active: false })
+    .update({ 
+      deleted_at: new Date().toISOString(), 
+      is_active: false,
+      updated_by: deletedBy 
+    })
     .eq('tenant_id', tenantId)
     .eq('id', categoryId);
 

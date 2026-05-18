@@ -62,6 +62,7 @@ export interface UpdateMenuCategoryDto {
   image_url?:   string | null;
   sort_order?:  number;
   is_active?:   boolean;
+  version_num:  number; // Required for optimistic locking
 }
 
 export interface SetCategoryBranchVisibilityDto {
@@ -110,6 +111,7 @@ export interface UpdateMenuItemDto {
   status?:               MenuItemStatus;
   image_url?:            string | null;
   thumbnail_url?:        string | null;
+  version_num:           number; // Required for optimistic locking
 }
 
 // ─── Modifier DTOs ────────────────────────────────────────────
@@ -206,4 +208,11 @@ export interface BranchMenuQuery {
   service_type?: ServiceType;
   search?:       string;
   include_unavailable?: boolean; // Default false — omit 86'd items
+}
+
+export interface MenuCategoryListQuery {
+  search?:       string;
+  parent_id?:    string | null; // null for roots
+  page?:         number;
+  limit?:        number;
 }

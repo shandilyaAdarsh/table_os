@@ -18,11 +18,6 @@ import { PERMISSIONS } from '../../types/rbac.types';
 import { validate } from '../../shared/utils/validation.utils';
 import { formatSuccess } from '../../shared/utils/response-formatter';
 import {
-  CreateMenuCategorySchema,
-  UpdateMenuCategorySchema,
-  SetCategoryBranchVisibilitySchema,
-  CreateMenuItemSchema,
-  UpdateMenuItemSchema,
   LinkModifierGroupsSchema,
   CreateModifierGroupSchema,
   UpdateModifierGroupSchema,
@@ -33,21 +28,9 @@ import {
   SetBranchModifierGroupOverrideSchema,
   CreateAvailabilityScheduleSchema,
   CreateTemporaryDisablementSchema,
-  MenuItemListQuerySchema,
   BranchMenuQuerySchema,
 } from './menu.validators';
 import {
-  getCategoryTree,
-  getVisibleCategoriesForBranch,
-  createMenuCategory,
-  updateMenuCategory,
-  deleteMenuCategory,
-  setCategoryVisibilityForBranch,
-  listMenuItems,
-  getMenuItemById,
-  createNewMenuItem,
-  updateExistingMenuItem,
-  deleteMenuItem,
   linkModifierGroupsToItem,
   setBranchItemOverride,
   setBranchModifierOptionOverride,
@@ -58,6 +41,9 @@ import {
   addOptionToGroup,
   updateModifierOptionData,
 } from './services/menu.service';
+
+import * as categoryController from './controllers/menu-category.controller';
+import * as itemController from './controllers/menu-item.controller';
 import {
   getSchedulesForItem,
   createAvailabilitySchedule,
@@ -75,151 +61,73 @@ const router: Router = Router({ mergeParams: true });
 router.use(authenticate);
 router.use(requireTenantAccess('tenantId'));
 
-// ─── Category Routes ──────────────────────────────────────────
+/** GET /api/tenants/:tenantId/menu/categories/tree - tree of all categories */
+router.get('/categories/tree', categoryController.getTree);
 
-/** GET /api/tenants/:tenantId/menu/categories - tree of all categories */
-router.get('/categories', async (req: Request<{ tenantId: string }>, res, next) => {
-  try {
-    const tenantId = String(req.params.tenantId);
-    const tree = await getCategoryTree(tenantId);
-    res.json(formatSuccess(tree));
-  } catch (err) { next(err); }
-});
+/** GET /api/tenants/:tenantId/menu/categories - list categories with pagination/search */
+router.get('/categories', categoryController.getList);
 
 /** GET /api/tenants/:tenantId/menu/categories/branch/:branchId */
 router.get('/categories/branch/:branchId',
   requireBranchAccess('branchId'),
-  async (req: Request<{ tenantId: string; branchId: string }>, res, next) => {
-    try {
-      const tenantId = String(req.params.tenantId);
-      const branchId = String(req.params.branchId);
-      const categories = await getVisibleCategoriesForBranch(tenantId, branchId);
-      res.json(formatSuccess(categories));
-    } catch (err) { next(err); }
-  }
+  categoryController.getBranchCategories
 );
 
 /** POST /api/tenants/:tenantId/menu/categories */
 router.post('/categories',
   requireMinRole(ROLES.MANAGER),
   requirePermissions('ANY', PERMISSIONS.MANAGE_MENU),
-  async (req: Request<{ tenantId: string }>, res, next) => {
-    try {
-      const tenantId = String(req.params.tenantId);
-      const dto      = validate(CreateMenuCategorySchema, req.body);
-      const category = await createMenuCategory(tenantId, dto, req.context.userId);
-      res.status(201).json(formatSuccess(category));
-    } catch (err) { next(err); }
-  }
+  categoryController.createCategory
 );
 
 /** PATCH /api/tenants/:tenantId/menu/categories/:categoryId */
 router.patch('/categories/:categoryId',
   requireMinRole(ROLES.MANAGER),
   requirePermissions('ANY', PERMISSIONS.MANAGE_MENU),
-  async (req: Request<{ tenantId: string; categoryId: string }>, res, next) => {
-    try {
-      const tenantId   = String(req.params.tenantId);
-      const categoryId = String(req.params.categoryId);
-      const dto        = validate(UpdateMenuCategorySchema, req.body);
-      const category   = await updateMenuCategory(tenantId, categoryId, dto);
-      res.json(formatSuccess(category));
-    } catch (err) { next(err); }
-  }
+  categoryController.updateCategory
 );
 
 /** DELETE /api/tenants/:tenantId/menu/categories/:categoryId */
 router.delete('/categories/:categoryId',
   requireMinRole(ROLES.RESTAURANT_ADMIN),
   requirePermissions('ANY', PERMISSIONS.MANAGE_MENU),
-  async (req: Request<{ tenantId: string; categoryId: string }>, res, next) => {
-    try {
-      const tenantId   = String(req.params.tenantId);
-      const categoryId = String(req.params.categoryId);
-      await deleteMenuCategory(tenantId, categoryId);
-      res.status(204).send();
-    } catch (err) { next(err); }
-  }
+  categoryController.removeCategory
 );
 
 /** PUT /api/tenants/:tenantId/menu/categories/:categoryId/visibility */
 router.put('/categories/:categoryId/visibility',
   requireMinRole(ROLES.MANAGER),
   requirePermissions('ANY', PERMISSIONS.MANAGE_MENU),
-  async (req: Request<{ tenantId: string; categoryId: string }>, res, next) => {
-    try {
-      const tenantId   = String(req.params.tenantId);
-      const categoryId = String(req.params.categoryId);
-      const dto        = validate(SetCategoryBranchVisibilitySchema, req.body);
-      await setCategoryVisibilityForBranch(tenantId, categoryId, dto);
-      res.status(204).send();
-    } catch (err) { next(err); }
-  }
+  categoryController.setBranchVisibility
 );
 
 // ─── Menu Item Routes ─────────────────────────────────────────
 
-/** GET /api/tenants/:tenantId/menu/items */
-router.get('/items', async (req: Request<{ tenantId: string }>, res, next) => {
-  try {
-    const tenantId = String(req.params.tenantId);
-    const query    = validate(MenuItemListQuerySchema, req.query);
-    const result   = await listMenuItems(tenantId, query);
-    res.json(formatSuccess(result));
-  } catch (err) { next(err); }
-});
+/** GET /api/tenants/:tenantId/menu/items - List/Search items */
+router.get('/items', itemController.getList);
 
 /** GET /api/tenants/:tenantId/menu/items/:itemId */
-router.get('/items/:itemId', async (req: Request<{ tenantId: string; itemId: string }>, res, next) => {
-  try {
-    const tenantId = String(req.params.tenantId);
-    const itemId   = String(req.params.itemId);
-    const item     = await getMenuItemById(tenantId, itemId);
-    res.json(formatSuccess(item));
-  } catch (err) { next(err); }
-});
+router.get('/items/:itemId', itemController.getById);
 
 /** POST /api/tenants/:tenantId/menu/items */
 router.post('/items',
   requireMinRole(ROLES.MANAGER),
   requirePermissions('ANY', PERMISSIONS.MANAGE_MENU),
-  async (req: Request<{ tenantId: string }>, res, next) => {
-    try {
-      const tenantId = String(req.params.tenantId);
-      const dto      = validate(CreateMenuItemSchema, req.body);
-      const item     = await createNewMenuItem(tenantId, dto, req.context.userId);
-      res.status(201).json(formatSuccess(item));
-    } catch (err) { next(err); }
-  }
+  itemController.createItem
 );
 
 /** PATCH /api/tenants/:tenantId/menu/items/:itemId */
 router.patch('/items/:itemId',
   requireMinRole(ROLES.MANAGER),
   requirePermissions('ANY', PERMISSIONS.MANAGE_MENU),
-  async (req: Request<{ tenantId: string; itemId: string }>, res, next) => {
-    try {
-      const tenantId = String(req.params.tenantId);
-      const itemId   = String(req.params.itemId);
-      const dto      = validate(UpdateMenuItemSchema, req.body);
-      const item     = await updateExistingMenuItem(tenantId, itemId, dto);
-      res.json(formatSuccess(item));
-    } catch (err) { next(err); }
-  }
+  itemController.updateItem
 );
 
 /** DELETE /api/tenants/:tenantId/menu/items/:itemId */
 router.delete('/items/:itemId',
   requireMinRole(ROLES.RESTAURANT_ADMIN),
   requirePermissions('ANY', PERMISSIONS.MANAGE_MENU),
-  async (req: Request<{ tenantId: string; itemId: string }>, res, next) => {
-    try {
-      const tenantId = String(req.params.tenantId);
-      const itemId   = String(req.params.itemId);
-      await deleteMenuItem(tenantId, itemId);
-      res.status(204).send();
-    } catch (err) { next(err); }
-  }
+  itemController.removeItem
 );
 
 /** PUT /api/tenants/:tenantId/menu/items/:itemId/modifiers */

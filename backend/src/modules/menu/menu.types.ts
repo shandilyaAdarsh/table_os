@@ -56,6 +56,8 @@ export interface MenuCategory {
   sort_order:  number;
   is_active:   boolean;
   created_by:  string | null;
+  updated_by:  string | null;
+  version_num: number;
   created_at:  string;
   updated_at:  string;
   deleted_at:  string | null;
@@ -99,6 +101,8 @@ export interface MenuItem {
   prep_time_minutes:    number | null;
   sort_order:           number;
   created_by:           string | null;
+  updated_by:           string | null;
+  version_num:          number;
   created_at:           string;
   updated_at:           string;
   deleted_at:           string | null;

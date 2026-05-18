@@ -23,14 +23,19 @@ export async function findItemsByTenant(
     .from('menu_items')
     .select('*', { count: 'exact' })
     .eq('tenant_id', tenantId)
-    .is('deleted_at', null)
-    .range(from, to)
-    .order('sort_order', { ascending: true });
+    .is('deleted_at', null);
+
+  if (query.search) {
+    // Utilize GIN index on search_vector
+    q = q.textSearch('search_vector', query.search, { type: 'websearch', config: 'simple' });
+  }
+
+  q = q.range(from, to).order('sort_order', { ascending: true });
 
   if (query.category_id)  q = q.eq('category_id', query.category_id);
   if (query.status)       q = q.eq('status', query.status);
   if (query.is_featured)  q = q.eq('is_featured', true);
-  if (query.search)       q = q.ilike('name', `%${query.search}%`);
+
   if (query.dietary_tags?.length) {
     // @> operator: all specified tags must be present
     q = q.contains('dietary_tags', query.dietary_tags);
@@ -53,8 +58,8 @@ export async function findItemById(
     .from('menu_items')
     .select('*')
     .eq('tenant_id', tenantId)
-    .eq('id', itemId)
     .is('deleted_at', null)
+    .eq('id', itemId)
     .maybeSingle();
 
   if (error) throw new Error(`[MenuItemRepo] findItemById: ${error.message}`);
@@ -69,8 +74,8 @@ export async function findItemBySlug(
     .from('menu_items')
     .select('*')
     .eq('tenant_id', tenantId)
-    .eq('slug', slug)
     .is('deleted_at', null)
+    .eq('slug', slug)
     .maybeSingle();
 
   if (error) throw new Error(`[MenuItemRepo] findItemBySlug: ${error.message}`);
@@ -85,8 +90,8 @@ export async function findItemBySku(
     .from('menu_items')
     .select('*')
     .eq('tenant_id', tenantId)
-    .eq('sku', sku)
     .is('deleted_at', null)
+    .eq('sku', sku)
     .maybeSingle();
 
   if (error) throw new Error(`[MenuItemRepo] findItemBySku: ${error.message}`);
@@ -170,29 +175,53 @@ export async function createMenuItem(
 export async function updateMenuItem(
   tenantId: string,
   itemId: string,
-  dto: UpdateMenuItemDto
+  dto: UpdateMenuItemDto,
+  updatedBy: string
 ): Promise<MenuItem> {
+  const { version_num, ...updateData } = dto;
+  
   const { data, error } = await supabaseAdmin
     .from('menu_items')
-    .update({ ...dto })
+    .update({ 
+      ...updateData,
+      updated_by: updatedBy,
+      version_num: version_num + 1
+    })
     .eq('tenant_id', tenantId)
-    .eq('id', itemId)
     .is('deleted_at', null)
+    .eq('id', itemId)
+    .eq('version_num', version_num)
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) throw new Error(`[MenuItemRepo] updateMenuItem: ${error.message}`);
+  if (!data) throw new Error(`[MenuItemRepo] updateMenuItem: Concurrency conflict or item not found`);
   return data;
 }
 
-export async function softDeleteMenuItem(tenantId: string, itemId: string): Promise<void> {
-  const { error } = await supabaseAdmin
+export async function softDeleteMenuItem(
+  tenantId: string, 
+  itemId: string, 
+  deletedBy: string,
+  versionNum: number
+): Promise<void> {
+  const { data, error } = await supabaseAdmin
     .from('menu_items')
-    .update({ deleted_at: new Date().toISOString(), status: 'archived' })
+    .update({ 
+      deleted_at: new Date().toISOString(), 
+      status: 'archived',
+      updated_by: deletedBy,
+      version_num: versionNum + 1
+    })
     .eq('tenant_id', tenantId)
-    .eq('id', itemId);
+    .is('deleted_at', null)
+    .eq('id', itemId)
+    .eq('version_num', versionNum)
+    .select()
+    .maybeSingle();
 
   if (error) throw new Error(`[MenuItemRepo] softDeleteMenuItem: ${error.message}`);
+  if (!data) throw new Error(`[MenuItemRepo] softDeleteMenuItem: Concurrency conflict or item not found`);
 }
 
 // ─── Branch Override Mutations ────────────────────────────────

@@ -15,6 +15,7 @@ import {
   updateCategory,
   softDeleteCategory,
   setCategoryBranchVisibility,
+  listMenuCategories,
 } from '../repositories/menu-category.repository';
 import {
   findItemsByTenant,
@@ -46,7 +47,7 @@ import type {
   ModifierGroupWithOptions, ModifierOption,
 } from '../menu.types';
 import type {
-  CreateMenuCategoryDto, UpdateMenuCategoryDto, SetCategoryBranchVisibilityDto,
+  CreateMenuCategoryDto, UpdateMenuCategoryDto, SetCategoryBranchVisibilityDto, MenuCategoryListQuery,
   CreateMenuItemDto, UpdateMenuItemDto, MenuItemListQuery,
   CreateModifierGroupDto, UpdateModifierGroupDto,
   CreateModifierOptionDto, UpdateModifierOptionDto,
@@ -75,6 +76,14 @@ export async function getCategoryTree(tenantId: string): Promise<MenuCategoryTre
   return roots;
 }
 
+export async function listCategories(
+  tenantId: string,
+  query: MenuCategoryListQuery
+): Promise<{ data: MenuCategory[]; total: number; page: number; limit: number }> {
+  const result = await listMenuCategories(tenantId, query);
+  return { ...result, page: query.page ?? 1, limit: query.limit ?? 50 };
+}
+
 export async function getVisibleCategoriesForBranch(
   tenantId: string,
   branchId: string
@@ -91,10 +100,21 @@ export async function createMenuCategory(
   const existing = await findCategoryBySlug(tenantId, dto.slug);
   if (existing) throw new AppError(`Category slug '${dto.slug}' already exists`, 409, 'CONFLICT');
 
-  // Guard: parent must belong to same tenant
+  // Guard: parent must belong to same tenant and max depth validation
   if (dto.parent_id) {
     const parent = await findCategoryById(tenantId, dto.parent_id);
     if (!parent) throw new AppError('Parent category not found', 404, 'NOT_FOUND');
+    
+    // Check Max Depth (Limit to 3 levels: Root (1) -> Child (2) -> Grandchild (3))
+    let depth = 2; // the new category will be at least depth 2
+    let curr = parent;
+    while (curr.parent_id) {
+      depth++;
+      const nextParent = await findCategoryById(tenantId, curr.parent_id);
+      if (!nextParent) break;
+      curr = nextParent;
+    }
+    if (depth > 3) throw new AppError('Maximum category depth of 3 exceeded', 400, 'VALIDATION_ERROR');
   }
 
   return createCategory(tenantId, dto, createdBy);
@@ -103,7 +123,8 @@ export async function createMenuCategory(
 export async function updateMenuCategory(
   tenantId: string,
   categoryId: string,
-  dto: UpdateMenuCategoryDto
+  dto: UpdateMenuCategoryDto,
+  updatedBy: string
 ): Promise<MenuCategory> {
   const existing = await findCategoryById(tenantId, categoryId);
   if (!existing) throw new AppError('Category not found', 404, 'NOT_FOUND');
@@ -113,18 +134,67 @@ export async function updateMenuCategory(
     if (slugConflict) throw new AppError(`Slug '${dto.slug}' is already in use`, 409, 'CONFLICT');
   }
 
-  // Prevent circular parent assignment
-  if (dto.parent_id === categoryId) {
-    throw new AppError('A category cannot be its own parent', 400, 'VALIDATION_ERROR');
+  // Parent-child validations
+  if (dto.parent_id !== undefined && dto.parent_id !== existing.parent_id) {
+    // Prevent circular parent assignment (immediate)
+    if (dto.parent_id === categoryId) {
+      throw new AppError('A category cannot be its own parent', 400, 'VALIDATION_ERROR');
+    }
+
+    if (dto.parent_id !== null) {
+      const parent = await findCategoryById(tenantId, dto.parent_id);
+      if (!parent) throw new AppError('Parent category not found', 404, 'NOT_FOUND');
+
+      // 1. Cycle prevention (is the new parent actually a descendant of this category?)
+      let currCycleCheck = parent;
+      while (currCycleCheck.parent_id) {
+        if (currCycleCheck.parent_id === categoryId) {
+          throw new AppError('Cycle detected: cannot set a descendant as parent', 400, 'VALIDATION_ERROR');
+        }
+        const nextCycleCheck = await findCategoryById(tenantId, currCycleCheck.parent_id);
+        if (!nextCycleCheck) break;
+        currCycleCheck = nextCycleCheck;
+      }
+
+      // 2. Max Depth Validation (Limit to 3 levels)
+      let depth = 2; // Root -> parent -> this node
+      let currDepthCheck = parent;
+      while (currDepthCheck.parent_id) {
+        depth++;
+        const nextDepthCheck = await findCategoryById(tenantId, currDepthCheck.parent_id);
+        if (!nextDepthCheck) break;
+        currDepthCheck = nextDepthCheck;
+      }
+      
+      // Calculate max depth of descendants
+      const allCategories = await findCategoriesByTenant(tenantId);
+      const getDescendantDepth = (catId: string, currentDepth: number): number => {
+        const children = allCategories.filter(c => c.parent_id === catId);
+        if (children.length === 0) return currentDepth;
+        return Math.max(...children.map(c => getDescendantDepth(c.id, currentDepth + 1)));
+      };
+      
+      const maxDescendantDepth = getDescendantDepth(categoryId, 1);
+      if (depth - 1 + maxDescendantDepth > 3) {
+        throw new AppError('Maximum category depth of 3 exceeded when moving branch', 400, 'VALIDATION_ERROR');
+      }
+    }
   }
 
-  return updateCategory(tenantId, categoryId, dto);
+  return updateCategory(tenantId, categoryId, dto, updatedBy);
 }
 
-export async function deleteMenuCategory(tenantId: string, categoryId: string): Promise<void> {
+export async function deleteMenuCategory(tenantId: string, categoryId: string, deletedBy: string): Promise<void> {
   const existing = await findCategoryById(tenantId, categoryId);
   if (!existing) throw new AppError('Category not found', 404, 'NOT_FOUND');
-  await softDeleteCategory(tenantId, categoryId);
+  
+  // Enforce ON DELETE RESTRICT manually for soft deletes
+  const { data: children } = await listMenuCategories(tenantId, { parent_id: categoryId, limit: 1 });
+  if (children.length > 0) {
+    throw new AppError('Cannot delete category with active children', 409, 'CONFLICT');
+  }
+
+  await softDeleteCategory(tenantId, categoryId, deletedBy);
 }
 
 export async function setCategoryVisibilityForBranch(
@@ -185,7 +255,8 @@ export async function createNewMenuItem(
 export async function updateExistingMenuItem(
   tenantId: string,
   itemId: string,
-  dto: UpdateMenuItemDto
+  dto: UpdateMenuItemDto,
+  updatedBy: string
 ): Promise<MenuItem> {
   const existing = await findItemById(tenantId, itemId);
   if (!existing) throw new AppError('Menu item not found', 404, 'NOT_FOUND');
@@ -200,13 +271,13 @@ export async function updateExistingMenuItem(
     if (conflict) throw new AppError(`SKU '${dto.sku}' already in use`, 409, 'CONFLICT');
   }
 
-  return updateMenuItem(tenantId, itemId, dto);
+  return updateMenuItem(tenantId, itemId, dto, updatedBy);
 }
 
-export async function deleteMenuItem(tenantId: string, itemId: string): Promise<void> {
+export async function deleteMenuItem(tenantId: string, itemId: string, deletedBy: string): Promise<void> {
   const existing = await findItemById(tenantId, itemId);
   if (!existing) throw new AppError('Menu item not found', 404, 'NOT_FOUND');
-  await softDeleteMenuItem(tenantId, itemId);
+  await softDeleteMenuItem(tenantId, itemId, deletedBy, existing.version_num);
 }
 
 export async function linkModifierGroupsToItem(
