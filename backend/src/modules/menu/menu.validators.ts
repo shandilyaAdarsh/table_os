@@ -71,6 +71,7 @@ export const UpdateMenuCategorySchema = z.object({
   image_url:   z.string().url().nullable().optional(),
   sort_order:  z.number().int().min(0).optional(),
   is_active:   z.boolean().optional(),
+  version_num: z.number().int().min(1),
 });
 
 export const SetCategoryBranchVisibilitySchema = z.object({
@@ -119,6 +120,7 @@ export const UpdateMenuItemSchema = z.object({
   status:             z.enum(ITEM_STATUSES).optional(),
   image_url:          z.string().url().nullable().optional(),
   thumbnail_url:      z.string().url().nullable().optional(),
+  version_num:        z.number().int().min(1),
 });
 
 // ─── Modifier Schemas ─────────────────────────────────────────
@@ -224,4 +226,11 @@ export const BranchMenuQuerySchema = z.object({
   service_type:        z.enum(SERVICE_TYPES).optional(),
   search:              z.string().max(200).optional(),
   include_unavailable: z.coerce.boolean().optional().default(false),
+});
+
+export const MenuCategoryListQuerySchema = z.object({
+  search:       z.string().max(200).optional(),
+  parent_id:    uuid.nullable().optional(), // 'null' text isn't handled here implicitly unless custom refined, but nullable() works if it's sent as null
+  page:         z.coerce.number().int().min(1).optional().default(1),
+  limit:        z.coerce.number().int().min(1).max(200).optional().default(50),
 });
