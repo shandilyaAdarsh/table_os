@@ -7,11 +7,13 @@
 --   [1] Removed CASCADE from legacy DROP statements — explicit teardown only
 --   [2] Removed permissive authenticated_access_* RLS policies
 --   [3] Added `priority` to immutable financial fields in trigger
---   [4] Refactored overlap constraint — prevents overlapping active windows
---       per (tenant_id, tax_profile_id) regardless of name
+--   [4] Refactored overlap constraint — v1 single-rate model: one active
+--       effective rate per (tenant_id, tax_profile_id) per time window
 --   [5] Added deterministic ORDER BY to both RPC resolvers
---   [6] Documented additive aggregation strategy (no compounding yet)
+--   [6] Corrected architecture comments: v1 = single-rate model;
+--       SUM retained for forward compatibility only
 --   [7] OCC (version_num WHERE + increment) enforced in repository layer
+--   [8] Immutability trigger upgraded to SQLSTATE-aware RAISE EXCEPTION USING
 -- ============================================================
 
 BEGIN;
@@ -127,13 +129,26 @@ CREATE TABLE public.tax_rates (
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 -- ── Overlap prevention constraint ───────────────────────────
--- HARDENING FIX [4]: Constraint was previously scoped on (tenant, profile, name),
--- allowing overlapping windows for different names under the same profile.
--- This created accidental tax stacking and operational ambiguity.
+-- HARDENING FIX [4]: V1 SINGLE-RATE MODEL
 --
--- New constraint: prevent ANY two active, non-deleted tax rates from
--- overlapping on (tenant_id, tax_profile_id) within the same time window,
--- regardless of name. This enforces deterministic additive tax behavior.
+-- Design decision: the v1 tax engine enforces exactly ONE active effective
+-- tax rate per (tenant_id, tax_profile_id) per time window.
+--
+-- Rationale:
+--   • Eliminates accidental tax stacking and operational ambiguity.
+--   • Enforces a deterministic, predictable single-rate taxation model.
+--   • The name column is NOT part of the exclusion key, so even distinctly
+--     named rates cannot overlap within the same profile/window.
+--
+-- Additive multi-rate layering (v2+):
+--   When jurisdiction layering or compound rates are needed in a future
+--   version, this constraint must be revisited — likely by introducing a
+--   tax_rate_components child table or a separate tax_layer abstraction,
+--   rather than relaxing this constraint.
+--
+-- The resolvers still use SUM(rate_basis_points) which is correct and safe:
+--   In v1 only one rate matches per window, so SUM == that single rate.
+--   SUM is retained explicitly for forward compatibility without resolver change.
 ALTER TABLE public.tax_rates ADD CONSTRAINT tax_rates_no_overlap_excl
   EXCLUDE USING gist (
     tenant_id      WITH =,
@@ -186,10 +201,18 @@ BEGIN
      OLD.priority          IS DISTINCT FROM NEW.priority          OR
      OLD.name              IS DISTINCT FROM NEW.name
   THEN
-    RAISE EXCEPTION
-      'Immutable financial fields cannot be modified on an active tax rate. '
-      'To change rate_basis_points, effective_from, effective_to, tax_profile_id, '
-      'priority, or name: deactivate the existing rate and create a new one.';
+    -- HARDENING FIX [8]: Structured SQLSTATE-aware exception.
+    -- ERRCODE P0001 = raise_exception (application-defined error).
+    -- Using RAISE ... USING instead of bare RAISE ensures:
+    --   • The SQLSTATE code is predictable and catchable in the service layer.
+    --   • Message, detail, and hint are independently queryable in pg_exception_*.
+    --   • Observability tools (pg_stat_activity, error logs) surface SQLSTATE cleanly.
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'Immutable financial fields cannot be modified on an active tax rate.',
+      DETAIL  = 'Attempted mutation on: rate_basis_points, effective_from, effective_to, '
+                'tax_profile_id, priority, or name.',
+      HINT    = 'Deactivate the existing tax rate and create a new one with the desired values.';
   END IF;
   RETURN NEW;
 END;
@@ -313,19 +336,27 @@ CREATE POLICY "tenant_isolation_mitp_delete"
 
 -- ── Single-item resolver ──────────────────────────────────────
 -- HARDENING FIX [5]: Added explicit ORDER BY for deterministic output.
+-- HARDENING FIX [6]: Architecture clarification — v1 single-rate model.
 --
--- Tax Aggregation Architecture (ADDITIVE — v1):
---   Taxes within a profile are aggregated using simple addition (SUM).
---   This means all active, in-window tax rates contribute equally to the
---   total_basis_points figure.
---   IMPORTANT: There is currently NO:
---     - Compounding behavior (tax-on-tax)
---     - Jurisdiction sequencing or layered execution
---     - Priority-weighted calculation
---   The `priority` column on tax_rates controls resolver ORDER BY for
---   deterministic display/debugging, not calculation order.
---   Future layered taxation (e.g. GST → PST compounding) will require a
---   separate ordered-execution strategy rather than a flat SUM.
+-- ┌─────────────────────────────────────────────────────────────┐
+-- │  TAX ENGINE — V1 ARCHITECTURE: SINGLE-RATE MODEL            │
+-- ├─────────────────────────────────────────────────────────────┤
+-- │  Current behavior (v1):                                      │
+-- │    • Exactly ONE active effective tax rate per profile per    │
+-- │      time window (enforced by tax_rates_no_overlap_excl).    │
+-- │    • SUM(rate_basis_points) == that single rate value.       │
+-- │    • Deterministic single-rate taxation — no stacking,       │
+-- │      no compounding, no jurisdiction sequencing.             │
+-- │    • SUM is used (not MAX/FIRST) for forward compatibility:  │
+-- │      the resolver body does not need to change when v2       │
+-- │      introduces layered rates via a child table.             │
+-- │                                                              │
+-- │  NOT supported in v1 (reserved for future engine evolution): │
+-- │    • Additive multi-component layering                       │
+-- │    • Compounding (tax-on-tax) behavior                       │
+-- │    • Jurisdiction sequencing or ordered tax execution        │
+-- │    • Simultaneous overlapping active rates per profile       │
+-- └─────────────────────────────────────────────────────────────┘
 CREATE OR REPLACE FUNCTION public.resolve_tax_for_menu_item(
   p_tenant_id    UUID,
   p_menu_item_id UUID,
@@ -379,13 +410,16 @@ END;
 $$ LANGUAGE plpgsql STABLE;
 
 -- ── Batch resolver ────────────────────────────────────────────
--- Resolves taxes for multiple menu items in a single query to prevent N+1.
--- HARDENING FIX [5]: ORDER BY clause added for deterministic output ordering.
--- HARDENING FIX [6]: Architecture comment documenting additive strategy.
+-- Resolves taxes for multiple menu items in a single query (prevents N+1).
+-- HARDENING FIX [5]: ORDER BY for deterministic output.
+-- HARDENING FIX [6]: Architecture comment aligned to v1 single-rate model.
 --
--- Additive aggregation note (same as single resolver above):
---   total_basis_points = SUM(rate_basis_points) across all active, in-window rates.
---   No compounding. No jurisdiction sequencing. All rates contribute equally.
+-- V1 single-rate aggregation note (mirrors single-item resolver):
+--   In v1 the overlap constraint guarantees at most one in-window active rate
+--   per profile, so SUM(rate_basis_points) returns that single rate's value.
+--   SUM is used intentionally (not LIMIT 1) so that the v2 upgrade path
+--   (multiple rate components per profile) requires no resolver change.
+--   No compounding. No jurisdiction sequencing. No simultaneous multi-rates.
 CREATE OR REPLACE FUNCTION public.resolve_tax_for_menu_items_batch(
   p_tenant_id      UUID,
   p_menu_item_ids  UUID[],
