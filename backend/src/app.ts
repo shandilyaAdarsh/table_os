@@ -13,6 +13,7 @@ import { rbacRouter } from './modules/rbac/rbac.router';
 import { menuRouter } from './modules/menu/menu.router';
 import pricingRouter from './modules/pricing/pricing.router';
 import { taxRouter } from './modules/tax/tax.router';
+import { modifierRouter } from './modules/modifier/modifier.router';
 import { errorMiddleware } from './middleware/error.middleware';
 import { loggingMiddleware } from './middleware/logging.middleware';
 
@@ -69,6 +70,7 @@ export function createApp(): express.Application {
   app.use('/tenants/:tenantId/menu', menuRouter);
   app.use('/tenants/:tenantId/pricing', pricingRouter);
   app.use('/tenants/:tenantId/tax', taxRouter);
+  app.use('/tenants/:tenantId/modifier', modifierRouter);
 
   // Future modules registered here:
   // app.use('/tenants/:tenantId/staff', staffRouter);
