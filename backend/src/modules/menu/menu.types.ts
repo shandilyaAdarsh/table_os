@@ -15,33 +15,8 @@ export type AvailabilityDay = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 
 
 // ─── Tax ──────────────────────────────────────────────────────
 
-export interface TaxGroup {
-  id:          string;
-  tenant_id:   string;
-  name:        string;
-  description: string | null;
-  is_default:  boolean;
-  is_active:   boolean;
-  created_at:  string;
-  updated_at:  string;
-  deleted_at:  string | null;
-}
-
-export interface TaxRate {
-  id:               string;
-  tenant_id:        string;
-  tax_group_id:     string;
-  branch_id:        string | null;
-  name:             string;
-  rate:             number;  // Stored as NUMERIC(6,4); e.g. 12.5 = 12.5%
-  calculation_mode: TaxCalcMode;
-  is_active:        boolean;
-  effective_from:   string | null; // ISO date string
-  effective_until:  string | null;
-  created_at:       string;
-  updated_at:       string;
-  deleted_at:       string | null;
-}
+// Tax profiles and rates are now managed in the tax module
+// See src/modules/tax/tax.types.ts
 
 // ─── Categories ───────────────────────────────────────────────
 
