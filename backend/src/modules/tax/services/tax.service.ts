@@ -1,10 +1,10 @@
 import type { TaxRepository } from '../repositories/tax.repository';
-import type { 
-  TaxProfile, 
-  TaxRate, 
-  MenuItemTaxProfile, 
-  ResolvedTaxRPC, 
-  ResolvedTaxBatchRPC 
+import type {
+  TaxProfile,
+  TaxRate,
+  MenuItemTaxProfile,
+  ResolvedTaxRPC,
+  ResolvedTaxBatchRPC
 } from '../tax.types';
 import type {
   CreateTaxProfileDTO,
@@ -12,6 +12,8 @@ import type {
   CreateTaxRateDTO,
   AssignMenuItemTaxProfileDTO
 } from '../tax.dtos';
+import { AppError } from '../../../shared/errors/AppError';
+import { ErrorCode } from '../../../shared/errors/error-codes';
 
 export class TaxService {
   constructor(private readonly taxRepository: TaxRepository) {}
@@ -40,10 +42,25 @@ export class TaxService {
    * Modifying an existing tax rate involves appending a new one and ending the old one.
    * Direct updates are restricted by DB triggers except for is_active.
    */
-  async appendRate(tenantId: string, userId: string, oldRateId: string | null, payload: CreateTaxRateDTO, oldVersionNum?: number): Promise<TaxRate> {
-    // If replacing an old rate, deactivate the old rate
+  async appendRate(
+    tenantId: string,
+    userId: string,
+    oldRateId: string | null,
+    payload: CreateTaxRateDTO,
+    oldVersionNum?: number,
+  ): Promise<TaxRate> {
+    // Append-only replace flow:
+    //   1. Deactivate the existing rate (OCC protected by oldVersionNum)
+    //   2. Insert the new rate as a fresh record
+    // Direct mutation of immutable fields is blocked at the DB trigger level.
     if (oldRateId) {
-      if (oldVersionNum === undefined) throw new Error('oldVersionNum is required when replacing a rate');
+      if (oldVersionNum === undefined) {
+        throw new AppError(
+          'oldVersionNum is required when replacing an existing tax rate.',
+          400,
+          ErrorCode.BAD_REQUEST,
+        );
+      }
       await this.taxRepository.deactivateRate(tenantId, oldRateId, userId, oldVersionNum);
     }
     return this.taxRepository.createRate(tenantId, userId, payload);

@@ -1,16 +1,71 @@
 -- ============================================================
 -- Migration: 20260518000003_core_tax_engine
 -- Replaces old float-based tax system with integer basis-points
--- append-only historical pricing strategy.
+-- append-only historical tax strategy.
+--
+-- HARDENING CHANGELOG (production hardening pass):
+--   [1] Removed CASCADE from legacy DROP statements — explicit teardown only
+--   [2] Removed permissive authenticated_access_* RLS policies
+--   [3] Added `priority` to immutable financial fields in trigger
+--   [4] Refactored overlap constraint — prevents overlapping active windows
+--       per (tenant_id, tax_profile_id) regardless of name
+--   [5] Added deterministic ORDER BY to both RPC resolvers
+--   [6] Documented additive aggregation strategy (no compounding yet)
+--   [7] OCC (version_num WHERE + increment) enforced in repository layer
 -- ============================================================
 
 BEGIN;
 
--- 1. Drop old tables safely
-DROP TABLE IF EXISTS public.tax_rates CASCADE;
-DROP TABLE IF EXISTS public.tax_groups CASCADE;
+-- ============================================================
+-- SECTION 1: Teardown of legacy tax tables
+-- ============================================================
+-- IMPORTANT (pre-production only):
+--   These tables/columns are from the old float-based tax_groups / tax_rates schema.
+--   In a live environment, DROP TABLE must be replaced with a proper
+--   column-by-column migration + data archival step.
+--   We intentionally avoid CASCADE: every FK dependency is resolved
+--   explicitly in correct dependency order to prevent silent destruction
+--   of unrelated objects.
+--
+--   Since this project is pre-production, we perform a clean slate reset.
+--   Re-evaluate this section before any production deployment.
+-- ============================================================
 
--- 2. Create tax_profiles
+-- Step 1: Drop FK constraints that reference tax_groups on dependent tables.
+--         These must come first — they are the reason a plain DROP TABLE fails
+--         without CASCADE. Explicit drops make the dependency graph visible.
+ALTER TABLE IF EXISTS public.menu_items
+  DROP CONSTRAINT IF EXISTS fk_menu_items_tax_group;
+
+ALTER TABLE IF EXISTS public.branch_menu_item_overrides
+  DROP CONSTRAINT IF EXISTS fk_branch_item_override_tax_group;
+
+-- Step 2: Drop the old tax_rates table (it has its own FK into tax_groups).
+--         Now safe because tax_groups has no remaining FK dependents.
+DROP TABLE IF EXISTS public.tax_rates;
+
+-- Step 3: Drop the old tax_groups table.
+DROP TABLE IF EXISTS public.tax_groups;
+
+-- Note: tax_group_id columns on menu_items and branch_menu_item_overrides are
+--       intentionally left in place. They are now FK-orphaned nullable columns.
+--       The new tax engine uses menu_item_tax_profiles for item ↔ profile mapping.
+--       Those legacy columns can be dropped in a dedicated cleanup migration once
+--       the application layer no longer references them.
+
+-- ============================================================
+-- SECTION 2: Enum type
+-- ============================================================
+
+DO $$ BEGIN
+  CREATE TYPE public.tax_calculation_mode AS ENUM ('inclusive', 'exclusive');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- ============================================================
+-- SECTION 3: tax_profiles
+-- ============================================================
+
 CREATE TABLE public.tax_profiles (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id        UUID NOT NULL REFERENCES public.tenants(id) ON DELETE RESTRICT,
@@ -21,86 +76,137 @@ CREATE TABLE public.tax_profiles (
   is_active        BOOLEAN NOT NULL DEFAULT true,
   created_by       UUID REFERENCES public.platform_users(id),
   updated_by       UUID REFERENCES public.platform_users(id),
+  -- OCC: all updates must present current version_num and increment it atomically
   version_num      INT NOT NULL DEFAULT 1,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at       TIMESTAMPTZ,
-  
+
   CONSTRAINT chk_tax_profiles_priority CHECK (priority >= 0 AND priority <= 1000)
 );
 
-CREATE INDEX idx_tax_profiles_tenant_id ON public.tax_profiles(tenant_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_tax_profiles_tenant_id
+  ON public.tax_profiles(tenant_id)
+  WHERE deleted_at IS NULL;
 
 CREATE TRIGGER set_tax_profiles_updated_at
   BEFORE UPDATE ON public.tax_profiles
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
--- 3. Create tax_rates
+-- ============================================================
+-- SECTION 4: tax_rates (append-only, immutable financial history)
+-- ============================================================
+
 CREATE TABLE public.tax_rates (
   id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id          UUID NOT NULL REFERENCES public.tenants(id) ON DELETE RESTRICT,
+  -- ON DELETE RESTRICT preserves append-only financial history even if the
+  -- parent profile is logically deleted (soft-delete expected instead).
   tax_profile_id     UUID NOT NULL REFERENCES public.tax_profiles(id) ON DELETE RESTRICT,
   name               TEXT NOT NULL,
-  rate_basis_points  INT NOT NULL,
+  rate_basis_points  INT NOT NULL,       -- e.g. 500 = 5.00%
   priority           INT NOT NULL DEFAULT 100,
   effective_from     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  effective_to       TIMESTAMPTZ,
+  effective_to       TIMESTAMPTZ,        -- NULL = open-ended / still active
   is_active          BOOLEAN NOT NULL DEFAULT true,
   created_by         UUID REFERENCES public.platform_users(id),
   updated_by         UUID REFERENCES public.platform_users(id),
+  -- OCC: all updates must present current version_num and increment it atomically
   version_num        INT NOT NULL DEFAULT 1,
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at         TIMESTAMPTZ,
-  
-  CONSTRAINT chk_tax_rates_basis_points CHECK (rate_basis_points >= 0),
-  CONSTRAINT chk_tax_rates_priority CHECK (priority >= 0 AND priority <= 1000),
-  CONSTRAINT chk_tax_rates_effective_dates CHECK (effective_to IS NULL OR effective_from < effective_to)
+
+  CONSTRAINT chk_tax_rates_basis_points  CHECK (rate_basis_points >= 0),
+  CONSTRAINT chk_tax_rates_priority      CHECK (priority >= 0 AND priority <= 1000),
+  CONSTRAINT chk_tax_rates_effective_dates
+    CHECK (effective_to IS NULL OR effective_from < effective_to)
 );
 
--- Enable btree_gist extension (likely already enabled in utilities, but just in case we need it for exclusion)
+-- Required for exclusion constraint with tstzrange
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
--- Prevent overlapping active windows for the same component name within a tax profile
-ALTER TABLE public.tax_rates ADD CONSTRAINT tax_rates_overlap_excl
+-- ── Overlap prevention constraint ───────────────────────────
+-- HARDENING FIX [4]: Constraint was previously scoped on (tenant, profile, name),
+-- allowing overlapping windows for different names under the same profile.
+-- This created accidental tax stacking and operational ambiguity.
+--
+-- New constraint: prevent ANY two active, non-deleted tax rates from
+-- overlapping on (tenant_id, tax_profile_id) within the same time window,
+-- regardless of name. This enforces deterministic additive tax behavior.
+ALTER TABLE public.tax_rates ADD CONSTRAINT tax_rates_no_overlap_excl
   EXCLUDE USING gist (
-    tenant_id WITH =,
+    tenant_id      WITH =,
     tax_profile_id WITH =,
-    name WITH =,
-    tstzrange(effective_from, effective_to, '[)') WITH &&
+    tstzrange(effective_from, COALESCE(effective_to, 'infinity'::timestamptz), '[)') WITH &&
   ) WHERE (is_active = TRUE AND deleted_at IS NULL);
 
-CREATE INDEX idx_tax_rates_profile ON public.tax_rates(tax_profile_id) WHERE is_active = true AND deleted_at IS NULL;
-CREATE INDEX idx_tax_rates_tenant ON public.tax_rates(tenant_id) WHERE is_active = true AND deleted_at IS NULL;
-CREATE INDEX idx_tax_rates_deleted ON public.tax_rates(tenant_id) WHERE deleted_at IS NOT NULL;
+CREATE INDEX idx_tax_rates_profile
+  ON public.tax_rates(tax_profile_id)
+  WHERE is_active = true AND deleted_at IS NULL;
+
+CREATE INDEX idx_tax_rates_tenant
+  ON public.tax_rates(tenant_id)
+  WHERE is_active = true AND deleted_at IS NULL;
+
+CREATE INDEX idx_tax_rates_deleted
+  ON public.tax_rates(tenant_id)
+  WHERE deleted_at IS NOT NULL;
 
 CREATE TRIGGER set_tax_rates_updated_at
   BEFORE UPDATE ON public.tax_rates
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
--- Immutable history trigger for tax_rates
+-- ── Immutability trigger ─────────────────────────────────────
+-- HARDENING FIX [3]: Added `priority` to protected fields.
+-- Priority determines deterministic tax ordering; mutating it post-creation
+-- changes the effective tax calculation history retroactively, which violates
+-- the append-only financial record contract.
+--
+-- Protected immutable fields:
+--   rate_basis_points — the actual tax percentage
+--   effective_from    — the window open boundary
+--   effective_to      — the window close boundary
+--   tax_profile_id    — the owning profile (structural link)
+--   priority          — determines resolver ordering (HARDENING: newly protected)
+--   name              — human identity of the rate component
+--
+-- Allowed mutations on an active rate (via UPDATE):
+--   is_active   → set to false to deactivate (must then create a new rate)
+--   updated_by  → audit trail
+--   version_num → OCC increment
+--   updated_at  → maintained by trigger
 CREATE OR REPLACE FUNCTION public.prevent_tax_rates_mutation()
 RETURNS TRIGGER AS $$
 BEGIN
   IF OLD.rate_basis_points IS DISTINCT FROM NEW.rate_basis_points OR
-     OLD.effective_from IS DISTINCT FROM NEW.effective_from OR
-     OLD.effective_to IS DISTINCT FROM NEW.effective_to OR
-     OLD.tax_profile_id IS DISTINCT FROM NEW.tax_profile_id OR
-     OLD.name IS DISTINCT FROM NEW.name
+     OLD.effective_from    IS DISTINCT FROM NEW.effective_from    OR
+     OLD.effective_to      IS DISTINCT FROM NEW.effective_to      OR
+     OLD.tax_profile_id    IS DISTINCT FROM NEW.tax_profile_id    OR
+     OLD.priority          IS DISTINCT FROM NEW.priority          OR
+     OLD.name              IS DISTINCT FROM NEW.name
   THEN
-    RAISE EXCEPTION 'Immutable financial fields cannot be modified. Deactivate and create a new tax rate.';
+    RAISE EXCEPTION
+      'Immutable financial fields cannot be modified on an active tax rate. '
+      'To change rate_basis_points, effective_from, effective_to, tax_profile_id, '
+      'priority, or name: deactivate the existing rate and create a new one.';
   END IF;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
+-- Trigger fires only while the rate remains active and non-deleted.
+-- Deactivation (is_active → false) itself is permitted and expected.
 CREATE TRIGGER enforce_tax_rates_immutability
   BEFORE UPDATE ON public.tax_rates
   FOR EACH ROW
-  WHEN (NEW.is_active = true AND OLD.is_active = true AND NEW.deleted_at IS NULL)
+  WHEN (OLD.is_active = true AND NEW.is_active = true AND OLD.deleted_at IS NULL)
   EXECUTE FUNCTION public.prevent_tax_rates_mutation();
 
--- 4. Create menu_item_tax_profiles mapping
+-- ============================================================
+-- SECTION 5: menu_item_tax_profiles (item ↔ profile mapping)
+-- ============================================================
+
 CREATE TABLE public.menu_item_tax_profiles (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id        UUID NOT NULL REFERENCES public.tenants(id) ON DELETE RESTRICT,
@@ -109,186 +215,233 @@ CREATE TABLE public.menu_item_tax_profiles (
   is_active        BOOLEAN NOT NULL DEFAULT true,
   created_by       UUID REFERENCES public.platform_users(id),
   updated_by       UUID REFERENCES public.platform_users(id),
+  -- OCC: all updates must present current version_num and increment it atomically
   version_num      INT NOT NULL DEFAULT 1,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-  deleted_at       TIMESTAMPTZ,
-  
-  -- Item can only have one active tax profile at a time
-  CONSTRAINT menu_item_tax_profiles_unique UNIQUE (tenant_id, menu_item_id)
+  deleted_at       TIMESTAMPTZ
 );
 
--- We only enforce uniqueness on active rows without using a partial unique index directly if we want constraint.
--- Actually, a partial unique index is safer for soft-delete. Let's drop the constraint and use an index.
-ALTER TABLE public.menu_item_tax_profiles DROP CONSTRAINT menu_item_tax_profiles_unique;
-
-CREATE UNIQUE INDEX idx_menu_item_tax_profiles_unique_active 
-  ON public.menu_item_tax_profiles(tenant_id, menu_item_id) 
+-- Partial unique index enforces one active mapping per item per tenant.
+-- Using an index (not a table constraint) allows soft-deleted rows to coexist
+-- so historical assignment records are preserved for auditing.
+CREATE UNIQUE INDEX idx_menu_item_tax_profiles_unique_active
+  ON public.menu_item_tax_profiles(tenant_id, menu_item_id)
   WHERE is_active = true AND deleted_at IS NULL;
 
-CREATE INDEX idx_menu_item_tax_profiles_item ON public.menu_item_tax_profiles(menu_item_id) WHERE is_active = true;
+CREATE INDEX idx_menu_item_tax_profiles_item
+  ON public.menu_item_tax_profiles(menu_item_id)
+  WHERE is_active = true;
 
 CREATE TRIGGER set_menu_item_tax_profiles_updated_at
   BEFORE UPDATE ON public.menu_item_tax_profiles
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
--- 5. RLS Policies
+-- ============================================================
+-- SECTION 6: Row Level Security
+-- ============================================================
 
-ALTER TABLE public.tax_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.tax_rates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tax_profiles         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tax_rates            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.menu_item_tax_profiles ENABLE ROW LEVEL SECURITY;
 
--- tax_profiles RLS
-CREATE POLICY "tenant_isolation_tax_profiles_select" ON public.tax_profiles AS RESTRICTIVE FOR SELECT TO authenticated
-USING (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
+-- ── tax_profiles ─────────────────────────────────────────────
+-- HARDENING FIX [2]: Removed permissive "authenticated_access_tax_profiles"
+-- (FOR ALL ... USING (true)) policy. Only restrictive tenant-scoped policies
+-- are kept. Any authenticated user not in the correct tenant context is denied.
 
-CREATE POLICY "tenant_isolation_tax_profiles_insert" ON public.tax_profiles AS RESTRICTIVE FOR INSERT TO authenticated
-WITH CHECK (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
+CREATE POLICY "tenant_isolation_tax_profiles_select"
+  ON public.tax_profiles AS RESTRICTIVE FOR SELECT TO authenticated
+  USING (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
 
-CREATE POLICY "tenant_isolation_tax_profiles_update" ON public.tax_profiles AS RESTRICTIVE FOR UPDATE TO authenticated
-USING (tenant_id = (current_setting('app.current_tenant_id', true))::uuid)
-WITH CHECK (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
+CREATE POLICY "tenant_isolation_tax_profiles_insert"
+  ON public.tax_profiles AS RESTRICTIVE FOR INSERT TO authenticated
+  WITH CHECK (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
 
-CREATE POLICY "tenant_isolation_tax_profiles_delete" ON public.tax_profiles AS RESTRICTIVE FOR DELETE TO authenticated
-USING (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
+CREATE POLICY "tenant_isolation_tax_profiles_update"
+  ON public.tax_profiles AS RESTRICTIVE FOR UPDATE TO authenticated
+  USING  (tenant_id = (current_setting('app.current_tenant_id', true))::uuid)
+  WITH CHECK (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
 
--- Basic authenticated access
-CREATE POLICY "authenticated_access_tax_profiles" ON public.tax_profiles FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "tenant_isolation_tax_profiles_delete"
+  ON public.tax_profiles AS RESTRICTIVE FOR DELETE TO authenticated
+  USING (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
 
--- tax_rates RLS
-CREATE POLICY "tenant_isolation_tax_rates_select" ON public.tax_rates AS RESTRICTIVE FOR SELECT TO authenticated
-USING (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
+-- ── tax_rates ─────────────────────────────────────────────────
+-- HARDENING FIX [2]: Removed permissive "authenticated_access_tax_rates".
 
-CREATE POLICY "tenant_isolation_tax_rates_insert" ON public.tax_rates AS RESTRICTIVE FOR INSERT TO authenticated
-WITH CHECK (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
+CREATE POLICY "tenant_isolation_tax_rates_select"
+  ON public.tax_rates AS RESTRICTIVE FOR SELECT TO authenticated
+  USING (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
 
-CREATE POLICY "tenant_isolation_tax_rates_update" ON public.tax_rates AS RESTRICTIVE FOR UPDATE TO authenticated
-USING (tenant_id = (current_setting('app.current_tenant_id', true))::uuid)
-WITH CHECK (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
+CREATE POLICY "tenant_isolation_tax_rates_insert"
+  ON public.tax_rates AS RESTRICTIVE FOR INSERT TO authenticated
+  WITH CHECK (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
 
-CREATE POLICY "tenant_isolation_tax_rates_delete" ON public.tax_rates AS RESTRICTIVE FOR DELETE TO authenticated
-USING (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
+CREATE POLICY "tenant_isolation_tax_rates_update"
+  ON public.tax_rates AS RESTRICTIVE FOR UPDATE TO authenticated
+  USING  (tenant_id = (current_setting('app.current_tenant_id', true))::uuid)
+  WITH CHECK (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
 
--- Basic authenticated access
-CREATE POLICY "authenticated_access_tax_rates" ON public.tax_rates FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "tenant_isolation_tax_rates_delete"
+  ON public.tax_rates AS RESTRICTIVE FOR DELETE TO authenticated
+  USING (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
 
+-- ── menu_item_tax_profiles ────────────────────────────────────
+-- HARDENING FIX [2]: Removed permissive "authenticated_access_mitp".
 
--- menu_item_tax_profiles RLS
-CREATE POLICY "tenant_isolation_mitp_select" ON public.menu_item_tax_profiles AS RESTRICTIVE FOR SELECT TO authenticated
-USING (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
+CREATE POLICY "tenant_isolation_mitp_select"
+  ON public.menu_item_tax_profiles AS RESTRICTIVE FOR SELECT TO authenticated
+  USING (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
 
-CREATE POLICY "tenant_isolation_mitp_insert" ON public.menu_item_tax_profiles AS RESTRICTIVE FOR INSERT TO authenticated
-WITH CHECK (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
+CREATE POLICY "tenant_isolation_mitp_insert"
+  ON public.menu_item_tax_profiles AS RESTRICTIVE FOR INSERT TO authenticated
+  WITH CHECK (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
 
-CREATE POLICY "tenant_isolation_mitp_update" ON public.menu_item_tax_profiles AS RESTRICTIVE FOR UPDATE TO authenticated
-USING (tenant_id = (current_setting('app.current_tenant_id', true))::uuid)
-WITH CHECK (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
+CREATE POLICY "tenant_isolation_mitp_update"
+  ON public.menu_item_tax_profiles AS RESTRICTIVE FOR UPDATE TO authenticated
+  USING  (tenant_id = (current_setting('app.current_tenant_id', true))::uuid)
+  WITH CHECK (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
 
-CREATE POLICY "tenant_isolation_mitp_delete" ON public.menu_item_tax_profiles AS RESTRICTIVE FOR DELETE TO authenticated
-USING (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
+CREATE POLICY "tenant_isolation_mitp_delete"
+  ON public.menu_item_tax_profiles AS RESTRICTIVE FOR DELETE TO authenticated
+  USING (tenant_id = (current_setting('app.current_tenant_id', true))::uuid);
 
--- Basic authenticated access
-CREATE POLICY "authenticated_access_mitp" ON public.menu_item_tax_profiles FOR ALL TO authenticated USING (true) WITH CHECK (true);
+-- ============================================================
+-- SECTION 7: RPC Resolvers
+-- ============================================================
 
--- 6. RPC Resolvers
-
--- resolve_tax_for_menu_item
+-- ── Single-item resolver ──────────────────────────────────────
+-- HARDENING FIX [5]: Added explicit ORDER BY for deterministic output.
+--
+-- Tax Aggregation Architecture (ADDITIVE — v1):
+--   Taxes within a profile are aggregated using simple addition (SUM).
+--   This means all active, in-window tax rates contribute equally to the
+--   total_basis_points figure.
+--   IMPORTANT: There is currently NO:
+--     - Compounding behavior (tax-on-tax)
+--     - Jurisdiction sequencing or layered execution
+--     - Priority-weighted calculation
+--   The `priority` column on tax_rates controls resolver ORDER BY for
+--   deterministic display/debugging, not calculation order.
+--   Future layered taxation (e.g. GST → PST compounding) will require a
+--   separate ordered-execution strategy rather than a flat SUM.
 CREATE OR REPLACE FUNCTION public.resolve_tax_for_menu_item(
-  p_tenant_id UUID,
+  p_tenant_id    UUID,
   p_menu_item_id UUID,
   p_effective_at TIMESTAMPTZ DEFAULT now()
 )
 RETURNS TABLE (
-  tax_profile_id UUID,
+  tax_profile_id   UUID,
   calculation_mode public.tax_calculation_mode,
   total_basis_points INT
 ) AS $$
 DECLARE
-  v_tax_profile_id UUID;
+  v_tax_profile_id   UUID;
   v_calculation_mode public.tax_calculation_mode;
-  v_total_bp INT;
+  v_total_bp         INT;
 BEGIN
-  -- 1. Find the active tax profile for the item
+  -- Step 1: Resolve the active tax profile for this item.
+  -- ORDER BY ensures determinism: highest-priority profile wins.
+  -- If the partial unique index (is_active + deleted_at) is correctly enforced,
+  -- only one row should ever match; ORDER BY makes this safe if it does not.
   SELECT tp.id, tp.calculation_mode
-  INTO v_tax_profile_id, v_calculation_mode
-  FROM public.menu_item_tax_profiles mitp
-  JOIN public.tax_profiles tp ON mitp.tax_profile_id = tp.id
-  WHERE mitp.tenant_id = p_tenant_id
-    AND mitp.menu_item_id = p_menu_item_id
-    AND mitp.is_active = true
-    AND mitp.deleted_at IS NULL
-    AND tp.is_active = true
-    AND tp.deleted_at IS NULL
+  INTO   v_tax_profile_id, v_calculation_mode
+  FROM   public.menu_item_tax_profiles mitp
+  JOIN   public.tax_profiles tp ON mitp.tax_profile_id = tp.id
+  WHERE  mitp.tenant_id   = p_tenant_id
+    AND  mitp.menu_item_id = p_menu_item_id
+    AND  mitp.is_active    = true
+    AND  mitp.deleted_at   IS NULL
+    AND  tp.is_active      = true
+    AND  tp.deleted_at     IS NULL
+  ORDER BY tp.priority DESC, tp.created_at DESC, tp.id DESC
   LIMIT 1;
 
   IF v_tax_profile_id IS NULL THEN
-    RETURN; -- No active tax profile mapped
+    RETURN; -- No active tax profile mapped to this item
   END IF;
 
-  -- 2. Sum up all active tax rates for the profile at the effective time
+  -- Step 2: Sum all active, in-window tax rates (additive aggregation).
+  -- Current model: taxes are additive (no compounding). See architecture note above.
   SELECT COALESCE(SUM(tr.rate_basis_points), 0)
-  INTO v_total_bp
-  FROM public.tax_rates tr
-  WHERE tr.tenant_id = p_tenant_id
-    AND tr.tax_profile_id = v_tax_profile_id
-    AND tr.is_active = true
-    AND tr.deleted_at IS NULL
-    AND tr.effective_from <= p_effective_at
-    AND (tr.effective_to IS NULL OR tr.effective_to > p_effective_at);
+  INTO   v_total_bp
+  FROM   public.tax_rates tr
+  WHERE  tr.tenant_id      = p_tenant_id
+    AND  tr.tax_profile_id = v_tax_profile_id
+    AND  tr.is_active      = true
+    AND  tr.deleted_at     IS NULL
+    AND  tr.effective_from <= p_effective_at
+    AND  (tr.effective_to IS NULL OR tr.effective_to > p_effective_at);
 
   RETURN QUERY SELECT v_tax_profile_id, v_calculation_mode, v_total_bp;
 END;
 $$ LANGUAGE plpgsql STABLE;
 
--- resolve_tax_for_menu_items_batch
+-- ── Batch resolver ────────────────────────────────────────────
+-- Resolves taxes for multiple menu items in a single query to prevent N+1.
+-- HARDENING FIX [5]: ORDER BY clause added for deterministic output ordering.
+-- HARDENING FIX [6]: Architecture comment documenting additive strategy.
+--
+-- Additive aggregation note (same as single resolver above):
+--   total_basis_points = SUM(rate_basis_points) across all active, in-window rates.
+--   No compounding. No jurisdiction sequencing. All rates contribute equally.
 CREATE OR REPLACE FUNCTION public.resolve_tax_for_menu_items_batch(
-  p_tenant_id UUID,
-  p_menu_item_ids UUID[],
-  p_effective_at TIMESTAMPTZ DEFAULT now()
+  p_tenant_id      UUID,
+  p_menu_item_ids  UUID[],
+  p_effective_at   TIMESTAMPTZ DEFAULT now()
 )
 RETURNS TABLE (
-  menu_item_id UUID,
-  tax_profile_id UUID,
-  calculation_mode public.tax_calculation_mode,
+  menu_item_id       UUID,
+  tax_profile_id     UUID,
+  calculation_mode   public.tax_calculation_mode,
   total_basis_points INT
 ) AS $$
 BEGIN
   RETURN QUERY
   WITH item_profiles AS (
-    SELECT 
+    -- One row per menu item: the highest-priority active profile.
+    -- DISTINCT ON + ORDER BY guarantees determinism if there are multiple
+    -- competing profiles (defensive: should not happen due to unique index).
+    SELECT DISTINCT ON (mitp.menu_item_id)
       mitp.menu_item_id,
-      tp.id AS tax_profile_id,
+      tp.id              AS tax_profile_id,
       tp.calculation_mode
-    FROM public.menu_item_tax_profiles mitp
-    JOIN public.tax_profiles tp ON mitp.tax_profile_id = tp.id
-    WHERE mitp.tenant_id = p_tenant_id
-      AND mitp.menu_item_id = ANY(p_menu_item_ids)
-      AND mitp.is_active = true
-      AND mitp.deleted_at IS NULL
-      AND tp.is_active = true
-      AND tp.deleted_at IS NULL
+    FROM  public.menu_item_tax_profiles mitp
+    JOIN  public.tax_profiles tp ON mitp.tax_profile_id = tp.id
+    WHERE mitp.tenant_id         = p_tenant_id
+      AND mitp.menu_item_id      = ANY(p_menu_item_ids)
+      AND mitp.is_active         = true
+      AND mitp.deleted_at        IS NULL
+      AND tp.is_active           = true
+      AND tp.deleted_at          IS NULL
+    ORDER BY mitp.menu_item_id, tp.priority DESC, tp.created_at DESC, tp.id DESC
   ),
   aggregated_rates AS (
-    SELECT 
+    -- Additive aggregation: simple SUM of basis points per profile.
+    -- Future: replace with ordered-execution CTE for compounding tax support.
+    SELECT
       tr.tax_profile_id,
       COALESCE(SUM(tr.rate_basis_points)::INT, 0) AS total_basis_points
-    FROM public.tax_rates tr
-    WHERE tr.tenant_id = p_tenant_id
-      AND tr.is_active = true
-      AND tr.deleted_at IS NULL
+    FROM  public.tax_rates tr
+    WHERE tr.tenant_id      = p_tenant_id
+      AND tr.is_active      = true
+      AND tr.deleted_at     IS NULL
       AND tr.effective_from <= p_effective_at
       AND (tr.effective_to IS NULL OR tr.effective_to > p_effective_at)
     GROUP BY tr.tax_profile_id
   )
-  SELECT 
+  SELECT
     ip.menu_item_id,
     ip.tax_profile_id,
     ip.calculation_mode,
-    COALESCE(ar.total_basis_points, 0) AS total_basis_points
-  FROM item_profiles ip
-  LEFT JOIN aggregated_rates ar ON ip.tax_profile_id = ar.tax_profile_id;
+    COALESCE(ar.total_basis_points, 0)::INT AS total_basis_points
+  FROM  item_profiles ip
+  LEFT JOIN aggregated_rates ar ON ip.tax_profile_id = ar.tax_profile_id
+  -- HARDENING FIX [5]: Deterministic output ordering for batch results
+  ORDER BY ip.menu_item_id;
+
 END;
 $$ LANGUAGE plpgsql STABLE;
-
 
 COMMIT;
