@@ -2,7 +2,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/sync_state_chip.dart';
+import '../../../menu/presentation/state/menu_providers.dart';
+import '../../../menu/presentation/widgets/menu_error_state.dart';
+import '../../../menu/presentation/widgets/menu_skeleton_loader.dart';
 import '../../domain/entities/menu_product.dart';
 import '../../domain/entities/order.dart';
 import '../../domain/entities/order_item.dart';
@@ -22,29 +27,20 @@ class OrderEditorScreen extends ConsumerStatefulWidget {
   ConsumerState<OrderEditorScreen> createState() => _OrderEditorScreenState();
 }
 
-class _OrderEditorScreenState extends ConsumerState<OrderEditorScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _OrderEditorScreenState extends ConsumerState<OrderEditorScreen> {
   int _selectedSeat = 1;
-  final List<String> _categories = ['All', 'Mains', 'Greens', 'Sides', 'Drinks'];
-
   String _searchQuery = '';
 
   @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: _categories.length, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    // Start background availability overlay polling when active
+    ref.watch(menuAvailabilityPollingProvider);
+
     final activeOrderAsync = ref.watch(activeOrderNotifierProvider(widget.tableId));
+    final menuSnapshotAsync = ref.watch(menuSnapshotNotifierProvider);
     final menuProducts = ref.watch(menuProductsProvider);
+    final menuSyncState = ref.watch(menuStalenessProvider);
+    
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     
@@ -52,10 +48,18 @@ class _OrderEditorScreenState extends ConsumerState<OrderEditorScreen> with Sing
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 800;
 
+    // Build availability map from snapshot data
+    final availabilityMap = menuSnapshotAsync.maybeWhen(
+      data: (snapshot) => {for (final item in snapshot.items) item.id: item.isAvailable},
+      orElse: () => <String, bool>{},
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Table ${widget.tableId} - Order Editor'),
         actions: [
+          SyncStateChip(overrideState: menuSyncState),
+          const SizedBox(width: 8),
           _buildSeatSelector(theme, isDark),
           const SizedBox(width: 8),
         ],
@@ -89,7 +93,7 @@ class _OrderEditorScreenState extends ConsumerState<OrderEditorScreen> with Sing
                 // Left Menu Browser
                 Expanded(
                   flex: 3,
-                  child: _buildMenuBrowser(menuProducts, theme, isDark),
+                  child: _buildMenuBrowserSection(menuSnapshotAsync, menuProducts, availabilityMap, theme, isDark),
                 ),
                 const VerticalDivider(width: 1),
                 // Right Checkout/Draft Sidebar
@@ -100,12 +104,12 @@ class _OrderEditorScreenState extends ConsumerState<OrderEditorScreen> with Sing
               ],
             );
           } else {
-            // Mobile Tabbed View or Sliding Panel
+            // Mobile Layout
             return Column(
               children: [
                 Expanded(
                   flex: 3,
-                  child: _buildMenuBrowser(menuProducts, theme, isDark),
+                  child: _buildMenuBrowserSection(menuSnapshotAsync, menuProducts, availabilityMap, theme, isDark),
                 ),
                 const Divider(height: 1),
                 Expanded(
@@ -149,124 +153,198 @@ class _OrderEditorScreenState extends ConsumerState<OrderEditorScreen> with Sing
     );
   }
 
-  Widget _buildMenuBrowser(List<MenuProduct> products, ThemeData theme, bool isDark) {
-    final searchFiltered = products.where((p) =>
-      p.name.toLowerCase().contains(_searchQuery.toLowerCase())
-    ).toList();
+  Widget _buildMenuBrowserSection(
+    AsyncValue menuSnapshotAsync,
+    List<MenuProduct> products,
+    Map<String, bool> availabilityMap,
+    ThemeData theme,
+    bool isDark,
+  ) {
+    return menuSnapshotAsync.when(
+      loading: () => const MenuSkeletonLoader(),
+      error: (err, stack) => MenuErrorState(
+        errorMessage: err.toString(),
+        onRetry: () => ref.read(menuSnapshotNotifierProvider.notifier).refresh(),
+      ),
+      data: (snapshot) {
+        final categories = ['All'] + snapshot.categories.map((c) => c.name).toList();
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: TextField(
-            decoration: InputDecoration(
-              hintText: 'Search menu items...',
-              prefixIcon: const Icon(Icons.search_rounded),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-            ),
-            onChanged: (val) {
-              setState(() {
-                _searchQuery = val;
-              });
-            },
-          ),
-        ),
-        TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          labelColor: AppColors.primary,
-          unselectedLabelColor: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
-          indicatorColor: AppColors.primary,
-          tabs: _categories.map((cat) => Tab(text: cat)).toList(),
-        ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: _categories.map((category) {
-              final filtered = category == 'All'
-                  ? searchFiltered
-                  : searchFiltered.where((p) => p.category == category).toList();
-
-              return GridView.builder(
-                padding: const EdgeInsets.all(16),
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 200,
-                  mainAxisExtent: 140,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
+        return DefaultTabController(
+          length: categories.length,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Search menu items...',
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  onChanged: (val) {
+                    setState(() {
+                      _searchQuery = val;
+                    });
+                  },
                 ),
-                itemCount: filtered.length,
-                itemBuilder: (context, index) {
-                  final product = filtered[index];
-                  return GestureDetector(
-                    onDoubleTap: () => _showModifiersSheet(product),
-                    onHorizontalDragEnd: (details) {
-                      if (details.primaryVelocity != null && details.primaryVelocity! > 0) {
-                        ref
-                            .read(activeOrderNotifierProvider(widget.tableId).notifier)
-                            .addItem(product, _selectedSeat, const []);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Added ${product.name} to Seat $_selectedSeat'),
-                            duration: const Duration(seconds: 1),
-                          ),
-                        );
-                      }
-                    },
-                    child: Card(
-                      color: isDark ? AppColors.darkSurface : Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: BorderSide(
-                          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
-                        ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
+              ),
+              TabBar(
+                isScrollable: true,
+                labelColor: AppColors.primary,
+                unselectedLabelColor: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                indicatorColor: AppColors.primary,
+                tabs: categories.map((cat) => Tab(text: cat)).toList(),
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: categories.map((category) {
+                    final searchFiltered = products.where((p) =>
+                      p.name.toLowerCase().contains(_searchQuery.toLowerCase())
+                    ).toList();
+
+                    final filtered = category == 'All'
+                        ? searchFiltered
+                        : searchFiltered.where((p) => p.category == category).toList();
+
+                    if (filtered.isEmpty) {
+                      return Center(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
+                            Icon(Icons.search_off_rounded, size: 48, color: isDark ? AppColors.darkBorder : Colors.grey[400]),
+                            const SizedBox(height: 12),
                             Text(
-                              product.name,
-                              style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const Spacer(),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  product.price.formatted,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: AppColors.primary,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                IconButton.filled(
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: AppColors.primary,
-                                    foregroundColor: Colors.white,
-                                  ),
-                                  icon: const Icon(Icons.add_rounded, size: 20),
-                                  onPressed: () => _showModifiersSheet(product),
-                                ),
-                              ],
+                              'No menu items found',
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                              ),
                             ),
                           ],
                         ),
+                      );
+                    }
+
+                    return GridView.builder(
+                      padding: const EdgeInsets.all(16),
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 200,
+                        mainAxisExtent: 140,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
                       ),
-                    ),
-                  );
-                },
-              );
-            }).toList(),
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        final product = filtered[index];
+                        final isAvailable = availabilityMap[product.id] ?? true;
+
+                        return GestureDetector(
+                          onDoubleTap: isAvailable ? () => _showModifiersSheet(product) : null,
+                          onHorizontalDragEnd: isAvailable
+                              ? (details) {
+                                  if (details.primaryVelocity != null && details.primaryVelocity! > 0) {
+                                    ref
+                                        .read(activeOrderNotifierProvider(widget.tableId).notifier)
+                                        .addItem(product, _selectedSeat, const []);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Added ${product.name} to Seat $_selectedSeat'),
+                                        duration: const Duration(seconds: 1),
+                                      ),
+                                    );
+                                  }
+                                }
+                              : null,
+                          child: Stack(
+                            children: [
+                              Card(
+                                color: isDark ? AppColors.darkSurface : Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  side: BorderSide(
+                                    color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                                  ),
+                                ),
+                                child: Opacity(
+                                  opacity: isAvailable ? 1.0 : 0.45,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          product.name,
+                                          style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const Spacer(),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              product.price.formatted,
+                                              style: theme.textTheme.bodyMedium?.copyWith(
+                                                color: AppColors.primary,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            IconButton.filled(
+                                              style: IconButton.styleFrom(
+                                                backgroundColor: AppColors.primary,
+                                                foregroundColor: Colors.white,
+                                              ),
+                                              icon: const Icon(Icons.add_rounded, size: 20),
+                                              onPressed: isAvailable ? () => _showModifiersSheet(product) : null,
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              if (!isAvailable)
+                                Positioned.fill(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.transparent,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Center(
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.error,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: const Text(
+                                          'OUT OF STOCK',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -436,17 +514,17 @@ class _OrderEditorScreenState extends ConsumerState<OrderEditorScreen> with Sing
                   onPressed: order.items.isEmpty
                       ? null
                       : () async {
-                          await ref.read(activeOrderNotifierProvider(widget.tableId).notifier).sendToKitchen();
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Order sent to kitchen display queue successfully!'),
-                                backgroundColor: AppColors.success,
-                              ),
-                            );
-                            context.pop();
-                          }
-                        },
+                           await ref.read(activeOrderNotifierProvider(widget.tableId).notifier).sendToKitchen();
+                           if (mounted) {
+                             ScaffoldMessenger.of(context).showSnackBar(
+                               const SnackBar(
+                                 content: Text('Order sent to kitchen display queue successfully!'),
+                                 backgroundColor: AppColors.success,
+                               ),
+                             );
+                             context.pop();
+                           }
+                         },
                   child: const Text('Send to Kitchen', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
