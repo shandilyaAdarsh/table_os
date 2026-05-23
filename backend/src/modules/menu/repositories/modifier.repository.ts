@@ -1,6 +1,7 @@
 // ============================================================
 // src/modules/menu/repositories/modifier.repository.ts
 // DB access for modifier groups and options.
+// Bridges the legacy menu module to the new Core Modifier System schema.
 // ============================================================
 
 import { supabaseAdmin } from '../../../config/supabase';
@@ -16,6 +17,45 @@ import type {
   CreateModifierOptionDto, UpdateModifierOptionDto,
 } from '../menu.dtos';
 
+// ─── Helper Mappers ───────────────────────────────────────────
+
+function mapGroup(g: any): ModifierGroup {
+  if (!g) return g;
+  return {
+    id: g.id,
+    tenant_id: g.tenant_id,
+    name: g.name,
+    description: g.description,
+    is_required: g.is_required,
+    min_select: g.min_select,
+    max_select: g.max_select,
+    sort_order: g.display_order ?? 0,
+    is_active: g.is_active,
+    created_at: g.created_at,
+    updated_at: g.updated_at,
+    deleted_at: g.deleted_at,
+  };
+}
+
+function mapOption(opt: any): ModifierOption {
+  if (!opt) return opt;
+  return {
+    id: opt.id,
+    tenant_id: opt.tenant_id,
+    modifier_group_id: opt.modifier_group_id,
+    name: opt.name,
+    price_delta: opt.price_delta_minor !== null && opt.price_delta_minor !== undefined
+      ? Number(opt.price_delta_minor) / 100
+      : 0,
+    is_default: opt.is_default,
+    sort_order: opt.display_order ?? 0,
+    is_active: opt.is_active,
+    created_at: opt.created_at,
+    updated_at: opt.updated_at,
+    deleted_at: opt.deleted_at,
+  };
+}
+
 // ─── Modifier Group Queries ───────────────────────────────────
 
 export async function findModifierGroupsByTenant(
@@ -26,10 +66,10 @@ export async function findModifierGroupsByTenant(
     .select('*')
     .eq('tenant_id', tenantId)
     .is('deleted_at', null)
-    .order('sort_order', { ascending: true });
+    .order('display_order', { ascending: true });
 
   if (error) throw new Error(`[ModifierRepo] findModifierGroupsByTenant: ${error.message}`);
-  return data ?? [];
+  return (data ?? []).map(mapGroup);
 }
 
 export async function findModifierGroupById(
@@ -45,7 +85,22 @@ export async function findModifierGroupById(
     .maybeSingle();
 
   if (error) throw new Error(`[ModifierRepo] findModifierGroupById: ${error.message}`);
-  return data;
+  return data ? mapGroup(data) : null;
+}
+
+export async function findAnyModifierGroupById(
+  tenantId: string,
+  groupId: string
+): Promise<ModifierGroup | null> {
+  const { data, error } = await supabaseAdmin
+    .from('modifier_groups')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('id', groupId)
+    .maybeSingle();
+
+  if (error) throw new Error(`[ModifierRepo] findAnyModifierGroupById: ${error.message}`);
+  return data ? mapGroup(data) : null;
 }
 
 /** Load groups and their options for a given set of group IDs. */
@@ -62,7 +117,7 @@ export async function findModifierGroupsWithOptions(
     .in('id', groupIds)
     .eq('is_active', true)
     .is('deleted_at', null)
-    .order('sort_order', { ascending: true });
+    .order('display_order', { ascending: true });
 
   if (gError) throw new Error(`[ModifierRepo] findModifierGroupsWithOptions (groups): ${gError.message}`);
 
@@ -73,19 +128,20 @@ export async function findModifierGroupsWithOptions(
     .in('modifier_group_id', groupIds)
     .eq('is_active', true)
     .is('deleted_at', null)
-    .order('sort_order', { ascending: true });
+    .order('display_order', { ascending: true });
 
   if (oError) throw new Error(`[ModifierRepo] findModifierGroupsWithOptions (options): ${oError.message}`);
 
   const optionsByGroup = new Map<string, ModifierOption[]>();
   for (const opt of options ?? []) {
-    const list = optionsByGroup.get(opt.modifier_group_id) ?? [];
-    list.push(opt);
-    optionsByGroup.set(opt.modifier_group_id, list);
+    const mapped = mapOption(opt);
+    const list = optionsByGroup.get(mapped.modifier_group_id) ?? [];
+    list.push(mapped);
+    optionsByGroup.set(mapped.modifier_group_id, list);
   }
 
   return (groups ?? []).map((g) => ({
-    ...g,
+    ...mapGroup(g),
     options: optionsByGroup.get(g.id) ?? [],
   }));
 }
@@ -105,7 +161,7 @@ export async function createModifierGroup(
       is_required: dto.is_required ?? false,
       min_select:  dto.min_select ?? 0,
       max_select:  dto.max_select ?? null,
-      sort_order:  dto.sort_order ?? 0,
+      display_order: dto.sort_order ?? 0,
     })
     .select()
     .single();
@@ -114,7 +170,7 @@ export async function createModifierGroup(
     logger.error({ err: error, tenantId, dto }, 'createModifierGroup failed');
     throw new Error(`[ModifierRepo] createModifierGroup: ${error.message}`);
   }
-  return data;
+  return mapGroup(data);
 }
 
 export async function updateModifierGroup(
@@ -122,9 +178,15 @@ export async function updateModifierGroup(
   groupId: string,
   dto: UpdateModifierGroupDto
 ): Promise<ModifierGroup> {
+  const mappedPayload: any = { ...dto };
+  if (dto.sort_order !== undefined) {
+    mappedPayload.display_order = dto.sort_order;
+    delete mappedPayload.sort_order;
+  }
+
   const { data, error } = await supabaseAdmin
     .from('modifier_groups')
-    .update({ ...dto })
+    .update(mappedPayload)
     .eq('tenant_id', tenantId)
     .eq('id', groupId)
     .is('deleted_at', null)
@@ -132,7 +194,7 @@ export async function updateModifierGroup(
     .single();
 
   if (error) throw new Error(`[ModifierRepo] updateModifierGroup: ${error.message}`);
-  return data;
+  return mapGroup(data);
 }
 
 export async function softDeleteModifierGroup(
@@ -148,7 +210,54 @@ export async function softDeleteModifierGroup(
   if (error) throw new Error(`[ModifierRepo] softDeleteModifierGroup: ${error.message}`);
 }
 
-// ─── Modifier Option Mutations ────────────────────────────────
+export async function restoreModifierGroup(
+  tenantId: string,
+  groupId: string
+): Promise<ModifierGroup> {
+  const { data, error } = await supabaseAdmin
+    .from('modifier_groups')
+    .update({ deleted_at: null, is_active: true })
+    .eq('tenant_id', tenantId)
+    .eq('id', groupId)
+    .select()
+    .single();
+
+  if (error) throw new Error(`[ModifierRepo] restoreModifierGroup: ${error.message}`);
+  return mapGroup(data);
+}
+
+// ─── Modifier Option Queries/Mutations ────────────────────────
+
+export async function findModifierOptionById(
+  tenantId: string,
+  optionId: string
+): Promise<ModifierOption | null> {
+  const { data, error } = await supabaseAdmin
+    .from('modifier_options')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('id', optionId)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (error) throw new Error(`[ModifierRepo] findModifierOptionById: ${error.message}`);
+  return data ? mapOption(data) : null;
+}
+
+export async function findAnyModifierOptionById(
+  tenantId: string,
+  optionId: string
+): Promise<ModifierOption | null> {
+  const { data, error } = await supabaseAdmin
+    .from('modifier_options')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('id', optionId)
+    .maybeSingle();
+
+  if (error) throw new Error(`[ModifierRepo] findAnyModifierOptionById: ${error.message}`);
+  return data ? mapOption(data) : null;
+}
 
 export async function createModifierOption(
   tenantId: string,
@@ -160,15 +269,15 @@ export async function createModifierOption(
       tenant_id:         tenantId,
       modifier_group_id: dto.modifier_group_id,
       name:              dto.name,
-      price_delta:       dto.price_delta ?? 0,
+      price_delta_minor: dto.price_delta !== undefined ? Math.round(dto.price_delta * 100) : 0,
       is_default:        dto.is_default ?? false,
-      sort_order:        dto.sort_order ?? 0,
+      display_order:     dto.sort_order ?? 0,
     })
     .select()
     .single();
 
   if (error) throw new Error(`[ModifierRepo] createModifierOption: ${error.message}`);
-  return data;
+  return mapOption(data);
 }
 
 export async function updateModifierOption(
@@ -176,9 +285,19 @@ export async function updateModifierOption(
   optionId: string,
   dto: UpdateModifierOptionDto
 ): Promise<ModifierOption> {
+  const mappedPayload: any = { ...dto };
+  if (dto.sort_order !== undefined) {
+    mappedPayload.display_order = dto.sort_order;
+    delete mappedPayload.sort_order;
+  }
+  if (dto.price_delta !== undefined) {
+    mappedPayload.price_delta_minor = Math.round(dto.price_delta * 100);
+    delete mappedPayload.price_delta;
+  }
+
   const { data, error } = await supabaseAdmin
     .from('modifier_options')
-    .update({ ...dto })
+    .update(mappedPayload)
     .eq('tenant_id', tenantId)
     .eq('id', optionId)
     .is('deleted_at', null)
@@ -186,7 +305,7 @@ export async function updateModifierOption(
     .single();
 
   if (error) throw new Error(`[ModifierRepo] updateModifierOption: ${error.message}`);
-  return data;
+  return mapOption(data);
 }
 
 export async function softDeleteModifierOption(
@@ -202,6 +321,22 @@ export async function softDeleteModifierOption(
   if (error) throw new Error(`[ModifierRepo] softDeleteModifierOption: ${error.message}`);
 }
 
+export async function restoreModifierOption(
+  tenantId: string,
+  optionId: string
+): Promise<ModifierOption> {
+  const { data, error } = await supabaseAdmin
+    .from('modifier_options')
+    .update({ deleted_at: null, is_active: true })
+    .eq('tenant_id', tenantId)
+    .eq('id', optionId)
+    .select()
+    .single();
+
+  if (error) throw new Error(`[ModifierRepo] restoreModifierOption: ${error.message}`);
+  return mapOption(data);
+}
+
 // ─── Branch Modifier Overrides ────────────────────────────────
 
 export async function upsertBranchModifierOptionOverride(
@@ -210,10 +345,18 @@ export async function upsertBranchModifierOptionOverride(
   modifierOptionId: string,
   override: Partial<{ override_price_delta: number | null; is_available: boolean | null }>
 ): Promise<void> {
+  const mappedOverride: any = { ...override };
+  if (override.override_price_delta !== undefined) {
+    mappedOverride.override_price_delta_minor = override.override_price_delta !== null
+      ? Math.round(override.override_price_delta * 100)
+      : null;
+    delete mappedOverride.override_price_delta;
+  }
+
   const { error } = await supabaseAdmin
     .from('branch_modifier_option_overrides')
     .upsert(
-      { tenant_id: tenantId, branch_id: branchId, modifier_option_id: modifierOptionId, ...override },
+      { tenant_id: tenantId, branch_id: branchId, modifier_option_id: modifierOptionId, ...mappedOverride },
       { onConflict: 'tenant_id,branch_id,modifier_option_id' }
     );
 
@@ -252,7 +395,13 @@ export async function findBranchModifierOverrides(
     .in('modifier_option_id', modifierOptionIds);
 
   if (error) throw new Error(`[ModifierRepo] findBranchModifierOverrides: ${error.message}`);
-  return data ?? [];
+
+  return (data ?? []).map((o: any) => ({
+    ...o,
+    override_price_delta: o.override_price_delta_minor !== undefined && o.override_price_delta_minor !== null
+      ? Number(o.override_price_delta_minor) / 100
+      : null
+  }));
 }
 
 export async function findBranchModifierGroupOverrides(

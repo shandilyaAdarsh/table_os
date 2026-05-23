@@ -9,23 +9,27 @@ import { AppError } from '../../../shared/errors/AppError';
 import {
   findCategoriesByTenant,
   findCategoryById,
+  findAnyCategoryById,
   findCategoryBySlug,
   findVisibleCategoriesForBranch,
   createCategory,
   updateCategory,
   softDeleteCategory,
+  restoreCategory,
   setCategoryBranchVisibility,
   listMenuCategories,
 } from '../repositories/menu-category.repository';
 import {
   findItemsByTenant,
   findItemById,
+  findAnyItemById,
   findItemBySlug,
   findItemBySku,
   findAllBranchItemOverrides,
   createMenuItem,
   updateMenuItem,
   softDeleteMenuItem,
+  restoreItem,
   upsertBranchItemOverride,
   deleteBranchItemOverride,
   replaceItemModifierGroups,
@@ -37,6 +41,12 @@ import {
   updateModifierGroup,
   createModifierOption,
   updateModifierOption,
+  softDeleteModifierGroup,
+  restoreModifierGroup,
+  softDeleteModifierOption,
+  restoreModifierOption,
+  findAnyModifierGroupById,
+  findAnyModifierOptionById,
   upsertBranchModifierOptionOverride,
   upsertBranchModifierGroupOverride,
   findBranchModifierOverrides,
@@ -44,7 +54,7 @@ import {
 } from '../repositories/modifier.repository';
 import type {
   MenuCategory, MenuCategoryTree, MenuItem, EffectiveMenuItem,
-  ModifierGroupWithOptions, ModifierOption,
+  ModifierGroupWithOptions, ModifierOption, ModifierGroup
 } from '../menu.types';
 import type {
   CreateMenuCategoryDto, UpdateMenuCategoryDto, SetCategoryBranchVisibilityDto, MenuCategoryListQuery,
@@ -197,6 +207,14 @@ export async function deleteMenuCategory(tenantId: string, categoryId: string, d
   await softDeleteCategory(tenantId, categoryId, deletedBy);
 }
 
+export async function restoreMenuCategory(tenantId: string, categoryId: string, restoredBy: string): Promise<MenuCategory> {
+  const existing = await findAnyCategoryById(tenantId, categoryId);
+  if (!existing) throw new AppError('Category not found', 404, 'NOT_FOUND');
+  if (!existing.deleted_at) throw new AppError('Category is not deleted', 400, 'VALIDATION_ERROR');
+
+  return restoreCategory(tenantId, categoryId, restoredBy, existing.version_num);
+}
+
 export async function setCategoryVisibilityForBranch(
   tenantId: string,
   categoryId: string,
@@ -278,6 +296,14 @@ export async function deleteMenuItem(tenantId: string, itemId: string, deletedBy
   const existing = await findItemById(tenantId, itemId);
   if (!existing) throw new AppError('Menu item not found', 404, 'NOT_FOUND');
   await softDeleteMenuItem(tenantId, itemId, deletedBy, existing.version_num);
+}
+
+export async function restoreMenuItem(tenantId: string, itemId: string, restoredBy: string): Promise<MenuItem> {
+  const existing = await findAnyItemById(tenantId, itemId);
+  if (!existing) throw new AppError('Menu item not found', 404, 'NOT_FOUND');
+  if (!existing.deleted_at) throw new AppError('Menu item is not deleted', 400, 'VALIDATION_ERROR');
+
+  return restoreItem(tenantId, itemId, restoredBy, existing.version_num);
 }
 
 export async function linkModifierGroupsToItem(
@@ -497,4 +523,30 @@ export async function updateModifierOptionData(
   dto: UpdateModifierOptionDto
 ): Promise<ModifierOption> {
   return updateModifierOption(tenantId, optionId, dto);
+}
+
+export async function deleteModifierGroup(tenantId: string, groupId: string): Promise<void> {
+  const existing = await findAnyModifierGroupById(tenantId, groupId);
+  if (!existing) throw new AppError('Modifier group not found', 404, 'NOT_FOUND');
+  await softDeleteModifierGroup(tenantId, groupId);
+}
+
+export async function restoreModifierGroupData(tenantId: string, groupId: string): Promise<ModifierGroup> {
+  const existing = await findAnyModifierGroupById(tenantId, groupId);
+  if (!existing) throw new AppError('Modifier group not found', 404, 'NOT_FOUND');
+  if (!existing.deleted_at) throw new AppError('Modifier group is not deleted', 400, 'VALIDATION_ERROR');
+  return restoreModifierGroup(tenantId, groupId);
+}
+
+export async function deleteModifierOption(tenantId: string, optionId: string): Promise<void> {
+  const existing = await findAnyModifierOptionById(tenantId, optionId);
+  if (!existing) throw new AppError('Modifier option not found', 404, 'NOT_FOUND');
+  await softDeleteModifierOption(tenantId, optionId);
+}
+
+export async function restoreModifierOptionData(tenantId: string, optionId: string): Promise<ModifierOption> {
+  const existing = await findAnyModifierOptionById(tenantId, optionId);
+  if (!existing) throw new AppError('Modifier option not found', 404, 'NOT_FOUND');
+  if (!existing.deleted_at) throw new AppError('Modifier option is not deleted', 400, 'VALIDATION_ERROR');
+  return restoreModifierOption(tenantId, optionId);
 }

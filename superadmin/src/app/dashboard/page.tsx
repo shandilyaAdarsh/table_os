@@ -462,7 +462,7 @@ export default function DashboardPage() {
                     return (
                       <>
                         <line x1={pts[nearest].x} y1="0" x2={pts[nearest].x} y2={chartH} stroke="#C0272D" strokeWidth="1" strokeDasharray="4 4" strokeOpacity="0.4" />
-                        <circle cx={pts[nearest].x} cy={pts[nearest].y} r="6" fill="#C0272D" stroke="#1C1B1B" strokeWidth="3" shadow="0 0 10px rgba(192,39,45,0.5)" />
+                        <circle cx={pts[nearest].x} cy={pts[nearest].y} r="6" fill="#C0272D" stroke="#1C1B1B" strokeWidth="3" style={{ filter: 'drop-shadow(0px 0px 10px rgba(192, 39, 45, 0.5))' }} />
                       </>
                     )
                   })()}
