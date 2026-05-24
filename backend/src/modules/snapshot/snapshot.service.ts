@@ -103,8 +103,9 @@ export class SnapshotService {
 
     // ── Step 5: Assemble final snapshot DTO ────────────────────
     const snapshot: BranchMenuSnapshotDto = {
-      snapshot_hash: snapshotHash,
+      snapshot_id: snapshotHash,
       ...payload,
+      etag: snapshotHash,
     };
 
     const metrics: SnapshotTimingMetrics = {

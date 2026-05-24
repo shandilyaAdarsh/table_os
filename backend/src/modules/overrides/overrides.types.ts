@@ -114,6 +114,7 @@ export interface ResolvedMenuItem {
   slug: string;
   is_visible: boolean; // Computed: base hidden check + availability check + branch override visibility
   price: ResolvedPrice;
+  tax_profile_id: string | null;
   modifier_groups: ResolvedModifierGroup[];
 }
 
@@ -127,9 +128,16 @@ export interface ResolvedCategory {
   items: ResolvedMenuItem[];
 }
 
+export interface ResolvedTaxProfile {
+  id: string;
+  calculation_mode: 'inclusive' | 'exclusive';
+  total_basis_points: number;
+}
+
 export interface ResolvedEffectiveMenu {
   branch_id: string;
   tenant_id: string;
   resolved_at: string;
   categories: ResolvedCategory[];
+  tax_profiles: ResolvedTaxProfile[];
 }

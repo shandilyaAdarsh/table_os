@@ -17,6 +17,7 @@ import { modifierRouter } from './modules/modifier/modifier.router';
 import { availabilityRouter } from './modules/availability/availability.router';
 import { snapshotRouter } from './modules/snapshot/snapshot.router';
 import { publicMenuRouter } from './modules/snapshot/public-menu.router';
+import { publicAvailabilityRouter } from './modules/availability/public-availability.router';
 import { adminRouter } from './modules/admin/admin.router';
 import { qrRouter } from './modules/qr/qr.router';
 import { cartRouter } from './modules/cart/cart.router';
@@ -90,8 +91,9 @@ export function createApp(): express.Application {
 
   // ─── Public Snapshot API (no auth required) ─────────────────
   // CDN-cacheable branch menu snapshots for QR ordering.
-  // Per public_api_contracts.md — versioned at /api/v1/branches.
-  app.use('/api/v1/branches', snapshotRouter);
+  // Per public_api_contracts.md — versioned at /api/v1/public/branches.
+  app.use('/api/v1/public/branches', snapshotRouter);
+  app.use('/api/v1/public/branches', publicAvailabilityRouter);
   app.use('/public', publicMenuRouter);
 
   // ─── Public QR Session API (no auth required) ───────────────

@@ -7,10 +7,6 @@
 // ============================================================
 
 import type { Request, Response, NextFunction } from 'express';
-import { validateAccessToken } from '../modules/auth/services/auth.service';
-import { findActiveDeviceSession } from '../modules/auth/repositories/auth.repository';
-import { resolvePermissions } from '../utils/permission-checker';
-import { touchSession, checkAndFlagSuspiciousActivity } from '../modules/rbac/services/session.service';
 import {
   AuthenticationError,
   ForbiddenError,
@@ -39,16 +35,15 @@ declare global {
 
 // ─── authenticate ─────────────────────────────────────────────
 
+import { RuntimeAuthService } from '../modules/auth/services/runtime-auth.service';
+
 /**
- * Core authentication middleware.
+ * Core authentication middleware (Runtime Governance).
  *
  * Flow:
- * 1. Extract Bearer token
- * 2. Validate JWT via Supabase Auth (server-side — not decoded locally)
- * 3. Cross-check admin_profiles in DB
- * 4. Verify device session integrity (anti-replay)
- * 5. Resolve granular permissions via DB RPC + cache
- * 6. Populate req.context from verified server data only
+ * 1. Extract Bearer token (Must be a backend-minted Runtime JWT)
+ * 2. Validate JWT symmetrically via jsonwebtoken
+ * 3. Populate req.context from the deterministic JWT payload (NO DB lookups)
  */
 export async function authenticate(
   req: Request,
@@ -64,74 +59,32 @@ export async function authenticate(
 
     const token = authHeader.slice(7);
     const deviceFingerprint = req.headers['x-device-fingerprint'] as string | undefined;
-    const deviceSessionId   = req.headers['x-device-session-id']  as string | undefined;
 
     if (!deviceFingerprint) {
       throw new AuthenticationError('Missing X-Device-Fingerprint header');
     }
 
-    // ── Step 1: Validate JWT via Supabase (cryptographic + DB cross-check)
-    const validation = await validateAccessToken(token);
+    // ── Step 1: Validate deterministic Runtime JWT
+    const payload = RuntimeAuthService.verifyRuntimeSession(token);
 
-    if (!validation.valid || !validation.user_id) {
-      throw new AuthenticationError(validation.error ?? 'Invalid or expired token');
-    }
-
-    // ── Step 2: Verify device session integrity (anti-replay)
-    if (deviceSessionId) {
-      const deviceSession = await findActiveDeviceSession(deviceSessionId, deviceFingerprint);
-
-      if (!deviceSession) {
-        logger.warn(
-          { userId: validation.user_id, deviceSessionId },
-          'Device session not found or revoked'
-        );
-        throw new SessionRevokedError();
-      }
-
-      // Touch last_activity_at — async, non-blocking
-      void touchSession(deviceSessionId);
-    }
-
-    // ── Step 3: Resolve granular permissions
-    const permissions = await resolvePermissions(
-      validation.user_id,
-      validation.tenant_id ?? null
-    );
-
-    // ── Step 4: Suspicious activity detection (device + context anomalies)
-    if (deviceSessionId) {
-      const isValid = await checkAndFlagSuspiciousActivity({
-        deviceSessionId,
-        currentIp: req.ip ?? '',
-        currentUa: req.headers['user-agent'] ?? '',
-        deviceFingerprint: deviceFingerprint!,
-        // geo_country could be added if using a geoip middleware
-      });
-
-      if (!isValid) {
-        throw new SessionRevokedError('Suspicious activity detected - session invalidated');
-      }
-    }
-
-    // ── Step 5: Populate request context from VERIFIED server data only
+    // ── Step 2: Populate request context from VERIFIED strict payload only
     const context: Request['context'] = {
-      id:                   validation.user_id,
-      userId:               validation.user_id,
-      email:                validation.email!,
-      role:                 validation.role as Role,
-      tenantId:             validation.tenant_id ?? null,
-      tenant_id:            validation.tenant_id ?? null,
-      branchIds:            validation.branch_ids ?? [],
-      permissions,
-      device_session_id:    deviceSessionId,
-      full_name:            validation.full_name ?? '',
-      must_change_password: validation.must_change_password ?? false,
+      id:                   payload.sub,
+      userId:               payload.sub,
+      email:                '', // Payload no longer carries email to remain lightweight
+      role:                 payload.role as Role,
+      tenantId:             payload.tenant_id,
+      tenant_id:            payload.tenant_id,
+      branchIds:            [payload.branch_id], // The runtime context operates in ONE strict branch
+      permissions:          new Set(payload.permissions),
+      device_session_id:    payload.session_id,
+      full_name:            '', 
+      must_change_password: false,
     };
 
     req.context           = context;
     req.device_fingerprint = deviceFingerprint;
-    // req.ip is set by Express using trust proxy — never read X-Forwarded-For manually
+    // req.ip is set by Express using trust proxy
     req.ip_address = req.ip ?? '';
 
     next();

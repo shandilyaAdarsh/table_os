@@ -6,10 +6,19 @@
 // Strict adherence to snapshot_payload_spec.md.
 // ============================================================
 
+// ─── Tax Profile DTO ───────────────────────────────────────────
+
+export interface SnapshotTaxProfileDto {
+  id: string;
+  calculation_mode: 'inclusive' | 'exclusive';
+  total_basis_points: number;
+}
+
 // ─── Modifier Option DTO ─────────────────────────────────────
 
 export interface SnapshotModifierOptionDto {
   id: string;
+  modifier_group_id: string;
   name: string;
   price_delta_minor: number;
   currency: string;
@@ -22,6 +31,7 @@ export interface SnapshotModifierOptionDto {
 
 export interface SnapshotModifierGroupDto {
   id: string;
+  menu_item_id: string;
   name: string;
   selection_mode: 'single' | 'multiple';
   min_select: number;
@@ -29,7 +39,6 @@ export interface SnapshotModifierGroupDto {
   is_required: boolean;
   is_available: boolean;
   display_order: number;
-  options: SnapshotModifierOptionDto[];
 }
 
 // ─── Price DTO ───────────────────────────────────────────────
@@ -54,6 +63,8 @@ export interface SnapshotAvailabilityDto {
 
 export interface SnapshotMenuItemDto {
   id: string;
+  category_id: string;
+  tax_profile_id: string | null;
   name: string;
   slug: string;
   description: string | null;
@@ -62,7 +73,6 @@ export interface SnapshotMenuItemDto {
   is_visible: boolean;
   price: SnapshotPriceDto;
   availability: SnapshotAvailabilityDto;
-  modifier_groups: SnapshotModifierGroupDto[];
 }
 
 // ─── Category DTO ────────────────────────────────────────────
@@ -74,24 +84,34 @@ export interface SnapshotCategoryDto {
   display_order: number;
   is_visible: boolean;
   image_url: string | null;
-  items: SnapshotMenuItemDto[];
 }
 
 // ─── Root Snapshot DTO ───────────────────────────────────────
 
 export interface BranchMenuSnapshotDto {
-  snapshot_hash: string;
+  snapshot_id: string;
+  tenant_id: string;
   branch_id: string;
-  resolved_at: string;
-  currency: string;
+  generated_at: string;
+  currency_code: string;
+  etag: string;
   categories: SnapshotCategoryDto[];
+  items: SnapshotMenuItemDto[];
+  modifier_groups: SnapshotModifierGroupDto[];
+  modifier_options: SnapshotModifierOptionDto[];
+  tax_profiles: SnapshotTaxProfileDto[];
 }
 
 // ─── Internal pre-hash payload (hash field excluded) ─────────
 
 export interface BranchMenuSnapshotPayload {
+  tenant_id: string;
   branch_id: string;
-  resolved_at: string;
-  currency: string;
+  generated_at: string;
+  currency_code: string;
   categories: SnapshotCategoryDto[];
+  items: SnapshotMenuItemDto[];
+  modifier_groups: SnapshotModifierGroupDto[];
+  modifier_options: SnapshotModifierOptionDto[];
+  tax_profiles: SnapshotTaxProfileDto[];
 }

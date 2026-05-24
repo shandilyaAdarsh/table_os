@@ -12,6 +12,7 @@ import {
   requestPasswordReset,
   completePasswordReset,
 } from '../services/auth.service';
+import { RuntimeAuthService } from '../services/runtime-auth.service';
 import {
   validate,
   LoginSchema,
@@ -155,3 +156,46 @@ export async function listSessions(
     next(err);
   }
 }
+
+// ─── POST /auth/runtime/exchange ──────────────────────────────
+// Exchanges a valid Supabase token for a strict, short-lived Runtime JWT
+
+export async function exchangeRuntimeSession(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      throw new AuthenticationError('Missing or malformed Authorization header');
+    }
+    const supabaseToken = authHeader.slice(7);
+    
+    const branchId = req.body.branch_id;
+    if (!branchId || typeof branchId !== 'string') {
+      throw new AuthenticationError('branch_id is required for runtime exchange');
+    }
+
+    const deviceSessionId = req.headers['x-device-session-id'] as string;
+    if (!deviceSessionId) {
+      throw new AuthenticationError('X-Device-Session-Id header is required');
+    }
+
+    const runtimeJwt = await RuntimeAuthService.exchangeForRuntimeSession(
+      supabaseToken,
+      branchId,
+      deviceSessionId
+    );
+
+    res.status(200).json(
+      ResponseFormatter.success(
+        { runtime_token: runtimeJwt, type: 'Bearer' },
+        'Runtime session exchanged successfully'
+      )
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+

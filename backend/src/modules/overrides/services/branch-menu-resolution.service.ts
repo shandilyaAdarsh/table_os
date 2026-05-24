@@ -13,15 +13,20 @@ import type {
   ResolvedModifierGroup,
   ResolvedModifierOption,
   ResolvedPrice,
+  ResolvedTaxProfile,
 } from '../overrides.types';
+
+import { TaxRepository } from '../../tax/repositories/tax.repository';
 
 export class BranchMenuResolutionService {
   private readonly resolverRepo: BranchMenuResolverRepository;
   private readonly availabilityRepo: AvailabilityRepository;
+  private readonly taxRepo: TaxRepository;
 
   constructor(supabase: SupabaseClient) {
     this.resolverRepo = new BranchMenuResolverRepository(supabase);
     this.availabilityRepo = new AvailabilityRepository(supabase);
+    this.taxRepo = new TaxRepository(supabase);
   }
 
   async resolveEffectiveMenu(params: {
@@ -45,6 +50,25 @@ export class BranchMenuResolutionService {
     const availabilityMap = new Map<string, string>();
     for (const av of availabilityList) {
       availabilityMap.set(av.menu_item_id, av.status);
+    }
+
+    // ─── STEP 2.5: PRE-LOAD TAX BATCH ─────────────
+    const taxBatch = itemIds.length > 0
+      ? await this.taxRepo.resolveBatchTax(tenantId, itemIds, timestamp)
+      : [];
+
+    const taxMap = new Map<string, typeof taxBatch[0]>();
+    const uniqueTaxProfiles = new Map<string, ResolvedTaxProfile>();
+    
+    for (const tax of taxBatch) {
+      taxMap.set(tax.menu_item_id, tax);
+      if (!uniqueTaxProfiles.has(tax.tax_profile_id)) {
+        uniqueTaxProfiles.set(tax.tax_profile_id, {
+          id: tax.tax_profile_id,
+          calculation_mode: tax.calculation_mode,
+          total_basis_points: tax.total_basis_points,
+        });
+      }
     }
 
     // ─── STEP 3: CONSTRUCT O(1) LOOKUP MAPS FOR SPARE OVERRIDES ────
@@ -252,6 +276,8 @@ export class BranchMenuResolutionService {
         });
       }
 
+      const itemTax = taxMap.get(item.id);
+
       const resolvedMenuItem: ResolvedMenuItem = {
         id: item.id,
         name: item.name,
@@ -259,6 +285,7 @@ export class BranchMenuResolutionService {
         slug: item.slug,
         is_visible: isVisible,
         price: resolvedPrice,
+        tax_profile_id: itemTax ? itemTax.tax_profile_id : null,
         modifier_groups: resolvedModifierGroups,
       };
 
@@ -277,6 +304,7 @@ export class BranchMenuResolutionService {
       tenant_id: tenantId,
       resolved_at: timestamp,
       categories: resolvedCategories,
+      tax_profiles: Array.from(uniqueTaxProfiles.values()),
     };
   }
 }

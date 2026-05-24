@@ -63,3 +63,24 @@ export interface UpdateItemAvailabilityExceptionDto {
   priority?: number;
   version_num: number; // Mandatory for OCC
 }
+
+// ─── Runtime Overlay ──────────────────────────────────────────
+
+export type VisibilityState = 'VISIBLE' | 'SOLD_OUT' | 'PAUSED' | 'SCHEDULE_RESTRICTED' | 'HIDDEN';
+
+export type ResolutionSource = 'MANUAL_OVERRIDE' | 'SCHEDULE_ENGINE' | 'STOCK_ENGINE' | 'EXCEPTION_RULE' | 'DEFAULT';
+
+export interface AvailabilityItemDto {
+  menu_item_id: string;
+  is_available: boolean;
+  visibility_state: VisibilityState;
+  reason: string | null;
+  resolution_source: ResolutionSource;
+  last_resolved_at: string;
+}
+
+export interface AvailabilityOverlayDto {
+  branch_id: string;
+  generated_at: string;
+  items: AvailabilityItemDto[];
+}

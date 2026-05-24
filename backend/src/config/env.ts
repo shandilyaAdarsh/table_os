@@ -35,6 +35,7 @@ const envSchema = z.object({
   QR_SIGNING_SECRET: z.string().min(16, 'QR_SIGNING_SECRET is required'),
   QR_SESSION_SECRET: z.string().min(16, 'QR_SESSION_SECRET is required'),
   DEVICE_TOKEN_SECRET: z.string().min(16, 'DEVICE_TOKEN_SECRET is required'),
+  RUNTIME_JWT_SECRET: z.string().min(16, 'RUNTIME_JWT_SECRET is required').default('runtime_jwt_secret_must_be_min_16_chars_long'),
 });
 
 export type Env = z.infer<typeof envSchema>;

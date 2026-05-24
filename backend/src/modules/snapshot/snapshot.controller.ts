@@ -106,13 +106,13 @@ export async function getMenuSnapshot(
       req.headers['if-none-match'] as string | undefined
     );
 
-    if (requestETag !== null && requestETag === snapshot.snapshot_hash) {
+    if (requestETag !== null && requestETag === snapshot.etag) {
       // Snapshot unchanged — return 304 without body
       res
-        .set('ETag', formatETag(snapshot.snapshot_hash))
+        .set('ETag', formatETag(snapshot.etag))
         .set('Cache-Control', `public, max-age=${CDN_MAX_AGE_SECONDS}, stale-while-revalidate=${CDN_SWR_SECONDS}`)
         .set('Vary', 'Accept-Encoding')
-        .set('X-Snapshot-Hash', snapshot.snapshot_hash)
+        .set('X-Snapshot-Hash', snapshot.etag)
         .status(304)
         .end();
       return;
@@ -120,10 +120,10 @@ export async function getMenuSnapshot(
 
     // ── 6. Set CDN cache headers ──────────────────────────────
     res
-      .set('ETag', formatETag(snapshot.snapshot_hash))
+      .set('ETag', formatETag(snapshot.etag))
       .set('Cache-Control', `public, max-age=${CDN_MAX_AGE_SECONDS}, stale-while-revalidate=${CDN_SWR_SECONDS}`)
       .set('Vary', 'Accept-Encoding')
-      .set('X-Snapshot-Hash', snapshot.snapshot_hash)
+      .set('X-Snapshot-Hash', snapshot.etag)
       .set('X-Resolution-Ms', String(metrics.totalMs))
       .set('X-Snapshot-Categories', String(snapshot.categories.length));
 
@@ -134,6 +134,7 @@ export async function getMenuSnapshot(
       meta: {
         timestamp: new Date().toISOString(),
         performance: metrics,
+        snapshot_version: 1,
       },
     });
   } catch (err) {
