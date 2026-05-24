@@ -66,6 +66,21 @@ export async function findItemById(
   return data;
 }
 
+export async function findAnyItemById(
+  tenantId: string,
+  itemId: string
+): Promise<MenuItem | null> {
+  const { data, error } = await supabaseAdmin
+    .from('menu_items')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('id', itemId)
+    .maybeSingle();
+
+  if (error) throw new Error(`[MenuItemRepo] findAnyItemById: ${error.message}`);
+  return data;
+}
+
 export async function findItemBySlug(
   tenantId: string,
   slug: string
@@ -222,6 +237,31 @@ export async function softDeleteMenuItem(
 
   if (error) throw new Error(`[MenuItemRepo] softDeleteMenuItem: ${error.message}`);
   if (!data) throw new Error(`[MenuItemRepo] softDeleteMenuItem: Concurrency conflict or item not found`);
+}
+
+export async function restoreItem(
+  tenantId: string, 
+  itemId: string, 
+  restoredBy: string,
+  versionNum: number
+): Promise<MenuItem> {
+  const { data, error } = await supabaseAdmin
+    .from('menu_items')
+    .update({ 
+      deleted_at: null, 
+      status: 'active',
+      updated_by: restoredBy,
+      version_num: versionNum + 1
+    })
+    .eq('tenant_id', tenantId)
+    .eq('id', itemId)
+    .eq('version_num', versionNum)
+    .select()
+    .maybeSingle();
+
+  if (error) throw new Error(`[MenuItemRepo] restoreItem: ${error.message}`);
+  if (!data) throw new Error(`[MenuItemRepo] restoreItem: Concurrency conflict or item not found`);
+  return data;
 }
 
 // ─── Branch Override Mutations ────────────────────────────────

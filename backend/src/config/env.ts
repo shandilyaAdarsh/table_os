@@ -30,6 +30,12 @@ const envSchema = z.object({
   AUTH_ACCESS_TOKEN_TTL: z.coerce.number().int().positive().default(3600),
   AUTH_DEVICE_SESSION_TTL_DAYS: z.coerce.number().int().positive().default(1),
   AUTH_DEVICE_SESSION_REMEMBER_ME_DAYS: z.coerce.number().int().positive().default(30),
+
+  // QR + device security
+  QR_SIGNING_SECRET: z.string().min(16, 'QR_SIGNING_SECRET is required'),
+  QR_SESSION_SECRET: z.string().min(16, 'QR_SESSION_SECRET is required'),
+  DEVICE_TOKEN_SECRET: z.string().min(16, 'DEVICE_TOKEN_SECRET is required'),
+  RUNTIME_JWT_SECRET: z.string().min(16, 'RUNTIME_JWT_SECRET is required').default('runtime_jwt_secret_must_be_min_16_chars_long'),
 });
 
 export type Env = z.infer<typeof envSchema>;

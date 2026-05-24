@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 
 const navItems = [
   { href: '/dashboard', icon: 'monitoring', label: 'Telemetry', badge: true },
+  { href: '/dashboard/diagnostics', icon: 'terminal', label: 'Control Plane' },
   { href: '/dashboard/tenants', icon: 'hub', label: 'Node Registry' },
   { href: '/dashboard/onboard', icon: 'rocket_launch', label: 'Provisioning' },
   { href: '/dashboard/billing', icon: 'account_balance', label: 'Financials' },

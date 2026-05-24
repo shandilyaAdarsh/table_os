@@ -4,7 +4,7 @@
 // No custom crypto implementations.
 // ============================================================
 
-import { createHash, randomBytes, timingSafeEqual } from 'crypto';
+import { createHash, randomBytes, timingSafeEqual, createHmac } from 'crypto';
 
 /**
  * SHA-256 hash of a token for safe storage.
@@ -47,4 +47,22 @@ export function safeCompare(a: string, b: string): boolean {
   const bufA = Buffer.from(a, 'utf8');
   const bufB = Buffer.from(b, 'utf8');
   return timingSafeEqual(bufA, bufB);
+}
+
+/**
+ * HMAC-SHA256 signature for payload signing.
+ */
+export function hmacSha256(payload: string, secret: string): string {
+  return createHmac('sha256', secret).update(payload).digest('hex');
+}
+
+/**
+ * Base64url encode a UTF-8 string.
+ */
+export function toBase64Url(input: string): string {
+  return Buffer.from(input, 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
 }

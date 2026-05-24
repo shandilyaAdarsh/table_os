@@ -9,6 +9,8 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../../lib/supabase'
 import { useMenuStore, useCartStore } from '../../../store/index'
+import { useAvailabilityStore } from '../../../store/availabilityStore'
+import { useAvailabilityPolling } from '../../../hooks/useAvailabilityPolling'
 import { CategoryBubbles } from '../components/CategoryBubbles'
 import { CartBar } from '../components/CartBar'
 import { BottomNav } from '../components/BottomNav'
@@ -162,10 +164,18 @@ function AddButton({ item, onAdd, onCustomize, onAnimate }) {
 
 // ── Issue 7: MenuItemCard with flying dot animation ───────────────────────────
 function MenuItemCard({ item, idx, navigate, handleItemAdd }) {
+  const getAvailability = useAvailabilityStore(s => s.getAvailability)
+  const availability = getAvailability(item.id)
+  const visibility = availability.visibility_state
+
+  if (visibility === 'HIDDEN') return null;
+
+  const mergedItem = { ...item, is_available: availability.is_available }
+
   const handleAdd = (e) => {
     e.stopPropagation()
     spawnFlyToCart(e.clientX, e.clientY)
-    setTimeout(() => handleItemAdd(item), 100)
+    setTimeout(() => handleItemAdd(mergedItem), 100)
   }
 
   return (
@@ -173,40 +183,44 @@ function MenuItemCard({ item, idx, navigate, handleItemAdd }) {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(idx, 8) * 0.05 }}
-      onClick={() => navigate(`/menu/item/${item.id}`)}
+      onClick={() => navigate(`/menu/item/${mergedItem.id}`)}
       style={{
         display: 'flex', background: 'white', borderRadius: 16, padding: 14, gap: 12,
         boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #F3F4F6',
-        opacity: item.is_available ? 1 : 0.6, position: 'relative', cursor: 'pointer',
+        opacity: mergedItem.is_available ? 1 : 0.6, position: 'relative', cursor: 'pointer',
       }}
     >
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-          <div style={{ width: 12, height: 12, borderRadius: 2, border: item.is_veg ? '2px solid #22C55E' : '2px solid #EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: item.is_veg ? '#22C55E' : '#EF4444' }} />
+          <div style={{ width: 12, height: 12, borderRadius: 2, border: mergedItem.is_veg ? '2px solid #22C55E' : '2px solid #EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: mergedItem.is_veg ? '#22C55E' : '#EF4444' }} />
           </div>
-          <span style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{item.name}</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{mergedItem.name}</span>
         </div>
-        {item.description && (
+        {mergedItem.description && (
           <p style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.4, margin: '0 0 10px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-            {item.description}
+            {mergedItem.description}
           </p>
         )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
-          <span style={{ fontSize: 17, fontWeight: 800, color: '#F97316' }}>₹{item.price}</span>
-          <AddButton item={item} onAdd={handleItemAdd} onAnimate={(e) => spawnFlyToCart(e.clientX, e.clientY)} />
+          <span style={{ fontSize: 17, fontWeight: 800, color: '#F97316' }}>₹{mergedItem.price}</span>
+          <AddButton item={mergedItem} onAdd={handleItemAdd} onAnimate={(e) => spawnFlyToCart(e.clientX, e.clientY)} />
         </div>
       </div>
 
       <div style={{ position: 'relative', width: 90, height: 90, borderRadius: 12, overflow: 'hidden', flexShrink: 0, backgroundColor: '#F3F4F6' }}>
         <img
-          src={item.image_url || `https://placehold.co/90x90?text=${encodeURIComponent(item.name[0])}`}
+          src={mergedItem.image_url || `https://placehold.co/90x90?text=${encodeURIComponent(mergedItem.name[0])}`}
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          alt={item.name}
+          alt={mergedItem.name}
         />
-        {!item.is_available && (
+        {!mergedItem.is_available && (
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ color: 'white', fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>Sold Out</span>
+            <span style={{ color: 'white', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', textAlign: 'center', padding: '0 4px' }}>
+              {visibility === 'SOLD_OUT' ? 'Sold Out' : 
+               visibility === 'PAUSED' ? 'Paused' :
+               visibility === 'SCHEDULE_RESTRICTED' ? 'Available Later' : 'Unavailable'}
+            </span>
           </div>
         )}
       </div>
@@ -218,6 +232,12 @@ function MenuItemCard({ item, idx, navigate, handleItemAdd }) {
 export default function MenuHome() {
   const navigate    = useNavigate()
   const cartItems   = useCartStore(s => s.items)
+
+  // Hardcode Branch ID for testing purposes (since frontend demo isn't dynamically routing)
+  const BRANCH_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+
+  // Initialize availability polling
+  useAvailabilityPolling({ tenantId: TENANT_ID, branchId: BRANCH_ID, intervalMs: 15000 })
 
   // Read checked-in session for personalised header
   const session = (() => { try { return JSON.parse(localStorage.getItem('customerSession') || '{}') } catch { return {} } })()

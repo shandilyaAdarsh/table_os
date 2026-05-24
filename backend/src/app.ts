@@ -13,6 +13,19 @@ import { rbacRouter } from './modules/rbac/rbac.router';
 import { menuRouter } from './modules/menu/menu.router';
 import pricingRouter from './modules/pricing/pricing.router';
 import { taxRouter } from './modules/tax/tax.router';
+import { modifierRouter } from './modules/modifier/modifier.router';
+import { availabilityRouter } from './modules/availability/availability.router';
+import { snapshotRouter } from './modules/snapshot/snapshot.router';
+import { publicMenuRouter } from './modules/snapshot/public-menu.router';
+import { publicAvailabilityRouter } from './modules/availability/public-availability.router';
+import { adminRouter } from './modules/admin/admin.router';
+import { qrRouter } from './modules/qr/qr.router';
+import { cartRouter } from './modules/cart/cart.router';
+import { ordersRouter } from './modules/orders/orders.router';
+import { kitchenRouter } from './modules/kitchen/kitchen.router';
+import { billingRouter } from './modules/billing/billing.router';
+import { infrastructureRouter } from './modules/infrastructure/infrastructure.router';
+import { ObservabilityService } from './modules/infrastructure/observability.service';
 import { errorMiddleware } from './middleware/error.middleware';
 import { loggingMiddleware } from './middleware/logging.middleware';
 
@@ -34,9 +47,13 @@ export function createApp(): express.Application {
         'X-Device-Fingerprint',
         'X-Device-Session-Id',
         'X-Forwarded-For',
+        'X-QR-Session-Token',
       ],
     })
   );
+
+  // ─── Observability Context Propagation ─────────────────────
+  app.use(ObservabilityService.observabilityMiddleware);
 
   // ─── Request logging ───────────────────────────────────────
   app.use(loggingMiddleware);
@@ -69,6 +86,37 @@ export function createApp(): express.Application {
   app.use('/tenants/:tenantId/menu', menuRouter);
   app.use('/tenants/:tenantId/pricing', pricingRouter);
   app.use('/tenants/:tenantId/tax', taxRouter);
+  app.use('/tenants/:tenantId/modifier', modifierRouter);
+  app.use('/tenants/:tenantId/availability', availabilityRouter);
+
+  // ─── Public Snapshot API (no auth required) ─────────────────
+  // CDN-cacheable branch menu snapshots for QR ordering.
+  // Per public_api_contracts.md — versioned at /api/v1/public/branches.
+  app.use('/api/v1/public/branches', snapshotRouter);
+  app.use('/api/v1/public/branches', publicAvailabilityRouter);
+  app.use('/public', publicMenuRouter);
+
+  // ─── Public QR Session API (no auth required) ───────────────
+  app.use('/api/v1/qr', qrRouter);
+
+  // ─── Public Cart API (requires QR session token) ────────────
+  app.use('/api/v1/cart', cartRouter);
+
+  // ─── Order API (requires QR session or Staff Auth) ──────────
+  app.use('/api/v1/orders', ordersRouter);
+
+  // ─── Kitchen KDS API (requires Staff Auth) ──────────────────
+  app.use('/api/v1/kitchen', kitchenRouter);
+
+  // ─── Billing/POS API (requires Staff Auth) ──────────────────
+  app.use('/api/v1/billing', billingRouter);
+
+  // ─── Infrastructure/Hardening API ──────────────────────────
+  app.use('/api/v1/infrastructure', infrastructureRouter);
+
+  // ─── Admin API (requires auth & tenant context) ──────────────
+  // The authoritative operational interface for the dashboard/admin panel.
+  app.use('/api/v1/admin', adminRouter);
 
   // Future modules registered here:
   // app.use('/tenants/:tenantId/staff', staffRouter);

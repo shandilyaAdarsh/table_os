@@ -12,6 +12,7 @@ import {
   resetPassword,
   getSession,
   listSessions,
+  exchangeRuntimeSession,
 } from './controllers/auth.controller';
 import {
   authenticate,
@@ -37,5 +38,8 @@ router.post('/refresh', refreshToken);
 router.post('/logout',    authenticate,                              logoutHandler);
 router.get( '/session',   authenticate, requirePasswordChanged,      getSession);
 router.get( '/sessions',  authenticate, requirePasswordChanged,      listSessions);
+
+// ─── Runtime Exchange (no authenticate middleware, accepts Supabase token directly) ─
+router.post('/runtime/exchange', exchangeRuntimeSession);
 
 export { router as authRouter };

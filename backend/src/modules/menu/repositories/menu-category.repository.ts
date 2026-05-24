@@ -86,6 +86,25 @@ export async function findCategoryById(
   return data;
 }
 
+export async function findAnyCategoryById(
+  tenantId: string,
+  categoryId: string
+): Promise<MenuCategory | null> {
+  const { data, error } = await supabaseAdmin
+    .from('menu_categories')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('id', categoryId)
+    .maybeSingle();
+
+  if (error) {
+    logger.error({ err: error, tenantId, categoryId }, 'findAnyCategoryById failed');
+    throw new Error(`[MenuCategoryRepo] findAnyCategoryById: ${error.message}`);
+  }
+
+  return data;
+}
+
 export async function findCategoryBySlug(
   tenantId: string,
   slug: string
@@ -212,6 +231,32 @@ export async function softDeleteCategory(
     .eq('id', categoryId);
 
   if (error) throw new Error(`[MenuCategoryRepo] softDeleteCategory: ${error.message}`);
+}
+
+export async function restoreCategory(
+  tenantId: string,
+  categoryId: string,
+  restoredBy: string,
+  version_num: number
+): Promise<MenuCategory> {
+  const { data, error } = await supabaseAdmin
+    .from('menu_categories')
+    .update({ 
+      deleted_at: null, 
+      is_active: true,
+      updated_by: restoredBy,
+      version_num: version_num + 1
+    })
+    .eq('tenant_id', tenantId)
+    .eq('id', categoryId)
+    .eq('version_num', version_num)
+    .select()
+    .maybeSingle();
+
+  if (error) throw new Error(`[MenuCategoryRepo] restoreCategory: ${error.message}`);
+  if (!data) throw new Error(`[MenuCategoryRepo] restoreCategory: Concurrency conflict or category not found`);
+
+  return data;
 }
 
 // ─── Branch Visibility ────────────────────────────────────────
