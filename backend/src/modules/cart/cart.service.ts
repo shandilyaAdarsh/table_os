@@ -50,10 +50,15 @@ export async function addCartItem(
   tenantId: string,
   sessionId: string,
   dto: AddCartItemDto,
+  expectedCartRevision?: number,
 ): Promise<CartDetailDto> {
   const cart = await cartRepo.findActiveCartBySession(tenantId, sessionId);
   if (!cart) {
     throw new AppError('No active cart found for this session', 404, ErrorCode.NOT_FOUND);
+  }
+
+  if (expectedCartRevision !== undefined && cart.version_num !== expectedCartRevision) {
+    throw new AppError('STALE_RUNTIME_STATE: Cart was modified since your last known revision', 409, ErrorCode.CONFLICT);
   }
 
   if (cart.status !== 'open') {
@@ -156,10 +161,15 @@ export async function updateCartItem(
   sessionId: string,
   itemId: string,
   dto: UpdateCartItemDto,
+  expectedCartRevision?: number,
 ): Promise<CartDetailDto> {
   const cart = await cartRepo.findActiveCartBySession(tenantId, sessionId);
   if (!cart) {
     throw new AppError('No active cart found for this session', 404, ErrorCode.NOT_FOUND);
+  }
+
+  if (expectedCartRevision !== undefined && cart.version_num !== expectedCartRevision) {
+    throw new AppError('STALE_RUNTIME_STATE: Cart was modified since your last known revision', 409, ErrorCode.CONFLICT);
   }
 
   if (cart.status !== 'open') {
@@ -179,10 +189,15 @@ export async function removeCartItem(
   sessionId: string,
   itemId: string,
   versionNum: number,
+  expectedCartRevision?: number,
 ): Promise<CartDetailDto> {
   const cart = await cartRepo.findActiveCartBySession(tenantId, sessionId);
   if (!cart) {
     throw new AppError('No active cart found for this session', 404, ErrorCode.NOT_FOUND);
+  }
+
+  if (expectedCartRevision !== undefined && cart.version_num !== expectedCartRevision) {
+    throw new AppError('STALE_RUNTIME_STATE: Cart was modified since your last known revision', 409, ErrorCode.CONFLICT);
   }
 
   if (cart.status !== 'open') {
@@ -198,10 +213,15 @@ export async function updateCartNotes(
   tenantId: string,
   sessionId: string,
   dto: UpdateCartNotesDto,
+  expectedCartRevision?: number,
 ): Promise<CartDetailDto> {
   const cart = await cartRepo.findActiveCartBySession(tenantId, sessionId);
   if (!cart) {
     throw new AppError('No active cart found for this session', 404, ErrorCode.NOT_FOUND);
+  }
+
+  if (expectedCartRevision !== undefined && cart.version_num !== expectedCartRevision) {
+    throw new AppError('STALE_RUNTIME_STATE: Cart was modified since your last known revision', 409, ErrorCode.CONFLICT);
   }
 
   if (cart.status !== 'open') {

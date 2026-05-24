@@ -12,6 +12,8 @@ import { createOrderSnapshot } from '../snapshot/order-snapshot.service';
 import { supabaseAdmin } from '../../config/supabase';
 import { allocateSequenceNumber } from './sequence-allocator.service';
 
+import { BranchMenuResolutionService } from '../overrides/services/branch-menu-resolution.service';
+
 const VALID_TRANSITIONS: Record<ordersRepo.OrderStatus, ordersRepo.OrderStatus[]> = {
   pending: ['accepted', 'cancelled'],
   accepted: ['preparing', 'cancelled'],
@@ -29,11 +31,12 @@ export async function createOrderFromCart(params: {
   tableId: string;
   sessionId?: string;
   idempotencyKey?: string;
+  expectedCartRevision?: number;
   orderNotes?: string;
   source: ordersRepo.OrderSource;
   userId?: string;
 }): Promise<ordersRepo.Order> {
-  const { tenantId, cartId, idempotencyKey } = params;
+  const { tenantId, cartId, idempotencyKey, expectedCartRevision } = params;
 
   // 1. Idempotency Check
   if (idempotencyKey) {
@@ -53,7 +56,57 @@ export async function createOrderFromCart(params: {
     throw new AppError(`Cannot checkout a cart in '${cart.status}' status.`, 400, ErrorCode.VALIDATION_ERROR);
   }
 
-  // 3. Create immutable order snapshots (locks cart, runs re-resolution, tax computations, and inserts snapshot rows)
+  if (expectedCartRevision !== undefined && cart.version_num !== expectedCartRevision) {
+    throw new AppError('STALE_RUNTIME_STATE: Cart was modified since your last known revision', 409, ErrorCode.CONFLICT);
+  }
+
+  // 3. Strict Runtime Pre-Checkout Revalidation
+  const cartItems = await cartRepo.listCartItems(cart.id);
+  const cartItemIds = cartItems.map(i => i.id);
+  const modifiers = cartItemIds.length > 0 ? await cartRepo.listCartItemModifiers(cartItemIds) : [];
+  
+  const resolutionService = new BranchMenuResolutionService(supabaseAdmin);
+  const effectiveMenu = await resolutionService.resolveEffectiveMenu({
+    tenantId,
+    branchId: cart.branch_id,
+    timestamp: new Date().toISOString(),
+  });
+
+  for (const item of cartItems) {
+    let activeItem: any = null;
+    for (const cat of effectiveMenu.categories) {
+      const found = cat.items.find((it) => it.id === item.menu_item_id);
+      if (found) {
+        activeItem = found;
+        break;
+      }
+    }
+
+    if (!activeItem || !activeItem.is_visible) {
+      throw new AppError(`STALE_RUNTIME_STATE: Item ${item.item_name_snapshot} is no longer available.`, 409, ErrorCode.CONFLICT);
+    }
+    
+    if (activeItem.price.price_minor !== item.unit_price_minor_snapshot) {
+      throw new AppError(`STALE_RUNTIME_STATE: Price changed for ${item.item_name_snapshot}.`, 409, ErrorCode.CONFLICT);
+    }
+
+    const itemMods = modifiers.filter(m => m.cart_item_id === item.id);
+    for (const mod of itemMods) {
+      const group = activeItem.modifier_groups.find((g: any) => g.id === mod.modifier_group_id);
+      if (!group || !group.is_available) {
+        throw new AppError(`STALE_RUNTIME_STATE: Modifier group unavailable for ${item.item_name_snapshot}.`, 409, ErrorCode.CONFLICT);
+      }
+      const option = group.options.find((o: any) => o.id === mod.modifier_option_id);
+      if (!option || !option.is_available) {
+        throw new AppError(`STALE_RUNTIME_STATE: Modifier option ${mod.modifier_option_name_snapshot} is no longer available.`, 409, ErrorCode.CONFLICT);
+      }
+      if (option.price_delta_minor !== mod.price_delta_minor_snapshot) {
+        throw new AppError(`STALE_RUNTIME_STATE: Modifier price changed for ${mod.modifier_option_name_snapshot}.`, 409, ErrorCode.CONFLICT);
+      }
+    }
+  }
+
+  // 4. Create immutable order snapshots (locks cart, runs database-level snapshot inserts)
   const snapshotId = await createOrderSnapshot(tenantId, cartId, cart.version_num);
 
   try {
