@@ -7,6 +7,7 @@ import { Router } from 'express';
 import { requireQrSession } from '../qr/qr.middleware';
 import { authenticate } from '../../middleware/auth.middleware';
 import { requestIdempotency } from '../../middleware/idempotency.middleware';
+import { requireMutationEnvelope } from '../../middleware/mutation.middleware';
 import { checkoutCart, getOrderDetails, transitionStatus, listBranchOrders } from './orders.controller';
 import type { Request, Response, NextFunction } from 'express';
 
@@ -21,13 +22,13 @@ function requireQrOrStaffAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 // Customers or staff can checkout a cart
-router.post('/checkout', requireQrOrStaffAuth, requestIdempotency(), checkoutCart);
+router.post('/checkout', requireQrOrStaffAuth, requireMutationEnvelope(), requestIdempotency(), checkoutCart);
 
 // Fetch order details is allowed for either QR customers or staff
 router.get('/:id', requireQrOrStaffAuth, getOrderDetails);
 
 // Staff-only routes: managing order state transitions and listing all active orders
-router.patch('/:id/status', authenticate, transitionStatus);
+router.patch('/:id/status', authenticate, requireMutationEnvelope(), transitionStatus);
 router.get('/', authenticate, listBranchOrders);
 
 export { router as ordersRouter };

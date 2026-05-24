@@ -35,3 +35,31 @@ export async function fetchWithRuntime(endpoint, options = {}) {
 
   return response;
 }
+
+/**
+ * Executes a deterministic, retry-safe mutation enforcing the MutationEnvelope contract.
+ * Automatically wraps the payload with required sequencing and runtime context.
+ */
+export async function submitMutation(endpoint, mutation) {
+  const { tenantId, branchId, sessionId } = useRuntimeAuthStore.getState();
+  
+  const envelope = {
+    mutation_id: mutation.mutation_id,
+    mutation_sequence: mutation.mutation_sequence,
+    runtime_version: 1, // Fixed version for now
+    session_id: sessionId || undefined,
+    tenant_id: tenantId,
+    branch_id: branchId,
+    client_timestamp: new Date().toISOString(),
+    idempotency_key: mutation.idempotency_key,
+    expected_cart_revision: mutation.expected_cart_revision,
+    payload: mutation.payload,
+  };
+
+  const response = await fetchWithRuntime(endpoint, {
+    method: 'POST', // or PATCH/DELETE if overridden, but usually POST is fine
+    body: JSON.stringify(envelope),
+  });
+
+  return response;
+}

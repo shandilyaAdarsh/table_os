@@ -6,11 +6,14 @@
 import { Router } from 'express';
 import { requireQrSession } from '../qr/qr.middleware';
 import { getCart, addItem, updateItem, removeItem, updateNotes } from './cart.controller';
+import { requireMutationEnvelope } from '../../middleware/mutation.middleware';
 
 const router: Router = Router({ mergeParams: true });
 
 // All cart routes require a valid active QR session token
 router.use(requireQrSession);
+// Mutating cart routes require a strict MutationEnvelope
+router.use(requireMutationEnvelope());
 
 router.get('/', getCart);
 router.post('/items', addItem);

@@ -9,14 +9,14 @@ import { ErrorCode } from '../shared/errors/error-codes';
 
 export function requestIdempotency() {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const key = req.headers['idempotency-key'] as string;
+    const key = req.mutationContext?.idempotency_key;
     
     // Non-mutating methods or requests without idempotency keys are bypassed
     if (!key || req.method === 'GET' || req.method === 'HEAD') {
       return next();
     }
 
-    const tenantId = req.context?.tenantId;
+    const tenantId = req.mutationContext?.tenant_id || req.context?.tenantId;
     if (!tenantId) {
       // If tenantId is not resolved yet, let route parsing fail appropriately later
       return next();
