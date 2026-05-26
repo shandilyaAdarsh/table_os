@@ -5,6 +5,16 @@ import { IncidentService } from '../projection/incident.service';
 
 const router: Router = Router({ mergeParams: true });
 
+// Strict Production Hard-Fail Exclusion
+if (process.env.NODE_ENV === 'production') {
+  router.use((_req, res) => {
+    res.status(503).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'Chaos testing routes are authoritatively disabled in production environments.' }
+    });
+  });
+}
+
 // POST /api/v1/infrastructure/chaos/gap
 router.post('/gap', authenticate, managerOrAbove, async (req: Request, res: Response) => {
   const tenantId = req.context.tenantId!;

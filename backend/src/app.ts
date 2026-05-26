@@ -27,6 +27,7 @@ import { billingRouter } from './modules/billing/billing.router';
 import { infrastructureRouter } from './modules/infrastructure/infrastructure.router';
 import { chaosRouter } from './modules/infrastructure/chaos.router';
 import { runtimeRouter } from './modules/projection/runtime.router';
+import { eventReplayRouter } from './modules/projection/event-replay.router';
 import { ObservabilityService } from './modules/infrastructure/observability.service';
 import { errorMiddleware } from './middleware/error.middleware';
 import { loggingMiddleware } from './middleware/logging.middleware';
@@ -130,10 +131,13 @@ export function createApp(): express.Application {
 
   // ─── Infrastructure/Hardening API ──────────────────────────
   app.use('/api/v1/infrastructure', infrastructureRouter);
-  app.use('/api/v1/infrastructure/chaos', chaosRouter);
+  if (process.env.NODE_ENV !== 'production') {
+    app.use('/api/v1/infrastructure/chaos', chaosRouter);
+  }
 
   // ─── Operational Runtime API ───────────────────────────────
   app.use('/api/v1/runtime', runtimeRouter);
+  app.use('/api/v1/runtime/events', eventReplayRouter);
 
   // ─── Admin API (requires auth & tenant context) ──────────────
   // The authoritative operational interface for the dashboard/admin panel.
