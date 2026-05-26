@@ -59,22 +59,23 @@ Future<void> bootstrap({
     // Hydrate base system preferences
     final sharedPreferences = await SharedPreferences.getInstance();
 
-    runApp(
-      ProviderScope(
-        observers: [
-          AppProviderObserver(),
-        ],
-        overrides: [
-          // Expose SharedPreferences globally for dependencies
-          sharedPreferencesProvider.overrideWithValue(sharedPreferences),
-          // Override Hive boxes and Talker instances
-          talkerProvider.overrideWithValue(talker),
-          apiCacheBoxProvider.overrideWithValue(apiCacheBox),
-          offlineQueueBoxProvider.overrideWithValue(offlineQueueBox),
-        ],
-        child: const OrderlyyApp(),
-      ),
+    // Create provider container
+    final container = ProviderScope(
+      observers: [
+        AppProviderObserver(),
+      ],
+      overrides: [
+        // Expose SharedPreferences globally for dependencies
+        sharedPreferencesProvider.overrideWithValue(sharedPreferences),
+        // Override Hive boxes and Talker instances
+        talkerProvider.overrideWithValue(talker),
+        apiCacheBoxProvider.overrideWithValue(apiCacheBox),
+        offlineQueueBoxProvider.overrideWithValue(offlineQueueBox),
+      ],
+      child: const OrderlyyApp(),
     );
+
+    runApp(container);
   }, (error, stack) {
     talker.handle(error, stack, '[Bootstrap Error] Unhandled Exception');
   });

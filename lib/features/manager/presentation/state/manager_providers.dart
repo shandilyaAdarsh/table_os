@@ -1,5 +1,6 @@
 // lib/features/manager/presentation/state/manager_providers.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/floor_analytics.dart';
 import '../../domain/entities/operational_alert.dart';
@@ -55,6 +56,22 @@ class FloorAnalyticsNotifier extends AsyncNotifier<FloorAnalyticsSnapshot> {
       lastAggregatedAt: DateTime.now(),
     );
     state = AsyncValue.data(updated);
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━ RUNTIME INTEGRATION ━━━━━━━━━━━━━━━━━━━━━━
+
+  /// Apply remote analytics delta from backend (called by runtime bridge).
+  /// NEVER call this directly from UI code.
+  Future<void> applyRemoteAnalyticsDelta(Map<String, dynamic> payload) async {
+    debugPrint('[FloorAnalyticsNotifier] Applying remote analytics delta');
+
+    try {
+      final snapshot = FloorAnalyticsSnapshot.fromJson(payload);
+      state = AsyncValue.data(snapshot);
+      debugPrint('[FloorAnalyticsNotifier] Applied analytics delta');
+    } catch (e) {
+      debugPrint('[FloorAnalyticsNotifier] ERROR applying analytics delta: $e');
+    }
   }
 }
 
@@ -160,6 +177,39 @@ class OperationalAlertsNotifier extends StateNotifier<List<OperationalAlert>> {
         assignedStaffName: staffName,
       );
     }).toList();
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━ RUNTIME INTEGRATION ━━━━━━━━━━━━━━━━━━━━━━
+
+  /// Apply remote alert update from backend (called by runtime bridge).
+  /// NEVER call this directly from UI code.
+  Future<void> applyRemoteAlertUpdate(Map<String, dynamic> payload) async {
+    debugPrint('[OperationalAlertsNotifier] Applying remote alert update');
+
+    try {
+      final alert = OperationalAlert.fromJson(payload);
+      final idx = state.indexWhere((a) => a.alertId == alert.alertId);
+
+      if (idx != -1) {
+        final next = List<OperationalAlert>.from(state);
+        next[idx] = alert;
+        state = next;
+      } else {
+        state = [alert, ...state];
+      }
+
+      debugPrint('[OperationalAlertsNotifier] Applied alert update: ${alert.alertId}');
+    } catch (e) {
+      debugPrint('[OperationalAlertsNotifier] ERROR applying alert update: $e');
+    }
+  }
+
+  /// Apply remote alert dismissal from backend (called by runtime bridge).
+  /// NEVER call this directly from UI code.
+  Future<void> applyRemoteAlertDismissed(String alertId) async {
+    debugPrint('[OperationalAlertsNotifier] Applying remote alert dismissal: $alertId');
+    state = state.where((a) => a.alertId != alertId).toList();
+    debugPrint('[OperationalAlertsNotifier] Dismissed alert: $alertId');
   }
 }
 

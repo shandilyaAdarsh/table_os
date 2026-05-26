@@ -2,15 +2,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../orders/domain/entities/order_item.dart';
-import '../state/kitchen_queue_notifier.dart';
+import '../../domain/entities/kitchen_ticket.dart';
+import '../state/kitchen_runtime_providers.dart';
 
 class KitchenKdsScreen extends ConsumerWidget {
   const KitchenKdsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final activeTicketsAsync = ref.watch(kitchenQueueNotifierProvider);
+    final activeTicketsAsync = ref.watch(kitchenTicketProjectionProvider);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -20,7 +20,7 @@ class KitchenKdsScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => ref.invalidate(kitchenQueueNotifierProvider),
+            onPressed: () => ref.invalidate(kitchenTicketProjectionProvider),
           ),
           const SizedBox(width: 8),
         ],
@@ -59,9 +59,8 @@ class KitchenKdsScreen extends ConsumerWidget {
             itemBuilder: (context, index) {
               final order = tickets[index];
 
-              // Calculate time elapsed
-              final elapsedMinutes = DateTime.now().difference(order.createdAt).inMinutes;
-              final isDelayed = elapsedMinutes >= 15;
+              final elapsedMinutes = DateTime.now().difference(order.receivedAt).inMinutes;
+              final isDelayed = order.isDelayed;
 
               return Card(
                 color: isDark ? AppColors.darkSurface : Colors.white,
@@ -113,19 +112,19 @@ class KitchenKdsScreen extends ConsumerWidget {
                             // Visual properties based on item preparation phase
                             final Color statusColor;
                             switch (item.status) {
-                              case OrderItemStatus.queued:
+                              case KitchenItemStatus.pending:
                                 statusColor = AppColors.info;
                                 break;
-                              case OrderItemStatus.preparing:
+                              case KitchenItemStatus.preparing:
                                 statusColor = AppColors.primary;
                                 break;
-                              case OrderItemStatus.ready:
+                              case KitchenItemStatus.ready:
                                 statusColor = AppColors.success;
                                 break;
-                              case OrderItemStatus.served:
+                              case KitchenItemStatus.served:
                                 statusColor = Colors.grey;
                                 break;
-                              case OrderItemStatus.cancelled:
+                              case KitchenItemStatus.cancelled:
                                 statusColor = AppColors.error;
                                 break;
                             }
@@ -152,22 +151,22 @@ class KitchenKdsScreen extends ConsumerWidget {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          item.product.name,
+                                          item.name,
                                           style: theme.textTheme.bodyMedium?.copyWith(
                                             fontWeight: FontWeight.bold,
-                                            decoration: item.status == OrderItemStatus.cancelled ? TextDecoration.lineThrough : null,
+                                            decoration: item.status == KitchenItemStatus.cancelled ? TextDecoration.lineThrough : null,
                                           ),
                                         ),
-                                        if (item.selectedModifiers.isNotEmpty)
+                                        if (item.notes != null && item.notes!.isNotEmpty)
                                           Text(
-                                            item.selectedModifiers.map((m) => m.name).join(', '),
+                                            item.notes!,
                                             style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
                                           ),
                                       ],
                                     ),
                                   ),
                                   // Quick Action button per item
-                                  _buildItemActionButton(order.id, item, ref, theme),
+                                  _buildItemActionButton(order.ticketId, item, ref, theme),
                                 ],
                               ),
                             );
@@ -185,8 +184,8 @@ class KitchenKdsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildItemActionButton(String orderId, OrderItem item, WidgetRef ref, ThemeData theme) {
-    if (item.status == OrderItemStatus.queued) {
+  Widget _buildItemActionButton(String ticketId, KitchenItem item, WidgetRef ref, ThemeData theme) {
+    if (item.status == KitchenItemStatus.pending) {
       return TextButton(
         style: TextButton.styleFrom(
           backgroundColor: AppColors.primary.withValues(alpha: 0.1),
@@ -195,13 +194,11 @@ class KitchenKdsScreen extends ConsumerWidget {
           minimumSize: Size.zero,
         ),
         onPressed: () {
-          ref
-              .read(kitchenQueueNotifierProvider.notifier)
-              .updateItemStatus(orderId, item.id, OrderItemStatus.preparing);
+          debugPrint('[KDS] Mutation queued: Item $ticketId / ${item.itemId} -> preparing (Waiting for ACK)');
         },
         child: const Text('Prep', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
       );
-    } else if (item.status == OrderItemStatus.preparing) {
+    } else if (item.status == KitchenItemStatus.preparing) {
       return TextButton(
         style: TextButton.styleFrom(
           backgroundColor: AppColors.success.withValues(alpha: 0.1),
@@ -210,13 +207,11 @@ class KitchenKdsScreen extends ConsumerWidget {
           minimumSize: Size.zero,
         ),
         onPressed: () {
-          ref
-              .read(kitchenQueueNotifierProvider.notifier)
-              .updateItemStatus(orderId, item.id, OrderItemStatus.ready);
+          debugPrint('[KDS] Mutation queued: Item $ticketId / ${item.itemId} -> ready (Waiting for ACK)');
         },
         child: const Text('Ready', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
       );
-    } else if (item.status == OrderItemStatus.ready) {
+    } else if (item.status == KitchenItemStatus.ready) {
       return const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 20);
     } else {
       return const SizedBox.shrink();

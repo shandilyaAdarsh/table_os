@@ -5,42 +5,35 @@ import '../../domain/entities/branch.dart';
 import '../../domain/entities/staff_member.dart';
 import 'auth_state.dart';
 
+import 'package:flutter/foundation.dart';
+import '../../providers/auth_repository_provider.dart';
+import '../../../../core/runtime/runtime.dart';
+
 part 'auth_notifier.g.dart';
 
 @Riverpod(keepAlive: true)
 class AuthNotifier extends _$AuthNotifier {
   @override
   AuthState build() {
+    _loadInitialData();
     return const AuthState();
   }
 
+  Future<void> _loadInitialData() async {
+    final repo = ref.read(authRepositoryProvider);
+    _organizations = await repo.getOrganizations();
+    for (var org in _organizations) {
+      _branches[org.id] = await repo.getBranchesForOrganization(org.id);
+    }
+  }
+
+  List<Organization> get mockOrganizations => _organizations;
+  Map<String, List<Branch>> get mockBranches => _branches;
+
   // Preloaded mock data for offline resiliency and simulation
-  final List<Organization> mockOrganizations = const [
-    Organization(id: 'org-1', name: "McDonald's Central Region"),
-    Organization(id: 'org-2', name: "McDonald's APMEA Region"),
-    Organization(id: 'org-3', name: 'McCafe Sandbox'),
-  ];
-
-  final Map<String, List<Branch>> mockBranches = const {
-    'org-1': [
-      Branch(id: 'br-1', name: 'Central Terminal Branch', status: BranchStatus.open, syncPercentage: '100%', activeStaff: 24),
-      Branch(id: 'br-2', name: 'Westside Mall Express', status: BranchStatus.busy, syncPercentage: '96%', activeStaff: 12),
-      Branch(id: 'br-3', name: 'Downtown Bistro', status: BranchStatus.outage, syncPercentage: '0%', activeStaff: 0),
-    ],
-    'org-2': [
-      Branch(id: 'br-4', name: 'Singapore Changi Terminal 3', status: BranchStatus.open, syncPercentage: '100%', activeStaff: 32),
-      Branch(id: 'br-5', name: 'Tokyo Shibuya Crossing', status: BranchStatus.busy, syncPercentage: '92%', activeStaff: 18),
-    ],
-    'org-3': [
-      Branch(id: 'br-6', name: 'Sandbox Local Node', status: BranchStatus.open, syncPercentage: '100%', activeStaff: 2),
-    ],
-  };
-
-  final List<StaffMember> mockStaff = const [
-    StaffMember(id: 'st-1', name: 'John Doe', pin: '1234', role: StaffRole.waiter),
-    StaffMember(id: 'st-2', name: 'Sarah Jenkins', pin: '5678', role: StaffRole.kdsOperator),
-    StaffMember(id: 'st-3', name: 'Bob Smith', pin: '0000', role: StaffRole.manager),
-  ];
+  // Now loaded dynamically from AuthRepository
+  List<Organization> _organizations = [];
+  Map<String, List<Branch>> _branches = {};
 
   void selectOrganization(Organization org) {
     state = state.copyWith(
@@ -61,14 +54,16 @@ class AuthNotifier extends _$AuthNotifier {
     );
   }
 
-  bool loginWithPIN(String pin) {
+  Future<bool> loginWithPIN(String pin) async {
     state = state.copyWith(errorMessage: null);
     
-    // Check pin credentials against mock database
-    final staffIndex = mockStaff.indexWhere((s) => s.pin == pin);
-    if (staffIndex != -1) {
+    // Check pin credentials against authoritative repository
+    final repo = ref.read(authRepositoryProvider);
+    final staff = await repo.loginWithPIN(pin);
+    
+    if (staff != null) {
       state = state.copyWith(
-        loggedInStaff: mockStaff[staffIndex],
+        loggedInStaff: staff,
         isLocked: false,
       );
       return true;
@@ -80,20 +75,38 @@ class AuthNotifier extends _$AuthNotifier {
     }
   }
 
-  void startShift(StaffRole role, String section) {
-    if (state.loggedInStaff == null) return;
+  Future<void> startShift(StaffRole role, String section) async {
+    if (state.loggedInStaff == null || state.selectedBranch == null) return;
     
     final updatedStaff = state.loggedInStaff!.copyWith(
       role: role,
       section: section,
     );
 
-    state = state.copyWith(
-      loggedInStaff: updatedStaff,
-      isShiftStarted: true,
-      shiftStartTime: DateTime.now(),
-      isLocked: false,
+    // Hydrate runtime session using backend-authoritative data
+    final hydrator = ref.read(runtimeSessionHydratorProvider);
+    final result = await hydrator.hydrateSession(
+      branchId: state.selectedBranch!.id,
+      staffId: updatedStaff.id,
     );
+
+    if (result.success && result.session != null) {
+      // Setup runtime epoch and notify orchestrator
+      final orchestrator = ref.read(runtimeOrchestratorProvider);
+      orchestrator.startSession(
+        branchId: state.selectedBranch!.id,
+        staffId: updatedStaff.id,
+      );
+
+      state = state.copyWith(
+        loggedInStaff: updatedStaff,
+        isShiftStarted: true,
+        shiftStartTime: DateTime.now(),
+        isLocked: false,
+      );
+    } else {
+      state = state.copyWith(errorMessage: result.errorMessage ?? 'Failed to start shift');
+    }
   }
 
   void lockSession() {

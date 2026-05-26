@@ -33,11 +33,11 @@ class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen> {
     });
   }
 
-  void _triggerLogin() {
-    final success = ref.read(authNotifierProvider.notifier).loginWithPIN(_pinCode);
-    if (success) {
+  Future<void> _triggerLogin() async {
+    final success = await ref.read(authNotifierProvider.notifier).loginWithPIN(_pinCode);
+    if (success && mounted) {
       context.go('/shift-start');
-    } else {
+    } else if (mounted) {
       setState(() {
         _pinCode = '';
       });
@@ -150,10 +150,10 @@ class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen> {
                     }),
                     IconButton(
                       icon: const Icon(Icons.fingerprint_rounded, size: 28, color: AppColors.primary),
-                      onPressed: () {
+                      onPressed: () async {
                         // Mock biometric bypass for testing convenience
-                        ref.read(authNotifierProvider.notifier).loginWithPIN('1234');
-                        context.go('/shift-start');
+                        await ref.read(authNotifierProvider.notifier).loginWithPIN('1234');
+                        if (mounted) context.go('/shift-start');
                       },
                     ),
                     OutlinedButton(

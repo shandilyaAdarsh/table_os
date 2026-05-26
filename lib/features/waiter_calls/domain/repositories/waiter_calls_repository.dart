@@ -8,4 +8,11 @@ abstract class WaiterCallsRepository {
   Future<void> resolveCall(String callId);
   Future<void> escalateCall(String callId);
   Future<void> createWaiterCall(String tableId, String tableLabel, CallType type, {String? note, bool isVip});
+
+  Future<void> applyRemoteCallUpdate(WaiterCall call);
+  Future<void> applyRemoteCallDelete(String callId);
+
+  // New sync methods for deterministic projection
+  Future<void> syncWaiterCalls(List<WaiterCall> calls);
+  Future<List<WaiterCall>> fetchActiveCalls();
 }

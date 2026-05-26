@@ -7,74 +7,27 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 
-// ---------------------------------------------------------------------------
-// Demo Providers (self-contained)
-// ---------------------------------------------------------------------------
+import '../state/realtime_providers.dart';
+import '../../../../core/network/realtime_sync_manager.dart';
+import '../../../../core/runtime/diagnostics/operational_health_publisher.dart';
 
-final demoRealtimeStateProvider =
-    StateProvider<String>((ref) => 'connected');
+// Diagnostic Widgets
+import '../widgets/diagnostics/transport_health_monitor.dart';
+import '../widgets/diagnostics/replay_recovery_monitor.dart';
+import '../widgets/diagnostics/projection_rebuild_monitor.dart';
+import '../widgets/diagnostics/mutation_acknowledgement_monitor.dart';
+import '../widgets/diagnostics/queue_backlog_inspector.dart';
+import '../widgets/diagnostics/runtime_epoch_diagnostics.dart';
+import '../widgets/diagnostics/realtime_synchronization_inspector.dart';
 
-final demoReplayProgressProvider =
-    StateProvider<double>((ref) => 0.47);
 
-final demoPendingOpsProvider =
-    StateProvider<int>((ref) => 3);
-
-final demoFailedOpsProvider =
-    StateProvider<int>((ref) => 1);
-
-// ---------------------------------------------------------------------------
-// Model for timeline events
-// ---------------------------------------------------------------------------
-
-class _TimelineEvent {
-  final String label;
-  final String timeAgo;
-  final IconData icon;
-  final Color color;
-
-  const _TimelineEvent({
-    required this.label,
-    required this.timeAgo,
-    required this.icon,
-    required this.color,
-  });
-}
-
-// ---------------------------------------------------------------------------
-// RealtimeStatusScreen
-// ---------------------------------------------------------------------------
 
 class RealtimeStatusScreen extends ConsumerWidget {
   const RealtimeStatusScreen({super.key});
 
-  static const _timeline = [
-    _TimelineEvent(
-      label: 'Connected to server',
-      timeAgo: '2 h ago',
-      icon: Icons.check_circle_rounded,
-      color: AppColors.success,
-    ),
-    _TimelineEvent(
-      label: 'Connection lost (network drop)',
-      timeAgo: '8 min ago',
-      icon: Icons.cancel_rounded,
-      color: AppColors.error,
-    ),
-    _TimelineEvent(
-      label: 'Reconnected successfully',
-      timeAgo: '7 min ago',
-      icon: Icons.refresh_rounded,
-      color: AppColors.success,
-    ),
-  ];
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final connectionState = ref.watch(demoRealtimeStateProvider);
-    final replayProgress = ref.watch(demoReplayProgressProvider);
-    final pendingOps = ref.watch(demoPendingOpsProvider);
-    final failedOps = ref.watch(demoFailedOpsProvider);
+    final healthState = ref.watch(operationalHealthProvider);
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surfaceColor =
@@ -91,7 +44,7 @@ class RealtimeStatusScreen extends ConsumerWidget {
           isDark ? AppColors.darkBackground : AppColors.lightBackground,
       appBar: AppBar(
         title: Text(
-          'Realtime Status',
+          'Runtime Diagnostics',
           style: AppTextStyles.h3.copyWith(color: textPrimary),
         ),
         centerTitle: false,
@@ -107,157 +60,125 @@ class RealtimeStatusScreen extends ConsumerWidget {
           icon: Icon(Icons.arrow_back_ios_new_rounded, color: textPrimary),
           onPressed: () => context.pop(),
         ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh_rounded, color: textPrimary),
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              ref.read(operationalHealthProvider.notifier).refresh();
+            },
+          )
+        ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-        children: [
-          // ── Status Card ─────────────────────────────────────────────────
-          _StatusCard(
-            connectionState: connectionState,
-            surfaceColor: surfaceColor,
-            borderColor: borderColor,
-            textPrimary: textPrimary,
-            textSecondary: textSecondary,
-          ),
+      body: healthState.when(
+        data: (snapshot) {
+          final isReplaying = snapshot.transport.isReplaying;
+          final replayProgress = isReplaying ? 0.65 : 1.0; // In a real scenario, this would come from the snapshot or KDS
 
-          // ── Replay progress bar ──────────────────────────────────────────
-          if (connectionState == 'replaying') ...[
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          return ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+            children: [
+              // ── Overall Status ──────────────────────────────────────────────
+              _StatusCard(
+                snapshot: snapshot,
+                surfaceColor: surfaceColor,
+                borderColor: borderColor,
+                textPrimary: textPrimary,
+                textSecondary: textSecondary,
+              ),
+
+              const SizedBox(height: 24),
+
+              // ── Transport & Epoch ───────────────────────────────────────────
+              TransportHealthMonitor(transport: snapshot.transport),
+              const SizedBox(height: 16),
+              RuntimeEpochDiagnostics(epoch: snapshot.epoch),
+
+              const SizedBox(height: 16),
+
+              // ── Replay & Synchronization ──────────────────────────────────────
+              if (isReplaying) ...[
+                ReplayRecoveryMonitor(
+                  isReplaying: isReplaying,
+                  progress: replayProgress,
+                ),
+                const SizedBox(height: 16),
+              ],
+              RealtimeSynchronizationInspector(sequence: snapshot.sequence),
+
+              const SizedBox(height: 24),
+
+              // ── Projections & Queues ────────────────────────────────────────
+              _SectionHeader(
+                title: 'State Hydration & Backlogs',
+                textPrimary: textPrimary,
+              ),
+              const SizedBox(height: 12),
+              ProjectionRebuildMonitor(projections: snapshot.projections),
+              const SizedBox(height: 16),
+              MutationAcknowledgementMonitor(mutations: snapshot.mutations),
+              const SizedBox(height: 16),
+              QueueBacklogInspector(
+                projectionRebuildBacklog: snapshot.projections.currentlyRebuilding,
+                mutationBacklog: snapshot.mutations.pendingMutations,
+              ),
+
+              const SizedBox(height: 32),
+
+              // ── Quick Actions ────────────────────────────────────────────────
+              _SectionHeader(
+                title: 'Runtime Controls',
+                textPrimary: textPrimary,
+              ),
+              const SizedBox(height: 12),
+              Row(
                 children: [
-                  Text(
-                    'Replay progress',
-                    style: AppTextStyles.bodySmall
-                        .copyWith(color: textSecondary),
-                  ),
-                  const SizedBox(height: 6),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: replayProgress,
-                      minHeight: 6,
-                      backgroundColor: borderColor,
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                          Color(0xFF3D8EF0)),
+                  Expanded(
+                    child: _ActionButton(
+                      label: 'Force Reconnect',
+                      icon: Icons.refresh_rounded,
+                      color: AppColors.primary,
+                      onPressed: () {
+                        HapticFeedback.mediumImpact();
+                        ref.read(realtimeSyncManagerProvider).connectLocal();
+                        ref.read(realtimeStateProvider.notifier).simulateReconnect();
+                      },
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${(replayProgress * 100).toStringAsFixed(0)}% complete',
-                    style: AppTextStyles.caption
-                        .copyWith(color: textSecondary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _ActionButton(
+                      label: 'Invalidate Epoch',
+                      icon: Icons.block_rounded,
+                      color: AppColors.error,
+                      onPressed: () {
+                        HapticFeedback.heavyImpact();
+                        // Real implementation would call epochManager.invalidateEpoch()
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Epoch invalidated (Simulated)')),
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),
-            ),
-          ],
 
-          const SizedBox(height: 24),
+              const SizedBox(height: 32),
 
-          // ── Connection Timeline ──────────────────────────────────────────
-          _SectionHeader(
-            title: 'Connection Timeline',
-            textPrimary: textPrimary,
-          ),
-          const SizedBox(height: 12),
-          _TimelineSection(
-            events: _timeline,
-            surfaceColor: surfaceColor,
-            borderColor: borderColor,
-            textPrimary: textPrimary,
-            textSecondary: textSecondary,
-          ),
-
-          const SizedBox(height: 24),
-
-          // ── Sync Queue KPIs ──────────────────────────────────────────────
-          _SectionHeader(
-            title: 'Sync Queue',
-            textPrimary: textPrimary,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _KpiChip(
-                  label: 'Pending Ops',
-                  value: '$pendingOps',
-                  color: AppColors.warning,
-                  icon: Icons.pending_rounded,
-                  surfaceColor: surfaceColor,
-                  borderColor: borderColor,
-                  textPrimary: textPrimary,
-                  textSecondary: textSecondary,
-                ),
+              // ── Simulation Panel ─────────────────────────────────────────────
+              _SimulationPanel(
+                surfaceColor: surfaceColor,
+                borderColor: borderColor,
+                textPrimary: textPrimary,
+                textSecondary: textSecondary,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _KpiChip(
-                  label: 'Failed Ops',
-                  value: '$failedOps',
-                  color: AppColors.error,
-                  icon: Icons.error_rounded,
-                  surfaceColor: surfaceColor,
-                  borderColor: borderColor,
-                  textPrimary: textPrimary,
-                  textSecondary: textSecondary,
-                ),
-              ),
+
+              const SizedBox(height: 32),
             ],
-          ),
-
-          const SizedBox(height: 24),
-
-          // ── Quick Actions ────────────────────────────────────────────────
-          _SectionHeader(
-            title: 'Quick Actions',
-            textPrimary: textPrimary,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _ActionButton(
-                  label: 'Force Reconnect',
-                  icon: Icons.refresh_rounded,
-                  color: AppColors.primary,
-                  onPressed: () {
-                    HapticFeedback.mediumImpact();
-                    ref.read(demoRealtimeStateProvider.notifier).state =
-                        'connected';
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _ActionButton(
-                  label: 'View Sync Queue',
-                  icon: Icons.sync_alt_rounded,
-                  color: AppColors.secondary,
-                  onPressed: () {
-                    HapticFeedback.selectionClick();
-                    context.push('/realtime/sync-queue');
-                  },
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 32),
-
-          // ── Simulation Panel ─────────────────────────────────────────────
-          _SimulationPanel(
-            surfaceColor: surfaceColor,
-            borderColor: borderColor,
-            textPrimary: textPrimary,
-            textSecondary: textSecondary,
-          ),
-
-          const SizedBox(height: 32),
-        ],
+          );
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, s) => Center(child: Text('Error loading diagnostics: $e', style: TextStyle(color: AppColors.error))),
       ),
     );
   }
@@ -268,14 +189,14 @@ class RealtimeStatusScreen extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 
 class _StatusCard extends StatelessWidget {
-  final String connectionState;
+  final dynamic snapshot; // RuntimeDiagnosticsSnapshot
   final Color surfaceColor;
   final Color borderColor;
   final Color textPrimary;
   final Color textSecondary;
 
   const _StatusCard({
-    required this.connectionState,
+    required this.snapshot,
     required this.surfaceColor,
     required this.borderColor,
     required this.textPrimary,
@@ -283,45 +204,30 @@ class _StatusCard extends StatelessWidget {
   });
 
   _StatusConfig get config {
-    switch (connectionState) {
-      case 'connected':
+    final status = snapshot.overallHealth.name;
+    switch (status) {
+      case 'healthy':
         return const _StatusConfig(
           icon: Icons.check_circle_rounded,
           label: 'Fully Operational',
           color: AppColors.success,
-          subtitle: 'All systems nominal. Real-time updates active.',
+          subtitle: 'All runtime systems nominal. Real-time updates active.',
           showSpinner: false,
-        );
-      case 'reconnecting':
-        return const _StatusConfig(
-          icon: Icons.sync_rounded,
-          label: 'Reconnecting...',
-          color: Color(0xFFF59E0B),
-          subtitle: 'Attempting to re-establish connection.',
-          showSpinner: true,
-        );
-      case 'replaying':
-        return const _StatusConfig(
-          icon: Icons.history_rounded,
-          label: 'Syncing missed events',
-          color: Color(0xFF3D8EF0),
-          subtitle: 'Replaying missed events to restore floor state.',
-          showSpinner: true,
         );
       case 'degraded':
         return const _StatusConfig(
           icon: Icons.warning_rounded,
-          label: 'Offline Mode',
+          label: 'Degraded Mode',
           color: AppColors.warning,
-          subtitle: 'Connection degraded. Some updates may be delayed.',
+          subtitle: 'System operating with reduced capabilities. Queuing locally.',
           showSpinner: false,
         );
       case 'critical':
         return const _StatusConfig(
           icon: Icons.dangerous_rounded,
-          label: 'Recovery Required',
+          label: 'Critical Failure',
           color: AppColors.error,
-          subtitle: 'Unable to reach server. Manual intervention needed.',
+          subtitle: 'Runtime synchronization failed. Manual intervention needed.',
           showSpinner: false,
         );
       default:
@@ -329,7 +235,7 @@ class _StatusCard extends StatelessWidget {
           icon: Icons.help_outline_rounded,
           label: 'Unknown',
           color: AppColors.darkTextSecondary,
-          subtitle: 'Connection state unknown.',
+          subtitle: 'Overall health unknown.',
           showSpinner: false,
         );
     }
@@ -354,7 +260,6 @@ class _StatusCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Icon / spinner
           if (cfg.showSpinner)
             SizedBox(
               width: 64,
@@ -382,10 +287,8 @@ class _StatusCard extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
-          // Status pill
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             decoration: BoxDecoration(
               color: cfg.color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(100),
@@ -403,7 +306,7 @@ class _StatusCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  connectionState.toUpperCase(),
+                  snapshot.overallHealth.name.toUpperCase(),
                   style: AppTextStyles.caption.copyWith(
                     color: cfg.color,
                     fontWeight: FontWeight.w700,
@@ -435,195 +338,7 @@ class _StatusConfig {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Timeline Section
-// ---------------------------------------------------------------------------
 
-class _TimelineSection extends StatelessWidget {
-  final List<_TimelineEvent> events;
-  final Color surfaceColor;
-  final Color borderColor;
-  final Color textPrimary;
-  final Color textSecondary;
-
-  const _TimelineSection({
-    required this.events,
-    required this.surfaceColor,
-    required this.borderColor,
-    required this.textPrimary,
-    required this.textSecondary,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
-      ),
-      child: Column(
-        children: List.generate(events.length, (i) {
-          final event = events[i];
-          final isLast = i == events.length - 1;
-          return _TimelineItem(
-            event: event,
-            isLast: isLast,
-            borderColor: borderColor,
-            textPrimary: textPrimary,
-            textSecondary: textSecondary,
-          );
-        }),
-      ),
-    );
-  }
-}
-
-class _TimelineItem extends StatelessWidget {
-  final _TimelineEvent event;
-  final bool isLast;
-  final Color borderColor;
-  final Color textPrimary;
-  final Color textSecondary;
-
-  const _TimelineItem({
-    required this.event,
-    required this.isLast,
-    required this.borderColor,
-    required this.textPrimary,
-    required this.textSecondary,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Icon + connector line
-          Column(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: event.color.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(event.icon, color: event.color, size: 18),
-              ),
-              if (!isLast)
-                Expanded(
-                  child: Container(
-                    width: 2,
-                    color: borderColor,
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(width: 12),
-          // Event text
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(bottom: isLast ? 0 : 16, top: 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    event.label,
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: textPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    event.timeAgo,
-                    style:
-                        AppTextStyles.bodySmall.copyWith(color: textSecondary),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// KPI Chip
-// ---------------------------------------------------------------------------
-
-class _KpiChip extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-  final IconData icon;
-  final Color surfaceColor;
-  final Color borderColor;
-  final Color textPrimary;
-  final Color textSecondary;
-
-  const _KpiChip({
-    required this.label,
-    required this.value,
-    required this.color,
-    required this.icon,
-    required this.surfaceColor,
-    required this.borderColor,
-    required this.textPrimary,
-    required this.textSecondary,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      decoration: BoxDecoration(
-        color: surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: color, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: AppTextStyles.h3.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                Text(
-                  label,
-                  style: AppTextStyles.bodySmall
-                      .copyWith(color: textSecondary),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Action Button
@@ -747,14 +462,29 @@ class _SimulationPanel extends ConsumerWidget {
             children: states.map((s) {
               final (label, color, icon) = s;
               final current =
-                  ref.watch(demoRealtimeStateProvider);
+                  ref.watch(realtimeStateProvider).connectionState.name;
               final isActive = current == label;
               return GestureDetector(
                 onTap: () {
                   HapticFeedback.selectionClick();
-                  ref
-                      .read(demoRealtimeStateProvider.notifier)
-                      .state = label;
+                  final notifier = ref.read(realtimeStateProvider.notifier);
+                  switch (label) {
+                    case 'connected':
+                      notifier.simulateReconnect();
+                      break;
+                    case 'reconnecting':
+                      notifier.simulateDisconnect();
+                      break;
+                    case 'replaying':
+                      notifier.simulateReplay();
+                      break;
+                    case 'degraded':
+                      notifier.simulateDegraded();
+                      break;
+                    case 'critical':
+                      notifier.simulateCritical();
+                      break;
+                  }
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
@@ -762,7 +492,7 @@ class _SimulationPanel extends ConsumerWidget {
                       horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     color: isActive
-                        ? color.withValues(alpha: 0.18)
+                        ? color.withOpacity(0.18)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(100),
                     border: Border.all(

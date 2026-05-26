@@ -204,4 +204,27 @@ class TablesRepositoryImpl implements TablesRepository {
       await offlineQueue.queueWrite(action: 'splitTable', payload: payload);
     }
   }
+
+  @override
+  Future<void> applyRemoteTableUpdate(RestaurantTable table) async {
+    await local.cacheTable(table.toDto());
+  }
+
+  @override
+  Future<void> applyRemoteTableDelete(String tableId) async {
+    final current = await local.getCachedTables();
+    final filtered = current.where((dto) => dto.id != tableId).toList();
+    await local.cacheTables(filtered);
+  }
+
+  @override
+  Future<void> syncTables(List<RestaurantTable> tables) async {
+    final dtos = tables.map((t) => t.toDto()).toList();
+    await local.cacheTables(dtos);
+  }
+
+  @override
+  Future<List<RestaurantTable>> fetchTables() async {
+    return getTables();
+  }
 }

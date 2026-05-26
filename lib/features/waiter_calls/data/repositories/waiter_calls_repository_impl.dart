@@ -247,7 +247,8 @@ class WaiterCallsRepositoryImpl implements WaiterCallsRepository {
     }
   }
 
-  void applyRemoteCallUpdate(WaiterCall call) {
+  @override
+  Future<void> applyRemoteCallUpdate(WaiterCall call) async {
     final idx = _inMemoryCalls.indexWhere((c) => c.id == call.id);
     if (idx != -1) {
       _inMemoryCalls[idx] = call;
@@ -257,8 +258,21 @@ class WaiterCallsRepositoryImpl implements WaiterCallsRepository {
     _emit();
   }
 
-  void applyRemoteCallDelete(String callId) {
+  @override
+  Future<void> applyRemoteCallDelete(String callId) async {
     _inMemoryCalls.removeWhere((c) => c.id == callId);
     _emit();
+  }
+
+  @override
+  Future<void> syncWaiterCalls(List<WaiterCall> calls) async {
+    _inMemoryCalls.clear();
+    _inMemoryCalls.addAll(calls);
+    _emit();
+  }
+
+  @override
+  Future<List<WaiterCall>> fetchActiveCalls() async {
+    return _inMemoryCalls.where((c) => c.status != CallStatus.resolved).toList();
   }
 }

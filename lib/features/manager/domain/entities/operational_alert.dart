@@ -63,6 +63,40 @@ class OperationalAlert {
     );
   }
 
+  factory OperationalAlert.fromJson(Map<String, dynamic> json) {
+    return OperationalAlert(
+      alertId: json['alertId'] as String,
+      type: AlertType.values.firstWhere(
+        (e) => e.name == json['type'],
+        orElse: () => AlertType.slaBreached,
+      ),
+      severity: AlertSeverity.values.firstWhere(
+        (e) => e.name == json['severity'],
+        orElse: () => AlertSeverity.standard,
+      ),
+      entityId: json['entityId'] as String,
+      entityLabel: json['entityLabel'] as String,
+      triggeredAt: DateTime.parse(json['triggeredAt'] as String),
+      assignedStaffId: json['assignedStaffId'] as String?,
+      assignedStaffName: json['assignedStaffName'] as String?,
+      isAcknowledged: json['isAcknowledged'] as bool? ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'alertId': alertId,
+      'type': type.name,
+      'severity': severity.name,
+      'entityId': entityId,
+      'entityLabel': entityLabel,
+      'triggeredAt': triggeredAt.toIso8601String(),
+      'assignedStaffId': assignedStaffId,
+      'assignedStaffName': assignedStaffName,
+      'isAcknowledged': isAcknowledged,
+    };
+  }
+
   Duration get elapsed => DateTime.now().difference(triggeredAt);
 
   String get elapsedLabel {

@@ -19,6 +19,19 @@ class RealtimeStateNotifier extends StateNotifier<RealtimeStateModel> {
           ),
         );
 
+  /// General method to update connection state.
+  void updateConnectionState(RealtimeConnectionState connState, {String? error, int? attempts}) {
+    state = state.copyWith(
+      connectionState: connState,
+      reconnectAttempts: attempts ?? state.reconnectAttempts,
+      errorMessage: error,
+      clearErrorMessage: error == null,
+      clearDegradedSince: connState != RealtimeConnectionState.degraded,
+      clearReplayProgress: connState != RealtimeConnectionState.replaying,
+      clearReplayEventsRemaining: connState != RealtimeConnectionState.replaying,
+    );
+  }
+
   /// Simulates a sudden disconnect / reconnecting loop.
   void simulateDisconnect() {
     state = state.copyWith(

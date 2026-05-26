@@ -85,7 +85,7 @@ class ResponsiveExampleScreen extends StatelessWidget {
           // 20% of screen height
           height: context.heightPercent(20),
           decoration: BoxDecoration(
-            color: Colors.blue.withOpacity(0.2),
+            color: Colors.blue.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.blue),
           ),
@@ -123,7 +123,7 @@ class ResponsiveExampleScreen extends StatelessWidget {
       width: double.infinity,
       padding: AppSpacing.cardPadding(context),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
+        color: color.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color),
       ),
@@ -140,7 +140,7 @@ class ResponsiveExampleScreen extends StatelessWidget {
 
   Widget _buildResponsiveGrid(BuildContext context) {
     // Different column counts based on screen size
-    final columns = context.responsive<int>(
+    final columns = ResponsiveValue(context).responsive<int>(
       mobile: 2,
       tablet: 3,
       desktop: 4,
@@ -167,7 +167,7 @@ class ResponsiveExampleScreen extends StatelessWidget {
           itemBuilder: (context, index) {
             return Container(
               decoration: BoxDecoration(
-                color: Colors.teal.withOpacity(0.2),
+                color: Colors.teal.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.teal),
               ),

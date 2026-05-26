@@ -47,6 +47,41 @@ class FloorAnalyticsSnapshot {
     );
   }
 
+  factory FloorAnalyticsSnapshot.fromJson(Map<String, dynamic> json) {
+    final activeTables = json['activeTables'] as int? ?? 0;
+    final totalTables = json['totalTables'] as int? ?? 1;
+    return FloorAnalyticsSnapshot(
+      activeTables: activeTables,
+      totalTables: totalTables,
+      occupancyRate: (json['occupancyRate'] as num?)?.toDouble() ??
+          (activeTables / totalTables).clamp(0.0, 1.0),
+      avgTicketTimeMinutes:
+          (json['avgTicketTimeMinutes'] as num?)?.toDouble() ?? 0.0,
+      delayedTableCount: json['delayedTableCount'] as int? ?? 0,
+      slaComplianceRate:
+          (json['slaComplianceRate'] as num?)?.toDouble() ?? 1.0,
+      pendingPaymentCount: json['pendingPaymentCount'] as int? ?? 0,
+      kitchenBacklogCount: json['kitchenBacklogCount'] as int? ?? 0,
+      lastAggregatedAt: json['lastAggregatedAt'] != null
+          ? DateTime.parse(json['lastAggregatedAt'] as String)
+          : DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'activeTables': activeTables,
+      'totalTables': totalTables,
+      'occupancyRate': occupancyRate,
+      'avgTicketTimeMinutes': avgTicketTimeMinutes,
+      'delayedTableCount': delayedTableCount,
+      'slaComplianceRate': slaComplianceRate,
+      'pendingPaymentCount': pendingPaymentCount,
+      'kitchenBacklogCount': kitchenBacklogCount,
+      'lastAggregatedAt': lastAggregatedAt.toIso8601String(),
+    };
+  }
+
   /// Occupancy percentage clamped and rounded for display.
   int get occupancyPercent => (occupancyRate * 100).round().clamp(0, 100);
 

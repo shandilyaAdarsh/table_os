@@ -184,9 +184,9 @@ class _ShiftStartScreenState extends ConsumerState<ShiftStartScreen> {
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
-                    onPressed: () {
-                      ref.read(authNotifierProvider.notifier).startShift(_selectedRole, _selectedSection);
-                      context.go('/tables');
+                    onPressed: () async {
+                      await ref.read(authNotifierProvider.notifier).startShift(_selectedRole, _selectedSection);
+                      if (mounted) context.go('/tables');
                     },
                     child: const Text(
                       'START ACTIVE SHIFT',

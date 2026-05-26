@@ -1,5 +1,6 @@
 // lib/features/reservations/data/repositories/reservations_repository_impl.dart
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import '../../domain/entities/reservation.dart';
 import '../../domain/repositories/reservations_repository.dart';
 
@@ -7,8 +8,17 @@ class ReservationsRepositoryImpl implements ReservationsRepository {
   final List<Reservation> _reservations = [];
   final List<WaitlistEntry> _waitlist = [];
 
+  // Stream controllers for reactive updates
+  final _reservationsController = StreamController<List<Reservation>>.broadcast();
+  final _waitlistController = StreamController<List<WaitlistEntry>>.broadcast();
+
   ReservationsRepositoryImpl() {
     _initMockData();
+  }
+
+  void dispose() {
+    _reservationsController.close();
+    _waitlistController.close();
   }
 
   void _initMockData() {
@@ -93,12 +103,14 @@ class ReservationsRepositoryImpl implements ReservationsRepository {
   Future<void> addReservation(Reservation reservation) async {
     await Future.delayed(const Duration(milliseconds: 100));
     _reservations.add(reservation);
+    _notifyReservationsChanged();
   }
 
   @override
   Future<void> addWaitlistEntry(WaitlistEntry entry) async {
     await Future.delayed(const Duration(milliseconds: 100));
     _waitlist.add(entry);
+    _notifyWaitlistChanged();
   }
 
   @override
@@ -112,6 +124,7 @@ class ReservationsRepositoryImpl implements ReservationsRepository {
         assignedTableId: tableId ?? old.assignedTableId,
         checkedInTime: status == ReservationStatus.checkedIn ? DateTime.now() : old.checkedInTime,
       );
+      _notifyReservationsChanged();
     }
   }
 
@@ -119,5 +132,96 @@ class ReservationsRepositoryImpl implements ReservationsRepository {
   Future<void> removeFromWaitlist(String id) async {
     await Future.delayed(const Duration(milliseconds: 100));
     _waitlist.removeWhere((w) => w.id == id);
+    _notifyWaitlistChanged();
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━ RUNTIME INTEGRATION ━━━━━━━━━━━━━━━━━━━━━━
+
+  @override
+  Stream<List<Reservation>> watchReservations() {
+    return _reservationsController.stream;
+  }
+
+  @override
+  Stream<List<WaitlistEntry>> watchWaitlist() {
+    return _waitlistController.stream;
+  }
+
+  @override
+  Future<void> applyRemoteReservationUpdate(Map<String, dynamic> payload) async {
+    debugPrint('[ReservationsRepository] Applying remote reservation update: $payload');
+    
+    try {
+      final reservation = Reservation.fromJson(payload);
+      final index = _reservations.indexWhere((r) => r.id == reservation.id);
+      
+      if (index != -1) {
+        _reservations[index] = reservation;
+      } else {
+        _reservations.add(reservation);
+      }
+      
+      _notifyReservationsChanged();
+      debugPrint('[ReservationsRepository] Applied reservation update: ${reservation.id}');
+    } catch (e) {
+      debugPrint('[ReservationsRepository] ERROR applying reservation update: $e');
+    }
+  }
+
+  @override
+  Future<void> applyRemoteReservationDelete(String reservationId) async {
+    debugPrint('[ReservationsRepository] Applying remote reservation delete: $reservationId');
+    
+    final initialLength = _reservations.length;
+    _reservations.removeWhere((r) => r.id == reservationId);
+    
+    if (_reservations.length < initialLength) {
+      _notifyReservationsChanged();
+      debugPrint('[ReservationsRepository] Deleted reservation: $reservationId');
+    }
+  }
+
+  @override
+  Future<void> applyRemoteWaitlistUpdate(Map<String, dynamic> payload) async {
+    debugPrint('[ReservationsRepository] Applying remote waitlist update: $payload');
+    
+    try {
+      final entry = WaitlistEntry.fromJson(payload);
+      final index = _waitlist.indexWhere((w) => w.id == entry.id);
+      
+      if (index != -1) {
+        _waitlist[index] = entry;
+      } else {
+        _waitlist.add(entry);
+      }
+      
+      _notifyWaitlistChanged();
+      debugPrint('[ReservationsRepository] Applied waitlist update: ${entry.id}');
+    } catch (e) {
+      debugPrint('[ReservationsRepository] ERROR applying waitlist update: $e');
+    }
+  }
+
+  @override
+  Future<void> applyRemoteWaitlistDelete(String waitlistId) async {
+    debugPrint('[ReservationsRepository] Applying remote waitlist delete: $waitlistId');
+    
+    final initialLength = _waitlist.length;
+    _waitlist.removeWhere((w) => w.id == waitlistId);
+    
+    if (_waitlist.length < initialLength) {
+      _notifyWaitlistChanged();
+      debugPrint('[ReservationsRepository] Deleted waitlist entry: $waitlistId');
+    }
+  }
+
+  // ━━━━━━━━━━━━━━━━━━━━━━ INTERNAL HELPERS ━━━━━━━━━━━━━━━━━━━━━━
+
+  void _notifyReservationsChanged() {
+    _reservationsController.add(List.from(_reservations));
+  }
+
+  void _notifyWaitlistChanged() {
+    _waitlistController.add(List.from(_waitlist));
   }
 }

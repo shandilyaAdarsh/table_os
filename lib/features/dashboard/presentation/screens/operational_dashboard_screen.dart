@@ -5,11 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_spacing.dart';
 import '../../../auth/presentation/state/auth_notifier.dart';
 import '../../../tables/presentation/state/table_grid_notifier.dart';
-import '../../../kitchen/presentation/state/kitchen_queue_notifier.dart';
+import '../../../kitchen/presentation/state/kitchen_runtime_providers.dart';
 import '../../../tables/domain/entities/restaurant_table.dart';
 import '../../../orders/domain/entities/order.dart';
+import '../../../auth/domain/entities/branch.dart';
+import '../../../realtime/presentation/widgets/diagnostics/degraded_mode_coordinator_widget.dart';
+import '../../../../core/runtime/diagnostics/operational_health_publisher.dart';
 
 class OperationalDashboardScreen extends ConsumerStatefulWidget {
   const OperationalDashboardScreen({super.key});
@@ -75,8 +79,6 @@ class _OperationalDashboardScreenState extends ConsumerState<OperationalDashboar
   Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
     final tablesAsync = ref.watch(tableGridNotifierProvider);
-    final kitchenAsync = ref.watch(kitchenQueueNotifierProvider);
-    
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     
@@ -86,58 +88,53 @@ class _OperationalDashboardScreenState extends ConsumerState<OperationalDashboar
     // Operational statistics derived from providers
     int totalTables = 0;
     int occupiedTables = 0;
+    int availableTables = 0;
     int alertTables = 0;
     List<RestaurantTable> alertList = [];
     
     tablesAsync.whenData((state) {
       final tables = state.tables;
       totalTables = tables.length;
-      occupiedTables = tables.where((t) => t.status != TableStatus.available).length;
+      occupiedTables = tables.where((t) => t.status == TableStatus.occupied || t.status == TableStatus.reserved).length;
+      availableTables = tables.where((t) => t.status == TableStatus.available).length;
       alertList = tables.where((t) => t.status == TableStatus.needsAttention).toList();
       alertTables = alertList.length;
     });
 
-    int preparingOrdersCount = 0;
-    int readyOrdersCount = 0;
-    kitchenAsync.whenData((orders) {
-      preparingOrdersCount = orders.where((o) => o.status == OrderStatus.preparing || o.status == OrderStatus.sent).length;
-      readyOrdersCount = orders.where((o) => o.status == OrderStatus.ready).length;
-    });
-
-    // Mock calculations for sections based on typical restaurant configurations
-    double patioLoad = 0.0;
-    double mainLoad = 0.0;
-    double barLoad = 0.0;
-    double gardenLoad = 0.0;
+    final preparingTickets = ref.watch(preparingTicketsProvider);
+    final readyTickets = ref.watch(readyTicketsProvider);
+    final int preparingCount = preparingTickets.length;
+    final int readyCount = readyTickets.length;
+    // We don't have completedOrdersCount modeled in the projection yet, so we mock it.
+    final int completedOrdersCount = 0;
+    // Section load calculations
+    Map<String, Map<String, dynamic>> sectionStats = {
+      'Patio': {'total': 0, 'occupied': 0, 'range': 'T1-T3'},
+      'Main Hall': {'total': 0, 'occupied': 0, 'range': 'T4-T6'},
+      'Bar Area': {'total': 0, 'occupied': 0, 'range': 'T7-T8'},
+      'Garden': {'total': 0, 'occupied': 0, 'range': 'T9+'},
+    };
 
     tablesAsync.whenData((state) {
       final tables = state.tables;
-      int patioTotal = 0, patioOcc = 0;
-      int mainTotal = 0, mainOcc = 0;
-      int barTotal = 0, barOcc = 0;
-      int gardenTotal = 0, gardenOcc = 0;
-
       for (var table in tables) {
         final idNum = int.tryParse(table.id) ?? 1;
+        String section;
         if (idNum <= 3) {
-          patioTotal++;
-          if (table.status != TableStatus.available) patioOcc++;
+          section = 'Patio';
         } else if (idNum <= 6) {
-          mainTotal++;
-          if (table.status != TableStatus.available) mainOcc++;
+          section = 'Main Hall';
         } else if (idNum <= 8) {
-          barTotal++;
-          if (table.status != TableStatus.available) barOcc++;
+          section = 'Bar Area';
         } else {
-          gardenTotal++;
-          if (table.status != TableStatus.available) gardenOcc++;
+          section = 'Garden';
+        }
+        
+        sectionStats[section]!['total']++;
+        if (table.status != TableStatus.available) {
+          sectionStats[section]!['occupied']++;
         }
       }
-
-      patioLoad = patioTotal > 0 ? (patioOcc / patioTotal) : 0.0;
-      mainLoad = mainTotal > 0 ? (mainOcc / mainTotal) : 0.0;
-      barLoad = barTotal > 0 ? (barOcc / barTotal) : 0.0;
-      gardenLoad = gardenTotal > 0 ? (gardenOcc / gardenTotal) : 0.0;
     });
 
     // Device lock shortcut
@@ -147,502 +144,743 @@ class _OperationalDashboardScreenState extends ConsumerState<OperationalDashboar
     }
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBackground : Colors.grey[50],
+      backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
       appBar: AppBar(
+        elevation: 0,
+        backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              branch?.name ?? 'Operational Dashboard',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              'Dashboard',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            if (staff != null)
+            if (branch != null)
               Text(
-                'Shift User: ${staff.name} (${staff.role.name.toUpperCase()})',
-                style: theme.textTheme.bodySmall?.copyWith(color: AppColors.primary),
+                branch.name,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                ),
               ),
           ],
         ),
         actions: [
-          // Connection Health Indicator
-          _buildConnectionIndicator(branch),
+          // Connection Status
+          _buildConnectionBadge(branch, isDark),
+          const SizedBox(width: 8),
+          // Lock button
           IconButton(
-            tooltip: 'Secure Terminal Lock',
-            icon: const Icon(Icons.lock_outline_rounded),
+            tooltip: 'Lock Session',
+            icon: Icon(
+              Icons.lock_outline_rounded,
+              color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
+            ),
             onPressed: triggerLock,
           ),
+          // Logout button
           IconButton(
-            tooltip: 'Logout Session',
-            icon: const Icon(Icons.logout_rounded),
+            tooltip: 'Logout',
+            icon: Icon(
+              Icons.logout_rounded,
+              color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
+            ),
             onPressed: () {
               ref.read(authNotifierProvider.notifier).logout();
               context.go('/org-select');
             },
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. Grid of Quick Stats Metrics Cards
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildMetricCard(
-                      title: 'ACTIVE TABLES',
-                      value: '$occupiedTables / $totalTables',
-                      subtitle: '${((totalTables > 0 ? occupiedTables / totalTables : 0) * 100).toInt()}% Occupancy',
-                      color: AppColors.primary,
-                      icon: Icons.table_restaurant_rounded,
-                      isDark: isDark,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildMetricCard(
-                      title: 'KITCHEN READY',
-                      value: '$readyOrdersCount',
-                      subtitle: '$preparingOrdersCount Prepping',
-                      color: readyOrdersCount > 0 ? AppColors.success : AppColors.info,
-                      icon: Icons.dinner_dining_rounded,
-                      isDark: isDark,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildMetricCard(
-                      title: 'SERVICE ALERTS',
-                      value: '$alertTables',
-                      subtitle: alertTables > 0 ? 'Urgent SLAs active' : 'All SLAs stable',
-                      color: alertTables > 0 ? AppColors.error : Colors.grey,
-                      icon: Icons.notification_important_rounded,
-                      isDark: isDark,
-                    ),
-                  ),
-                ],
-              ).animate().fade(duration: 400.ms).slideY(begin: 0.05, end: 0),
-              
-              const SizedBox(height: 16),
-
-              // 2. Middle Panel: SLA Alerts list (left) & Heatmap (right)
-              Expanded(
-                flex: 4,
-                child: Row(
+        child: Column(
+          children: [
+            // High-visibility runtime diagnostics banner
+            const DegradedModeCoordinatorWidget(),
+            
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.all(AppSpacing.md(context)),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // SLA Alerts Column (left side)
-                    Expanded(
-                      flex: 3,
-                      child: Card(
-                        color: isDark ? AppColors.darkSurface : Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          side: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'SLA ALERTS (Realtime Priorities)',
-                                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold, letterSpacing: 0.5),
-                                  ),
-                                  if (alertTables > 0)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.error.withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Text(
-                                        'URGENT',
-                                        style: TextStyle(color: AppColors.error, fontSize: 10, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              const Divider(height: 20),
-                              Expanded(
-                                child: alertList.isEmpty
-                                    ? Center(
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.check_circle_outline_rounded, size: 48, color: AppColors.success.withValues(alpha: 0.7)),
-                                            const SizedBox(height: 12),
-                                            Text(
-                                              'No active SLA alerts',
-                                              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              'Operations running within target parameters.',
-                                              textAlign: TextAlign.center,
-                                              style: theme.textTheme.bodySmall?.copyWith(
-                                                color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      )
-                                    : ListView.builder(
-                                        itemCount: alertList.length,
-                                        itemBuilder: (context, index) {
-                                          final alertTable = alertList[index];
-                                          final alertCard = Container(
-                                            padding: const EdgeInsets.all(12),
-                                            decoration: BoxDecoration(
-                                              color: AppColors.error.withValues(alpha: 0.06),
-                                              borderRadius: BorderRadius.circular(12),
-                                              border: Border.all(color: AppColors.error.withValues(alpha: 0.2)),
-                                            ),
-                                            child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: [
-                                                Row(
-                                                  children: [
-                                                    const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 24),
-                                                    const SizedBox(width: 12),
-                                                    Column(
-                                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                                      children: [
-                                                        Text(
-                                                          'Table ${alertTable.label}: Action Required',
-                                                          style: const TextStyle(fontWeight: FontWeight.bold),
-                                                        ),
-                                                        Text(
-                                                          'Order ready for delivery - delayed 4m',
-                                                          style: theme.textTheme.bodySmall?.copyWith(
-                                                            color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ],
-                                                ),
-                                                Row(
-                                                  children: [
-                                                    TextButton(
-                                                      style: TextButton.styleFrom(
-                                                        foregroundColor: AppColors.error,
-                                                      ),
-                                                      onPressed: () {
-                                                        ref.read(tableGridNotifierProvider.notifier).updateStatus(alertTable.id, TableStatus.occupied);
-                                                      },
-                                                      child: const Text('Resolve'),
-                                                    ),
-                                                    ElevatedButton(
-                                                      style: ElevatedButton.styleFrom(
-                                                        backgroundColor: AppColors.error,
-                                                        foregroundColor: Colors.white,
-                                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                                        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                                      ),
-                                                      onPressed: () {
-                                                        context.push('/tables/${alertTable.id}');
-                                                      },
-                                                      child: const Text('View'),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ],
-                                            ),
-                                          ).animate(onPlay: (controller) => controller.repeat(reverse: true))
-                                           .boxShadow(
-                                             begin: const BoxShadow(color: Colors.transparent),
-                                             end: BoxShadow(color: AppColors.error.withValues(alpha: 0.08), blurRadius: 10),
-                                             duration: 1000.ms,
-                                           );
-                                          return Padding(
-                                            padding: const EdgeInsets.only(bottom: 10.0),
-                                            child: alertCard,
-                                          );
-                                        },
-                                      ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                    // Welcome Section
+                    if (staff != null) ...[
+                      _buildWelcomeSection(context, staff, isDark),
+                      SizedBox(height: AppSpacing.lg(context)),
+                    ],
+
+                    // Quick Stats Grid
+                    _buildQuickStatsGrid(
+                      context,
+                      totalTables: totalTables,
+                      occupiedTables: occupiedTables,
+                      availableTables: availableTables,
+                      alertTables: alertTables,
+                      preparingOrders: preparingCount,
+                      readyOrders: readyCount,
+                      completedOrders: completedOrdersCount,
+                      isDark: isDark,
                     ),
-                    const SizedBox(width: 12),
-                    // Load Balance Heatmap Column (right side)
-                    Expanded(
-                      flex: 2,
-                      child: Card(
-                        color: isDark ? AppColors.darkSurface : Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          side: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'HEATMAP GRID (Branch Load Balance)',
-                                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold, letterSpacing: 0.5),
-                              ),
-                              const Divider(height: 20),
-                              Expanded(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                  children: [
-                                    _buildHeatmapItem('Section Patio (T1-T3)', patioLoad, AppColors.primary, theme),
-                                    _buildHeatmapItem('Section Main (T4-T6)', mainLoad, AppColors.success, theme),
-                                    _buildHeatmapItem('Section Bar (T7-T8)', barLoad, AppColors.warning, theme),
-                                    _buildHeatmapItem('Section Garden (Other)', gardenLoad, AppColors.info, theme),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                    
+                    SizedBox(height: AppSpacing.lg(context)),
+
+                    // Service Alerts Section
+                    if (alertList.isNotEmpty) ...[
+                      _buildServiceAlertsSection(context, alertList, ref, isDark),
+                      SizedBox(height: AppSpacing.lg(context)),
+                    ],
+
+                    // Section Occupancy
+                    _buildSectionOccupancy(context, sectionStats, isDark),
+                    
+                    SizedBox(height: AppSpacing.lg(context)),
+
+                    // Kitchen Status
+                    _buildKitchenStatus(
+                      context,
+                      preparing: preparingCount,
+                      ready: readyCount,
+                      completed: completedOrdersCount,
+                      isDark: isDark,
                     ),
+                    
+                    SizedBox(height: AppSpacing.lg(context)),
+
+                    // Activity Feed
+                    _buildActivityFeed(context, isDark),
                   ],
                 ),
-              ).animate().fade(delay: 150.ms, duration: 400.ms),
-
-              const SizedBox(height: 12),
-
-              // 3. Websocket Ticker Output Logger console at bottom
-              Expanded(
-                flex: 2,
-                child: Card(
-                  color: isDark ? Colors.black38 : Colors.grey[900],
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: AppColors.success,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'REALTIME EVENT BUS BROADCAST TICKER',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontFamily: 'monospace',
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.0,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Expanded(
-                          child: ListView.builder(
-                            controller: _scrollController,
-                            itemCount: _simulatedLogs.length,
-                            itemBuilder: (context, index) {
-                              final log = _simulatedLogs[index];
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 2.0),
-                                child: Text(
-                                  log,
-                                  style: TextStyle(
-                                    fontFamily: 'monospace',
-                                    fontSize: 11,
-                                    color: log.contains('error') || log.contains('outage')
-                                        ? Colors.redAccent
-                                        : log.contains('ready')
-                                            ? Colors.greenAccent
-                                            : Colors.lightBlueAccent[100],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ).animate().fade(delay: 300.ms, duration: 400.ms),
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildMetricCard({
-    required String title,
-    required String value,
-    required String subtitle,
-    required Color color,
-    required IconData icon,
-    required bool isDark,
-  }) {
+  // Welcome Section
+  Widget _buildWelcomeSection(BuildContext context, dynamic staff, bool isDark) {
+    final hour = DateTime.now().hour;
+    String greeting = 'Good Morning';
+    if (hour >= 12 && hour < 17) {
+      greeting = 'Good Afternoon';
+    } else if (hour >= 17) {
+      greeting = 'Good Evening';
+    }
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(AppSpacing.md(context)),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
-          width: 1.5,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.person_outline_rounded,
+              color: AppColors.primary,
+              size: 32,
+            ),
+          ),
+          SizedBox(width: AppSpacing.md(context)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$greeting, ${staff.name}',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  '${_getRoleDisplayName(staff.role)} • Active Shift',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
+    ).animate().fadeIn(duration: 300.ms).slideX(begin: -0.1, end: 0);
+  }
+
+  // Helper method to get role display name
+  String _getRoleDisplayName(dynamic role) {
+    if (role == null) return 'Staff';
+    final roleName = role.toString().split('.').last;
+    switch (roleName) {
+      case 'waiter':
+        return 'Waiter';
+      case 'runner':
+        return 'Runner';
+      case 'host':
+        return 'Host';
+      case 'kdsOperator':
+        return 'KDS Operator';
+      case 'manager':
+        return 'Manager';
+      default:
+        return roleName.toUpperCase();
+    }
+  }
+
+  // Quick Stats Grid
+  Widget _buildQuickStatsGrid(
+    BuildContext context, {
+    required int totalTables,
+    required int occupiedTables,
+    required int availableTables,
+    required int alertTables,
+    required int preparingOrders,
+    required int readyOrders,
+    required int completedOrders,
+    required bool isDark,
+  }) {
+    final occupancyRate = totalTables > 0 ? (occupiedTables / totalTables * 100).toInt() : 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Overview',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        SizedBox(height: AppSpacing.sm(context)),
+        GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 2,
+          crossAxisSpacing: AppSpacing.sm(context),
+          mainAxisSpacing: AppSpacing.sm(context),
+          childAspectRatio: 1.5,
+          children: [
+            _buildStatCard(
+              context,
+              title: 'Tables',
+              value: '$occupiedTables/$totalTables',
+              subtitle: '$occupancyRate% Occupied',
+              icon: Icons.table_restaurant_rounded,
+              isDark: isDark,
+            ),
+            _buildStatCard(
+              context,
+              title: 'Available',
+              value: '$availableTables',
+              subtitle: 'Ready to seat',
+              icon: Icons.event_seat_rounded,
+              isDark: isDark,
+            ),
+            _buildStatCard(
+              context,
+              title: 'Kitchen',
+              value: '$preparingOrders',
+              subtitle: 'Orders preparing',
+              icon: Icons.restaurant_rounded,
+              isDark: isDark,
+            ),
+            _buildStatCard(
+              context,
+              title: 'Ready',
+              value: '$readyOrders',
+              subtitle: 'Ready to serve',
+              icon: Icons.check_circle_outline_rounded,
+              isDark: isDark,
+              highlight: readyOrders > 0,
+            ),
+          ],
+        ),
+      ],
+    ).animate().fadeIn(delay: 100.ms, duration: 400.ms);
+  }
+
+  Widget _buildStatCard(
+    BuildContext context, {
+    required String title,
+    required String value,
+    required String subtitle,
+    required IconData icon,
+    required bool isDark,
+    bool highlight = false,
+  }) {
+    return Container(
+      padding: EdgeInsets.all(AppSpacing.md(context)),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: highlight 
+              ? AppColors.primary 
+              : (isDark ? AppColors.darkBorder : AppColors.lightBorder),
+          width: highlight ? 2 : 1,
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 11,
-                  letterSpacing: 0.5,
-                  color: Colors.grey,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-              Icon(icon, color: color, size: 20),
+              Icon(
+                icon,
+                color: highlight 
+                    ? AppColors.primary 
+                    : (isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary),
+                size: 20,
+              ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            style: const TextStyle(
-              fontSize: 11,
-              color: Colors.grey,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: highlight ? AppColors.primary : null,
+                ),
+              ),
+              Text(
+                subtitle,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildHeatmapItem(String sectionName, double percentage, Color color, ThemeData theme) {
+  // Service Alerts Section
+  Widget _buildServiceAlertsSection(
+    BuildContext context,
+    List<RestaurantTable> alertList,
+    WidgetRef ref,
+    bool isDark,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              sectionName,
-              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            Text(
-              '${(percentage * 100).toInt()}% Capacity',
-              style: TextStyle(
-                color: color,
+              'Service Alerts',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.bold,
-                fontSize: 12,
+              ),
+            ),
+            SizedBox(width: AppSpacing.sm(context)),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.error.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '${alertList.length}',
+                style: const TextStyle(
+                  color: AppColors.error,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 4),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: percentage,
-            minHeight: 6,
-            backgroundColor: Colors.grey[200],
+        SizedBox(height: AppSpacing.sm(context)),
+        ...alertList.map((table) => Padding(
+          padding: EdgeInsets.only(bottom: AppSpacing.sm(context)),
+          child: Container(
+            padding: EdgeInsets.all(AppSpacing.md(context)),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppColors.error.withOpacity(0.3),
+                width: 1.5,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.warning_amber_rounded,
+                    color: AppColors.error,
+                    size: 24,
+                  ),
+                ),
+                SizedBox(width: AppSpacing.md(context)),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Table ${table.label}',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'Needs attention • Action required',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => context.push('/tables/${table.id}'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                  ),
+                  child: const Text('View'),
+                ),
+              ],
+            ),
+          ),
+        )),
+      ],
+    ).animate().fadeIn(delay: 200.ms, duration: 400.ms);
+  }
+
+  // Section Occupancy
+  Widget _buildSectionOccupancy(
+    BuildContext context,
+    Map<String, Map<String, dynamic>> sectionStats,
+    bool isDark,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Section Occupancy',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        SizedBox(height: AppSpacing.sm(context)),
+        Container(
+          padding: EdgeInsets.all(AppSpacing.md(context)),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+            ),
+          ),
+          child: Column(
+            children: sectionStats.entries.map((entry) {
+              final section = entry.key;
+              final stats = entry.value;
+              final total = stats['total'] as int;
+              final occupied = stats['occupied'] as int;
+              final range = stats['range'] as String;
+              final percentage = total > 0 ? occupied / total : 0.0;
+
+              return Padding(
+                padding: EdgeInsets.only(bottom: AppSpacing.md(context)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              section,
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              range,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          '$occupied/$total',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: AppSpacing.xs(context)),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: percentage,
+                        minHeight: 8,
+                        backgroundColor: isDark 
+                            ? AppColors.darkBorder 
+                            : AppColors.lightBorder,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          percentage > 0.8 
+                              ? AppColors.error 
+                              : percentage > 0.5 
+                                  ? AppColors.warning 
+                                  : AppColors.success,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    ).animate().fadeIn(delay: 300.ms, duration: 400.ms);
+  }
+
+  // Kitchen Status
+  Widget _buildKitchenStatus(
+    BuildContext context, {
+    required int preparing,
+    required int ready,
+    required int completed,
+    required bool isDark,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Kitchen Status',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        SizedBox(height: AppSpacing.sm(context)),
+        Container(
+          padding: EdgeInsets.all(AppSpacing.md(context)),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: _buildKitchenStatusItem(
+                  context,
+                  icon: Icons.schedule_rounded,
+                  label: 'Preparing',
+                  value: '$preparing',
+                  color: AppColors.warning,
+                  isDark: isDark,
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 40,
+                color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+              ),
+              Expanded(
+                child: _buildKitchenStatusItem(
+                  context,
+                  icon: Icons.check_circle_rounded,
+                  label: 'Ready',
+                  value: '$ready',
+                  color: AppColors.success,
+                  isDark: isDark,
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 40,
+                color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+              ),
+              Expanded(
+                child: _buildKitchenStatusItem(
+                  context,
+                  icon: Icons.done_all_rounded,
+                  label: 'Completed',
+                  value: '$completed',
+                  color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                  isDark: isDark,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ).animate().fadeIn(delay: 400.ms, duration: 400.ms);
+  }
+
+  Widget _buildKitchenStatusItem(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+    required bool isDark,
+  }) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 28),
+        SizedBox(height: AppSpacing.xs(context)),
+        Text(
+          value,
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.bold,
             color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildConnectionIndicator(dynamic branch) {
+  // Activity Feed
+  Widget _buildActivityFeed(BuildContext context, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Recent Activity',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        SizedBox(height: AppSpacing.sm(context)),
+        Container(
+          constraints: const BoxConstraints(maxHeight: 300),
+          padding: EdgeInsets.all(AppSpacing.md(context)),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+            ),
+          ),
+          child: ListView.separated(
+            shrinkWrap: true,
+            controller: _scrollController,
+            itemCount: _simulatedLogs.length,
+            separatorBuilder: (context, index) => Divider(
+              height: AppSpacing.sm(context),
+              color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+            ),
+            itemBuilder: (context, index) {
+              final log = _simulatedLogs[index];
+              IconData icon = Icons.info_outline_rounded;
+              Color iconColor = isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+
+              if (log.contains('ready')) {
+                icon = Icons.check_circle_outline_rounded;
+                iconColor = AppColors.success;
+              } else if (log.contains('error') || log.contains('outage')) {
+                icon = Icons.error_outline_rounded;
+                iconColor = AppColors.error;
+              } else if (log.contains('payment')) {
+                icon = Icons.payment_rounded;
+                iconColor = AppColors.primary;
+              }
+
+              return Row(
+                children: [
+                  Icon(icon, color: iconColor, size: 16),
+                  SizedBox(width: AppSpacing.sm(context)),
+                  Expanded(
+                    child: Text(
+                      log,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    ).animate().fadeIn(delay: 500.ms, duration: 400.ms);
+  }
+
+  // Connection Badge
+  Widget _buildConnectionBadge(dynamic branch, bool isDark) {
     final status = branch?.status;
     Color color = AppColors.success;
-    String label = 'SYNCED';
-    bool isPulsing = true;
+    String label = 'Connected';
+    IconData icon = Icons.cloud_done_rounded;
 
     if (status == null) {
       color = AppColors.error;
-      label = 'UNINITIALIZED';
-      isPulsing = false;
-    } else if (status.name == 'busy') {
+      label = 'Offline';
+      icon = Icons.cloud_off_rounded;
+    } else if (status == BranchStatus.busy) {
       color = AppColors.warning;
-      label = 'SYNCING (4.2s)';
-    } else if (status.name == 'outage') {
+      label = 'Syncing';
+      icon = Icons.cloud_sync_rounded;
+    } else if (status == BranchStatus.outage) {
       color = AppColors.error;
-      label = 'OFFLINE';
-    }
-
-    Widget dot = Container(
-      width: 8,
-      height: 8,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-      ),
-    );
-
-    if (isPulsing) {
-      dot = dot.animate(onPlay: (c) => c.repeat(reverse: true))
-          .scaleXY(begin: 0.8, end: 1.2, duration: 800.ms, curve: Curves.easeInOut)
-          .boxShadow(
-            begin: const BoxShadow(color: Colors.transparent),
-            end: BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 6),
-            duration: 800.ms,
-          );
+      label = 'Offline';
+      icon = Icons.cloud_off_rounded;
     }
 
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          dot,
+          Icon(icon, color: color, size: 16),
           const SizedBox(width: 6),
           Text(
             label,
             style: TextStyle(
               color: color,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],

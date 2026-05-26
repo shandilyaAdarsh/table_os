@@ -30,6 +30,18 @@ class OrdersRepositoryImpl implements OrdersRepository {
   }
 
   @override
+  Future<void> applyRemoteOrderUpdate(Order order) async {
+    await local.cacheOrder(order.toDto());
+  }
+
+  @override
+  Future<void> applyRemoteOrderDelete(String orderId) async {
+    final current = await local.getCachedOrders();
+    final filtered = current.where((dto) => dto.id != orderId).toList();
+    await local.cacheOrders(filtered);
+  }
+
+  @override
   Stream<List<Order>> watchActiveOrders() {
     return local.watchCachedOrders().map((list) {
       return list
@@ -45,5 +57,22 @@ class OrdersRepositoryImpl implements OrdersRepository {
       final index = list.indexWhere((dto) => dto.id == orderId);
       return index != -1 ? list[index].toDomain() : null;
     });
+  }
+
+  @override
+  Future<void> syncOrders(List<Order> orders) async {
+    final dtos = orders.map((o) => o.toDto()).toList();
+    await local.cacheOrders(dtos);
+  }
+
+  @override
+  Future<List<Order>> fetchActiveOrders() async {
+    // In a real implementation this would fetch from a remote API.
+    // For this simulation, we'll just return what's in the local cache.
+    final cached = await local.getCachedOrders();
+    return cached
+        .map((dto) => dto.toDomain())
+        .where((o) => o.status != OrderStatus.completed && o.status != OrderStatus.cancelled)
+        .toList();
   }
 }

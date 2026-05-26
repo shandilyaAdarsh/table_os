@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../routing/app_router.dart';
 import '../core/theme/app_theme.dart';
 import '../core/network/realtime_sync_manager.dart';
+import '../core/runtime/runtime_lifecycle.dart';
 import '../features/profile/presentation/screens/device_settings_screen.dart';
 
 class OrderlyyApp extends ConsumerWidget {
@@ -14,6 +15,9 @@ class OrderlyyApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Initialize Realtime Sync Manager to start receiving updates from admin app
     ref.read(realtimeSyncManagerProvider);
+
+    // Initialize Runtime Lifecycle Manager to manage runtime sessions
+    ref.read(runtimeLifecycleManagerProvider);
 
     final router = ref.watch(routerProvider);
     final settings = ref.watch(deviceSettingsProvider);

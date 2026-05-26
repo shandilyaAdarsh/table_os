@@ -45,6 +45,10 @@ import '../features/profile/presentation/screens/runtime_diagnostics_screen.dart
 import '../features/manager/presentation/screens/floor_analytics_screen.dart';
 import '../features/manager/presentation/screens/staff_performance_screen.dart';
 import '../features/manager/presentation/screens/operational_alerts_screen.dart';
+import '../features/realtime/presentation/state/realtime_providers.dart';
+import '../features/realtime/domain/entities/realtime_state_model.dart';
+import '../core/widgets/realtime_banner.dart';
+import '../core/network/realtime_sync_manager.dart';
 
 // Derived provider: count of active (unresolved) waiter calls for badge display
 final activeWaiterCallsCountProvider = Provider<int>((ref) {
@@ -62,6 +66,10 @@ class RouterNotifier extends ChangeNotifier {
   RouterNotifier(this._ref) {
     _ref.listen<AuthState>(
       authNotifierProvider,
+      (_, next) => notifyListeners(),
+    );
+    _ref.listen<RealtimeStateModel>(
+      realtimeStateProvider,
       (_, next) => notifyListeners(),
     );
   }
@@ -85,11 +93,25 @@ final routerProvider = Provider<GoRouter>((ref) {
       final authState = ref.read(authNotifierProvider);
       final loc = state.uri.path;
 
-      debugPrint('[ROUTER] redirect evaluation: location=$loc, isLocked=${authState.isLocked}, isShiftStarted=${authState.isShiftStarted}');
+      debugPrint('[ROUTER] redirect evaluation: location=$loc, isLocked=${authState.isLocked}, isShiftStarted=${authState.isShiftStarted}, org=${authState.selectedOrg?.name}, branch=${authState.selectedBranch?.name}');
 
       // If we are on the splash screen, do NOT redirect. Let it perform its bootloader diagnostics.
       if (loc == '/splash') {
         return null;
+      }
+
+      // Check for critical realtime connection failure
+      final realtimeState = ref.read(realtimeStateProvider);
+      if (realtimeState.connectionState == RealtimeConnectionState.critical) {
+        if (loc != '/realtime/recovery') {
+          return '/realtime/recovery';
+        }
+        return null;
+      }
+
+      // If we recovered and are still on the recovery screen, go back to main screen
+      if (loc == '/realtime/recovery') {
+        return '/tables';
       }
 
       // If locked, staff must go to/stay on session lock screen
@@ -326,6 +348,7 @@ class NavigationShellLayout extends ConsumerWidget {
     // Live badge providers
     final unreadNotifCount = ref.watch(unreadNotificationsCountProvider);
     final activeCallCount = ref.watch(activeWaiterCallsCountProvider);
+    final realtimeState = ref.watch(realtimeStateProvider);
 
     int selectedIndex = 0;
     if (location.startsWith('/reservations')) {
@@ -338,13 +361,39 @@ class NavigationShellLayout extends ConsumerWidget {
       selectedIndex = 4;
     }
 
+    RealtimeState mapState(RealtimeConnectionState s) {
+      switch (s) {
+        case RealtimeConnectionState.connected:
+          return RealtimeState.connected;
+        case RealtimeConnectionState.reconnecting:
+          return RealtimeState.reconnecting;
+        case RealtimeConnectionState.replaying:
+          return RealtimeState.replaying;
+        case RealtimeConnectionState.degraded:
+          return RealtimeState.degraded;
+        case RealtimeConnectionState.critical:
+          return RealtimeState.critical;
+      }
+    }
+
     return Scaffold(
       // Persistent top-bar with live notification bell
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(48),
         child: _buildTopActionBar(context, unreadNotifCount, activeCallCount),
       ),
-      body: child,
+      body: Stack(
+        children: [
+          child,
+          RealtimeBanner(
+            state: mapState(realtimeState.connectionState),
+            reconnectAttempt: realtimeState.reconnectAttempts,
+            onRetry: () {
+              ref.read(realtimeSyncManagerProvider).connectLocal();
+            },
+          ),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: selectedIndex,
         indicatorColor: AppColors.primary.withValues(alpha: 0.15),

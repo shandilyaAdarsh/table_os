@@ -74,6 +74,37 @@ class Reservation extends Equatable {
     );
   }
 
+  factory Reservation.fromJson(Map<String, dynamic> json) {
+    return Reservation(
+      id: json['id'] as String,
+      guestName: json['guestName'] as String,
+      guestPhone: json['guestPhone'] as String,
+      guestCount: json['guestCount'] as int,
+      reservationTime: DateTime.parse(json['reservationTime'] as String),
+      status: ReservationStatus.values.firstWhere(
+        (e) => e.name == json['status'],
+        orElse: () => ReservationStatus.booked,
+      ),
+      assignedTableId: json['assignedTableId'] as String?,
+      checkedInTime: json['checkedInTime'] != null
+          ? DateTime.parse(json['checkedInTime'] as String)
+          : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'guestName': guestName,
+      'guestPhone': guestPhone,
+      'guestCount': guestCount,
+      'reservationTime': reservationTime.toIso8601String(),
+      'status': status.name,
+      'assignedTableId': assignedTableId,
+      'checkedInTime': checkedInTime?.toIso8601String(),
+    };
+  }
+
   @override
   List<Object?> get props => [
         id,
@@ -111,6 +142,28 @@ class WaitlistEntry extends Equatable {
   // Priority Score = (Wait Duration in Mins * 1.5) + (Guest Count * 0.5) + (isVip ? 15.0 : 0)
   double get priorityScore {
     return (waitDurationMinutes * 1.5) + (guestCount * 0.5) + (isVip ? 15.0 : 0.0);
+  }
+
+  factory WaitlistEntry.fromJson(Map<String, dynamic> json) {
+    return WaitlistEntry(
+      id: json['id'] as String,
+      guestName: json['guestName'] as String,
+      guestPhone: json['guestPhone'] as String,
+      guestCount: json['guestCount'] as int,
+      addedTime: DateTime.parse(json['addedTime'] as String),
+      isVip: json['isVip'] as bool? ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'guestName': guestName,
+      'guestPhone': guestPhone,
+      'guestCount': guestCount,
+      'addedTime': addedTime.toIso8601String(),
+      'isVip': isVip,
+    };
   }
 
   @override

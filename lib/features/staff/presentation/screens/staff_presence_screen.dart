@@ -3,39 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 
-// ─── Domain ───────────────────────────────────────────────────────────────────
+// ─── Domain imports ───────────────────────────────────────────────────────────────────
 
-enum StaffPresenceStatus { online, busy, away, offline, onBreak, closingShift }
+import '../../domain/entities/staff_presence.dart';
+import '../state/staff_presence_governance_providers.dart';
 
-class StaffPresenceRecord {
-  final String staffId;
-  final String name;
-  final String role;
-  final StaffPresenceStatus status;
-  final String? sectionLabel;
-  final int activeTableCount;
-  final double slaComplianceRate;
-  final DateTime lastHeartbeat;
+// ─── Screen ──────────────────────────────────────────────────────────────────
 
-  const StaffPresenceRecord({
-    required this.staffId,
-    required this.name,
-    required this.role,
-    required this.status,
-    this.sectionLabel,
-    required this.activeTableCount,
-    required this.slaComplianceRate,
-    required this.lastHeartbeat,
-  });
-
-  bool get isOnline => status == StaffPresenceStatus.online || status == StaffPresenceStatus.busy;
-  bool get isOverloaded => activeTableCount > 5;
-
+extension StaffPresenceRecordX on StaffPresenceRecord {
   Color get presenceColor => switch (status) {
     StaffPresenceStatus.online => AppColors.success,
     StaffPresenceStatus.busy => AppColors.warning,
     StaffPresenceStatus.away => AppColors.secondary,
-    StaffPresenceStatus.onBreak => AppColors.info,
+    StaffPresenceStatus.onBreak => const Color(0xFF0EA5E9), // info
     StaffPresenceStatus.closingShift => AppColors.primary,
     StaffPresenceStatus.offline => Colors.grey,
   };
@@ -48,41 +28,7 @@ class StaffPresenceRecord {
     StaffPresenceStatus.closingShift => 'Closing Shift',
     StaffPresenceStatus.offline => 'Offline',
   };
-
-  static const info = Color(0xFF0EA5E9);
 }
-
-// ─── Providers ────────────────────────────────────────────────────────────────
-
-final staffPresenceListProvider = StateProvider<List<StaffPresenceRecord>>((ref) {
-  final now = DateTime.now();
-  return [
-    StaffPresenceRecord(staffId: 's1', name: 'Alex J.', role: 'Waiter', status: StaffPresenceStatus.online, sectionLabel: 'Section A', activeTableCount: 3, slaComplianceRate: 0.92, lastHeartbeat: now.subtract(const Duration(seconds: 12))),
-    StaffPresenceRecord(staffId: 's2', name: 'Maria K.', role: 'Waiter', status: StaffPresenceStatus.busy, sectionLabel: 'Section B', activeTableCount: 7, slaComplianceRate: 0.74, lastHeartbeat: now.subtract(const Duration(seconds: 8))),
-    StaffPresenceRecord(staffId: 's3', name: 'David L.', role: 'Supervisor', status: StaffPresenceStatus.online, sectionLabel: 'Bar', activeTableCount: 2, slaComplianceRate: 0.96, lastHeartbeat: now.subtract(const Duration(seconds: 22))),
-    StaffPresenceRecord(staffId: 's4', name: 'Priya M.', role: 'Waiter', status: StaffPresenceStatus.away, sectionLabel: 'Section A', activeTableCount: 0, slaComplianceRate: 0.88, lastHeartbeat: now.subtract(const Duration(minutes: 3))),
-    StaffPresenceRecord(staffId: 's5', name: 'James R.', role: 'Waiter', status: StaffPresenceStatus.onBreak, sectionLabel: 'Section C', activeTableCount: 0, slaComplianceRate: 0.81, lastHeartbeat: now.subtract(const Duration(minutes: 15))),
-    StaffPresenceRecord(staffId: 's6', name: 'Lena V.', role: 'Waiter', status: StaffPresenceStatus.offline, sectionLabel: null, activeTableCount: 0, slaComplianceRate: 0.0, lastHeartbeat: now.subtract(const Duration(hours: 2))),
-  ];
-});
-
-final onlineStaffProvider = Provider<List<StaffPresenceRecord>>((ref) {
-  return ref.watch(staffPresenceListProvider).where((s) => s.isOnline).toList();
-});
-
-final overloadedStaffProvider = Provider<List<StaffPresenceRecord>>((ref) {
-  return ref.watch(staffPresenceListProvider).where((s) => s.isOverloaded).toList();
-});
-
-final branchLoadProvider = Provider<double>((ref) {
-  final staff = ref.watch(staffPresenceListProvider).where((s) => s.isOnline).toList();
-  if (staff.isEmpty) return 0.0;
-  final totalTables = staff.fold<int>(0, (sum, s) => sum + s.activeTableCount);
-  const totalCapacity = 30; // configurable
-  return (totalTables / totalCapacity).clamp(0.0, 1.0);
-});
-
-// ─── Screen ──────────────────────────────────────────────────────────────────
 
 class StaffPresenceScreen extends ConsumerStatefulWidget {
   const StaffPresenceScreen({super.key});
@@ -110,11 +56,22 @@ class _StaffPresenceScreenState extends ConsumerState<StaffPresenceScreen>
 
   @override
   Widget build(BuildContext context) {
-    final staff = ref.watch(staffPresenceListProvider);
-    final overloaded = ref.watch(overloadedStaffProvider);
-    final branchLoad = ref.watch(branchLoadProvider);
+    final staffAsync = ref.watch(presenceProjectionProvider);
+    final overloaded = ref.watch(governedOverloadedStaffProvider);
+    final branchLoad = ref.watch(governedBranchLoadProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final onlineCount = staff.where((s) => s.isOnline).length;
+
+    return staffAsync.when(
+      loading: () => Scaffold(
+        backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+        body: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, st) => Scaffold(
+        backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
+        body: Center(child: Text('Error loading presence: $e')),
+      ),
+      data: (staff) {
+        final onlineCount = staff.where((s) => s.isOnline).length;
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkBackground : AppColors.lightBackground,
@@ -152,6 +109,8 @@ class _StaffPresenceScreenState extends ConsumerState<StaffPresenceScreen>
           ),
         ],
       ),
+    );
+      },
     );
   }
 

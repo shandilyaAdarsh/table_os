@@ -79,7 +79,7 @@ final deviceSettingsProvider = StateProvider<DeviceSettings>((ref) => const Devi
       vibrationPattern: 'short',
       reconnectStrategy: 'balanced',
       degradedModeAutoEnable: true,
-      themeMode: 'system',
+      themeMode: 'light',
       keepScreenOn: true,
       reduceMotion: false,
       lowPowerMode: false,
