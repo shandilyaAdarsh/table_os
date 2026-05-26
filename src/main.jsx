@@ -10,16 +10,7 @@ import { useAuthStore } from './store/authStore'
 // Shared
 import ProtectedRoute from './components/shared/ProtectedRoute.jsx'
 
-// Admin
-import AdminLogin from './apps/admin/pages/AdminLogin'
-import AdminDashboard from './apps/admin/pages/Dashboard'
-import AdminTableMap from './apps/admin/pages/TableMap'
-import AdminLiveOrders from './apps/admin/pages/LiveOrders'
-import AdminAnalytics from './apps/admin/pages/Analytics'
-import AdminMenuManagement from './apps/admin/pages/MenuManagement'
-import AdminQRManager from './apps/admin/pages/QRManager'
-import AdminStaff from './apps/admin/pages/StaffManagement'
-import AdminSettings from './apps/admin/pages/AdminSettings'
+// Removed Admin imports (now on Flutter)
 
 // KDS
 import KDSBoard from './apps/kds/pages/KDSBoard'
@@ -114,53 +105,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/menu/cart" element={<CartPage />} />
           <Route path="/menu/checkin" element={<CheckInRoute />} />
 
-          {/* Admin Dashboard */}
-          <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/admin" element={
-            <ProtectedRoute allowedRoles={['owner', 'manager']}>
-              <Navigate to="/admin/dashboard" replace />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin/dashboard" element={
-            <ProtectedRoute allowedRoles={['owner', 'manager']}>
-              <AdminDashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin/tables" element={
-            <ProtectedRoute allowedRoles={['owner', 'manager']}>
-              <AdminTableMap />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin/orders" element={
-            <ProtectedRoute allowedRoles={['owner', 'manager']}>
-              <AdminLiveOrders />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin/analytics" element={
-            <ProtectedRoute allowedRoles={['owner', 'manager']}>
-              <AdminAnalytics />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin/menu" element={
-            <ProtectedRoute allowedRoles={['owner', 'manager']}>
-              <AdminMenuManagement />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin/qr" element={
-            <ProtectedRoute allowedRoles={['owner', 'manager']}>
-              <AdminQRManager />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin/staff" element={
-            <ProtectedRoute allowedRoles={['owner']}>
-              <AdminStaff />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin/settings" element={
-            <ProtectedRoute allowedRoles={['owner']}>
-              <AdminSettings />
-            </ProtectedRoute>
-          } />
+          {/* Admin App is handled natively in Flutter, no web routes here */}
 
           {/* KDS */}
           <Route path="/kds" element={<KDSBoard />} />
