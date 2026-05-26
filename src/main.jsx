@@ -50,18 +50,24 @@ function AuthGate({ children }) {
 
   useEffect(() => {
     // Listen for auth changes globally
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log(`[AuthGate] Event: ${event}`)
-      
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        // Reresolve context on login or token rotation
-        await resolveContext()
-      } else if (event === 'SIGNED_OUT') {
-        logout()
-      }
-    })
+    if (supabase) {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log(`[AuthGate] Event: ${event}`)
+        
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          // Reresolve context on login or token rotation
+          await resolveContext()
+        } else if (event === 'SIGNED_OUT') {
+          logout()
+        }
+      })
 
-    return () => subscription.unsubscribe()
+      return () => subscription.unsubscribe()
+    } else {
+      console.warn('[AuthGate] Supabase client is null. Bypassing auth listener.');
+      // Proceed with hydration anyway so the UI can load
+      resolveContext();
+    }
   }, [resolveContext, logout])
 
   // Hydration control: Prevent indeterminate UI states before state is reloaded
