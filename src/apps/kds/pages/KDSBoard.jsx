@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useOrderStore, useAuthStore } from '../../../store/index.js';
+import { useKitchenOrdersProjection } from '../../../store/projections/kitchenOrdersProjection.js';
+import { useKitchenMetricsProjection } from '../../../store/projections/kitchenMetricsProjection.js';
+import { useMutationCoordinator } from '../../../store/mutationCoordinator.js';
+import { useKdsIdentityStore } from '../../../store/kdsIdentityStore.js';
+import { useLeadershipStore } from '../../../store/leadershipStore.js';
 import OrderCard from '../components/OrderCard.jsx';
 import { Loader2 } from 'lucide-react';
 
@@ -8,13 +13,30 @@ import { Loader2 } from 'lucide-react';
    KDSBoard — connects to Supabase realtime
 ═══════════════════════════════════════════════════ */
 const KDSBoard = () => {
-  const liveOrders        = useOrderStore(s => s.liveOrders);
+  // New Runtime Projections
+  const rawOrders = useKitchenOrdersProjection(s => s.orders);
+  const rebuildOrders = useKitchenOrdersProjection(s => s.rebuild);
+  const getOptimisticOrders = useKitchenOrdersProjection(s => s.getOptimisticOrders);
+  const isOrdersLoading = useKitchenOrdersProjection(s => s.isRebuilding);
+
+  const metrics = useKitchenMetricsProjection(s => s.metrics);
+  const rebuildMetrics = useKitchenMetricsProjection(s => s.rebuild);
+
+  // Mutation Pipeline for Optimistic UI
+  const { queue } = useMutationCoordinator();
+  const liveOrders = getOptimisticOrders(queue);
+
+  // Identity
+  const { branchId, stationId } = useKdsIdentityStore();
+  
+  // Leadership Election (Multi-tab protection)
+  const { isLeader, requestLeadership } = useLeadershipStore();
+
+  // Legacy (History only)
   const historyOrders     = useOrderStore(s => s.historyOrders);
-  const isLoading         = useOrderStore(s => s.isLoading);
-  const fetchOrders       = useOrderStore(s => s.fetchOrders);
   const fetchHistory      = useOrderStore(s => s.fetchHistory);
-  const totalOrdersToday  = useOrderStore(s => s.totalOrdersToday);
-  const subscribeRealtime = useOrderStore(s => s.subscribeRealtime);
+  const isLoading         = useOrderStore(s => s.isLoading) || isOrdersLoading;
+  
   const tenantId          = useAuthStore(s => s.tenantId);
   const user              = useAuthStore(s => s.user);
   const navigate          = useNavigate();
@@ -37,38 +59,34 @@ const KDSBoard = () => {
   /* ── Initial fetch + Realtime subscription ──────── */
   /* ── Initial fetch ──────── */
   useEffect(() => {
-    if (!effectiveTenantId) return;
+    if (!effectiveTenantId || !branchId) return;
+    
+    // Attempt lock acquisition on mount or station change
+    requestLeadership(stationId);
 
     if (activeTab === 'Live Orders') {
       if (liveOrders.length === 0) setRealtimeStatus('connecting');
-      fetchOrders().then(() => setRealtimeStatus('connected'));
+      Promise.all([
+        rebuildOrders(branchId, stationId),
+        rebuildMetrics(branchId, stationId)
+      ]).then(() => setRealtimeStatus('connected'));
     } else {
       if (historyOrders.length === 0) setRealtimeStatus('connecting');
       fetchHistory().then(() => setRealtimeStatus('connected'));
     }
 
-    const probe = setInterval(() => {
-      if (document.visibilityState === 'visible' && activeTab === 'Live Orders') {
-        fetchOrders().catch(() => setRealtimeStatus('disconnected'));
-      }
-    }, 60_000);
+    // No probe needed, ProjectionCoordinator + WebSocketRuntime handles lifecycle
+  }, [tenantId, branchId, stationId, activeTab]);
 
-    return () => clearInterval(probe);
-  }, [tenantId, activeTab]);
-
-  /* ── Realtime subscription (Independent of tab) ── */
-  useEffect(() => {
-    if (!effectiveTenantId || !subscribeRealtime) return;
-    const unsub = subscribeRealtime();
-    return () => unsub && unsub();
-  }, [tenantId]);
+  /* ── Realtime subscription is now handled globally by WebSocketRuntime ── */
 
   /* ── Page Visibility API: re-sync when tab regains focus ── */
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === 'visible' && effectiveTenantId) {
+      if (document.visibilityState === 'visible' && effectiveTenantId && branchId) {
         if (activeTab === 'Live Orders') {
-          fetchOrders();
+          rebuildOrders(branchId, stationId);
+          rebuildMetrics(branchId, stationId);
         } else {
           fetchHistory();
         }
@@ -170,6 +188,25 @@ const KDSBoard = () => {
   return (
     <div style={{ minHeight: '100vh', background: '#F7F9FB', fontFamily: '"Inter", sans-serif', color: '#191C1E', userSelect: 'none', overflow: 'hidden' }}>
 
+      {/* ━━━ MULTI-TAB LEADERSHIP OVERLAY ━━━ */}
+      {!isLeader && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(242, 244, 246, 0.95)', zIndex: 9999,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          backdropFilter: 'blur(8px)',
+        }}>
+          <span className="material-symbols-outlined" style={{ fontSize: '48px', color: '#8D4B00', marginBottom: '16px' }}>lock</span>
+          <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#191C1E', marginBottom: '8px' }}>Station in Use</h2>
+          <p style={{ fontSize: '14px', color: '#554336', marginBottom: '24px', textAlign: 'center', maxWidth: '400px', lineHeight: 1.5 }}>
+            Another KDS screen is actively managing this station. Only one active screen is permitted per station to prevent conflicting operations.
+          </p>
+          <div style={{ padding: '12px 24px', background: '#FFF4EC', color: '#8D4B00', borderRadius: '8px', fontWeight: 900, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+            Standby Viewer Mode Active
+          </div>
+        </div>
+      )}
+
       {/* ━━━ HEADER ━━━ */}
       <header style={{
         position: 'fixed', top: 0, left: 0, right: 0,
@@ -195,7 +232,7 @@ const KDSBoard = () => {
             <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>analytics</span>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <span style={{ fontSize: '9px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.8, lineHeight: 1 }}>Orders Today</span>
-              <span style={{ fontSize: '16px', fontWeight: 900, lineHeight: 1.1 }}>{totalOrdersToday}</span>
+              <span style={{ fontSize: '16px', fontWeight: 900, lineHeight: 1.1 }}>{metrics.totalOrdersToday || 0}</span>
             </div>
           </div>
         </div>
@@ -241,7 +278,10 @@ const KDSBoard = () => {
               onClick={() => {
                 setRealtimeStatus('connecting');
                 if (activeTab === 'Live Orders') {
-                  fetchOrders().then(() => setRealtimeStatus('connected'));
+                  Promise.all([
+                    rebuildOrders(branchId, stationId),
+                    rebuildMetrics(branchId, stationId)
+                  ]).then(() => setRealtimeStatus('connected'));
                 } else {
                   fetchHistory(historyFilter).then(() => setRealtimeStatus('connected'));
                 }
