@@ -4,7 +4,7 @@
 // ============================================================
 
 import { Router } from 'express';
-import { requireQrSession } from '../qr/qr.middleware';
+import { requireQrSession } from '../tables/qr/qr.middleware';
 import { getCart, addItem, updateItem, removeItem, updateNotes } from './cart.controller';
 import { requireMutationEnvelope } from '../../middleware/mutation.middleware';
 

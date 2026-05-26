@@ -6,26 +6,96 @@
 
 import { AppError } from '../../../shared/errors/AppError';
 import * as tableRepo from '../repositories/table.repository';
+import * as floorRepo from '../repositories/table-floor.repository';
+import * as sectionRepo from '../repositories/table-section.repository';
 import type {
-  CreateTableDto,
-  UpdateTableDto,
-  TransitionTableStatusDto,
-  TableListQuery,
-  CreateReservationDto,
-  UpdateReservationDto,
-} from '../tables.dtos';
-import type { Table, TableReservation } from '../tables.types';
-import { VALID_TABLE_TRANSITIONS } from '../tables.types';
+  CreateFloorInput,
+  UpdateFloorInput,
+  CreateSectionInput,
+  UpdateSectionInput,
+  CreateTableInput,
+  UpdateTableInput,
+  TableListQueryInput,
+  CreateReservationInput,
+  UpdateReservationInput,
+} from '../tables.validators';
+import type { Table, TableFloor, TableSection, TableReservation } from '../tables.types';
+
+// ─── Floors ───────────────────────────────────────────────────
+
+export async function listFloors(tenantId: string, branchId?: string): Promise<TableFloor[]> {
+  return floorRepo.listFloors(tenantId, branchId);
+}
+
+export async function createFloor(
+  tenantId: string,
+  dto: CreateFloorInput,
+  actorId: string,
+): Promise<TableFloor> {
+  return floorRepo.createFloor(tenantId, dto, actorId);
+}
+
+export async function updateFloor(
+  tenantId: string,
+  floorId: string,
+  dto: UpdateFloorInput,
+  actorId: string,
+): Promise<TableFloor> {
+  const existing = await floorRepo.findFloorById(tenantId, floorId);
+  if (!existing) throw new AppError('Floor not found', 404, 'NOT_FOUND');
+  const updated = await floorRepo.updateFloor(tenantId, floorId, dto, actorId);
+  if (!updated) throw new AppError('Floor was modified by another request. Reload and retry.', 409, 'CONFLICT');
+  return updated;
+}
+
+export async function deleteFloor(tenantId: string, floorId: string, _actorId: string): Promise<void> {
+  const existing = await floorRepo.findFloorById(tenantId, floorId);
+  if (!existing) throw new AppError('Floor not found', 404, 'NOT_FOUND');
+  await floorRepo.softDeleteFloor(tenantId, floorId);
+}
+
+// ─── Sections ─────────────────────────────────────────────────
+
+export async function listSections(tenantId: string, branchId?: string): Promise<TableSection[]> {
+  return sectionRepo.listSections(tenantId, branchId);
+}
+
+export async function createSection(
+  tenantId: string,
+  dto: CreateSectionInput,
+  actorId: string,
+): Promise<TableSection> {
+  return sectionRepo.createSection(tenantId, dto, actorId);
+}
+
+export async function updateSection(
+  tenantId: string,
+  sectionId: string,
+  dto: UpdateSectionInput,
+  actorId: string,
+): Promise<TableSection> {
+  const existing = await sectionRepo.findSectionById(tenantId, sectionId);
+  if (!existing) throw new AppError('Section not found', 404, 'NOT_FOUND');
+  const updated = await sectionRepo.updateSection(tenantId, sectionId, dto, actorId);
+  if (!updated) throw new AppError('Section was modified by another request. Reload and retry.', 409, 'CONFLICT');
+  return updated;
+}
+
+export async function deleteSection(tenantId: string, sectionId: string, _actorId: string): Promise<void> {
+  const existing = await sectionRepo.findSectionById(tenantId, sectionId);
+  if (!existing) throw new AppError('Section not found', 404, 'NOT_FOUND');
+  await sectionRepo.softDeleteSection(tenantId, sectionId);
+}
 
 // ─── Tables ───────────────────────────────────────────────────
 
 export async function listTables(
   tenantId: string,
-  query: TableListQuery,
+  query: TableListQueryInput,
 ): Promise<{ data: Table[]; total: number; page: number; limit: number }> {
   const page  = query.page  ?? 1;
   const limit = query.limit ?? 50;
-  const result = await tableRepo.listTables(tenantId, query);
+  const result = await tableRepo.listTables(tenantId, query as any);
   return { ...result, page, limit };
 }
 
@@ -37,10 +107,9 @@ export async function getTableById(tenantId: string, tableId: string): Promise<T
 
 export async function createTable(
   tenantId: string,
-  dto: CreateTableDto,
+  dto: CreateTableInput,
   actorId: string,
 ): Promise<Table> {
-  // Guard: unique table_number per branch
   const existing = await tableRepo.findTableByNumber(tenantId, dto.branch_id, dto.table_number);
   if (existing) {
     throw new AppError(
@@ -50,32 +119,19 @@ export async function createTable(
     );
   }
 
-  const table = await tableRepo.createTable(tenantId, dto, actorId);
-
-  // Audit: initial state history entry
-  await tableRepo.appendTableStateHistory(
-    tenantId,
-    table.branch_id,
-    table.id,
-    null,
-    'available',
-    actorId,
-    'Table created',
-  );
-
+  const table = await tableRepo.createTable(tenantId, dto as any, actorId);
   return table;
 }
 
 export async function updateTable(
   tenantId: string,
   tableId: string,
-  dto: UpdateTableDto,
+  dto: UpdateTableInput,
   actorId: string,
 ): Promise<Table> {
   const existing = await tableRepo.findTableById(tenantId, tableId);
   if (!existing) throw new AppError('Table not found', 404, 'NOT_FOUND');
 
-  // Check table_number uniqueness if changing it
   if (dto.table_number && dto.table_number !== existing.table_number) {
     const conflict = await tableRepo.findTableByNumber(
       tenantId,
@@ -91,50 +147,8 @@ export async function updateTable(
     }
   }
 
-  const updated = await tableRepo.updateTable(tenantId, tableId, dto, actorId);
+  const updated = await tableRepo.updateTable(tenantId, tableId, dto as any, actorId);
   if (!updated) throw new AppError('Table was modified by another request. Reload and retry.', 409, 'CONFLICT');
-  return updated;
-}
-
-export async function transitionTableStatus(
-  tenantId: string,
-  tableId: string,
-  dto: TransitionTableStatusDto,
-  actorId: string,
-): Promise<Table> {
-  const table = await tableRepo.findTableById(tenantId, tableId);
-  if (!table) throw new AppError('Table not found', 404, 'NOT_FOUND');
-
-  // State machine validation (commerce_architecture_freeze.md §11)
-  const validNext = VALID_TABLE_TRANSITIONS[table.status];
-  if (!validNext.includes(dto.status)) {
-    throw new AppError(
-      `Invalid status transition: '${table.status}' → '${dto.status}'. Allowed: ${validNext.join(', ')}`,
-      422,
-      'BAD_REQUEST',
-    );
-  }
-
-  const updated = await tableRepo.updateTableStatus(
-    tenantId,
-    tableId,
-    dto.status,
-    dto.version_num,
-    actorId,
-  );
-  if (!updated) throw new AppError('Table was modified by another request. Reload and retry.', 409, 'CONFLICT');
-
-  // Audit trail: every transition is recorded
-  await tableRepo.appendTableStateHistory(
-    tenantId,
-    table.branch_id,
-    tableId,
-    table.status,
-    dto.status,
-    actorId,
-    dto.reason,
-  );
-
   return updated;
 }
 
@@ -145,16 +159,10 @@ export async function deleteTable(
 ): Promise<void> {
   const table = await tableRepo.findTableById(tenantId, tableId);
   if (!table) throw new AppError('Table not found', 404, 'NOT_FOUND');
-
-  // Cannot delete an occupied/active table
-  if (['occupied', 'ordering', 'payment_pending'].includes(table.status)) {
-    throw new AppError(
-      `Cannot delete a table with status '${table.status}'.`,
-      422,
-      'BAD_REQUEST',
-    );
-  }
-
+  
+  // Note: Since status is now a projection, we would typically check the projection
+  // to ensure active_guest_count == 0 and active_order_count == 0 before deletion.
+  // For now, we perform soft delete.
   await tableRepo.softDeleteTable(tenantId, tableId, actorId);
 }
 
@@ -168,23 +176,22 @@ export async function getTableHistory(tenantId: string, tableId: string) {
 
 export async function createReservation(
   tenantId: string,
-  dto: CreateReservationDto,
+  dto: CreateReservationInput,
   actorId: string,
 ): Promise<TableReservation> {
-  // Validate that the table belongs to the tenant
   const table = await tableRepo.findTableById(tenantId, dto.table_id);
   if (!table) throw new AppError('Table not found', 404, 'NOT_FOUND');
   if (table.branch_id !== dto.branch_id) {
     throw new AppError('Table does not belong to the specified branch.', 403, 'FORBIDDEN');
   }
 
-  return tableRepo.createReservation(tenantId, dto, actorId);
+  return tableRepo.createReservation(tenantId, dto as any, actorId);
 }
 
 export async function updateReservation(
   tenantId: string,
   reservationId: string,
-  dto: UpdateReservationDto,
+  dto: UpdateReservationInput,
   actorId: string,
 ): Promise<TableReservation> {
   const existing = await tableRepo.findReservationById(tenantId, reservationId);

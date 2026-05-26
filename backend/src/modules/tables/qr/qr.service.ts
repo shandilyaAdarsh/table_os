@@ -3,17 +3,16 @@
 // Business logic for QR code validation and session issuance.
 // ============================================================
 
-import { env } from '../../config/env';
-import { AppError } from '../../shared/errors/AppError';
-import { ErrorCode } from '../../shared/errors/error-codes';
-import { generateSecureToken, hmacSha256, safeCompare } from '../../shared/utils/crypto';
+import { env } from '../../../config/env';
+import { AppError } from '../../../shared/errors/AppError';
+import { ErrorCode } from '../../../shared/errors/error-codes';
+import { generateSecureToken, hmacSha256, safeCompare } from '../../../shared/utils/crypto';
 import { randomUUID } from 'crypto';
 import * as qrRepo from './qr.repository';
-import * as tableRepo from '../tables/repositories/table.repository';
+import * as tableRepo from '../repositories/table.repository';
 import type { CreateQrCodeDto, ResolveQrSessionDto, QrSessionPublicDto } from './qr.dtos';
 import type { QrSignedPayload, QrSession } from './qr.types';
 import { QR_SESSION_TTL_SECONDS } from './qr.types';
-import { VALID_TABLE_TRANSITIONS } from '../tables/tables.types';
 
 function buildSignature(payload: Omit<QrSignedPayload, 'signature'>): string {
   const raw = [
@@ -68,7 +67,7 @@ export async function createQrCode(
   const signature = buildSignature(payload);
   const signedPayload: QrSignedPayload = { ...payload, signature };
   const signedPayloadText = JSON.stringify(signedPayload);
-  const qrCode = await qrRepo.createQrCode({
+  const assigned = await qrRepo.createQrCode({
     id: qrCodeId,
     tenant_id: tenantId,
     branch_id: dto.branch_id,
@@ -78,17 +77,10 @@ export async function createQrCode(
     generated_by: actorId,
   });
 
-  const assigned = await tableRepo.assignQrCodeToTable(
-    tenantId,
-    dto.table_id,
-    qrCode.id,
-    table.version_num,
-    actorId,
-  );
-  if (!assigned) throw new AppError('Table was modified by another request. Reload and retry.', 409, ErrorCode.CONFLICT);
+  // NOTE: assignQrCodeToTable removed — QR tokens are now managed via table_qr_tokens.
 
   return {
-    qr_code_id: qrCode.id,
+    qr_code_id: assigned.id,
     signed_payload: signedPayloadText,
     code_slug: codeSlug,
   };
@@ -158,18 +150,20 @@ export async function resolveQrSession(
     };
   }
 
-  const canOccupy = VALID_TABLE_TRANSITIONS[table.status]?.includes('occupied');
-  if (canOccupy) {
-    const updated = await tableRepo.updateTableStatus(
-      payload.tenant_id,
-      payload.table_id,
-      'occupied',
-      table.version_num,
-      null,
-    );
-    if (!updated) {
-      throw new AppError('Table was modified by another request. Reload and retry.', 409, ErrorCode.CONFLICT);
-    }
+  // Table status is no longer mutated directly — runtime state is derived from projections.
+  // A TABLE_GUEST_ARRIVED domain event is emitted instead to trigger projection rebuild.
+  const { error: eventError } = await (await import('../../../config/supabase')).supabaseAdmin
+    .from('domain_events')
+    .insert({
+      tenant_id:      payload.tenant_id,
+      branch_id:      payload.branch_id,
+      event_type:     'table.guest_arrived',
+      aggregate_id:   payload.table_id,
+      aggregate_type: 'Table',
+      payload:        { table_id: payload.table_id, source: 'qr_scan' },
+    });
+  if (eventError) {
+    // Non-fatal: projection will self-heal
   }
 
   const rawToken = generateSecureToken(32);

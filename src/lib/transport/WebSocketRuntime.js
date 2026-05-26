@@ -24,6 +24,7 @@ export class WebSocketRuntime {
     this.intendedDisconnect = false;
     this.isRebuilding = false;
     this.eventBuffer = [];
+    this.isDisposed = false; // Lifecycle guard flag
 
     WebSocketRuntime.instance = this;
   }
@@ -36,6 +37,11 @@ export class WebSocketRuntime {
   }
 
   connect() {
+    if (this.isDisposed) {
+      console.warn('[WebSocketRuntime] Cannot connect — runtime is disposed.');
+      return;
+    }
+
     const { state, transitionState } = useTransportStore.getState();
     
     if (state === TransportState.CONNECTED || state === TransportState.CONNECTING) {
@@ -59,7 +65,6 @@ export class WebSocketRuntime {
     transitionState(TransportState.AUTHENTICATING);
 
     try {
-      // Pass token via Sec-WebSocket-Protocol (browser translates second arg to this header)
       this.ws = new WebSocket(this.url, [token]);
 
       this.ws.onopen = this.handleOpen.bind(this);
@@ -82,7 +87,33 @@ export class WebSocketRuntime {
     useTransportStore.getState().cleanupTransport();
   }
 
+  // ── Centralized Runtime Disposal ──
+  disposeTransport() {
+    if (this.isDisposed) return;
+    console.warn('[WebSocketRuntime] 🛑 Disposing transport runtime...');
+    
+    // 1. Mark as disposed immediately to intercept all async callbacks
+    this.isDisposed = true;
+    
+    // 2. Disconnect and release connection resources
+    this.disconnect();
+    
+    // 3. Clear transient state
+    this.eventBuffer = [];
+    
+    // 4. Clear instance reference to prevent memory leaks
+    if (WebSocketRuntime.instance === this) {
+      WebSocketRuntime.instance = null;
+    }
+    console.info('[WebSocketRuntime] ✅ Transport disposed.');
+  }
+
   handleOpen() {
+    if (this.isDisposed) {
+      this.disconnect();
+      return;
+    }
+    
     this.reconnectAttempts = 0;
     this._resetHeartbeat();
     this._startAckLoop();
@@ -90,24 +121,22 @@ export class WebSocketRuntime {
     useTransportStore.getState().transitionState(TransportState.CONNECTED);
     useTransportStore.getState().setSyncing(true);
 
-    // Strict Reconnect Ordering (Step 1 Complete: Websocket Reconnected)
-    // Step 2: Request Replay Reconciliation
     const { replayCursor } = useTransportStore.getState();
     this.send({
       type: 'SYNC',
       last_sequence: replayCursor,
     });
-    // Note: Queue drain is deferred until SYNC_COMPLETE arrives
   }
 
   async handleMessage(event) {
-    this._resetHeartbeat(); // Any message resets heartbeat
+    if (this.isDisposed) return;
+    
+    this._resetHeartbeat();
     
     try {
       const data = JSON.parse(event.data);
 
       if (data.connection_id && data.stream_instance_id) {
-        // Connection Identity Ack from server (often sent right after connection)
         useTransportStore.getState().setConnectionIdentity(data);
         return;
       }
@@ -116,27 +145,28 @@ export class WebSocketRuntime {
         this.isRebuilding = true;
         import('../../store/projectionCoordinator').then(({ useProjectionCoordinator }) => {
           import('../../store/mutationCoordinator').then(async ({ useMutationCoordinator }) => {
-            // Step 3: Projection Rebuild
+            if (this.isDisposed) return; // double-check after dynamic import
+            
             await useProjectionCoordinator.getState().flushInvalidations();
             
-            // Step 4: Advance Replay Watermark (handled by sequence ingestion if SYNC_COMPLETE has it)
             if (data.last_sequence !== undefined) {
               useTransportStore.getState().setReplayCursor(data.last_sequence);
             }
             
-            // Process buffered events that arrived during rebuild
             const buffer = [...this.eventBuffer];
             this.eventBuffer = [];
             this.isRebuilding = false;
             
             for (const bufferedEvent of buffer) {
-              useTransportStore.getState().processEventEnvelope(bufferedEvent);
+              if (!this.isDisposed) {
+                useTransportStore.getState().processEventEnvelope(bufferedEvent);
+              }
             }
 
-            useTransportStore.getState().setSyncing(false);
-            
-            // Step 5: THEN begin queue drain
-            useMutationCoordinator.getState().drainQueue();
+            if (!this.isDisposed) {
+              useTransportStore.getState().setSyncing(false);
+              useMutationCoordinator.getState().drainQueue();
+            }
           });
         });
         return;
@@ -144,12 +174,9 @@ export class WebSocketRuntime {
 
       if (data.event_sequence !== undefined) {
         if (this.isRebuilding) {
-          // Late Frame Racing: Buffer events that arrive while SYNC_COMPLETE rebuild is in-flight
           this.eventBuffer.push(data);
-          console.info(`[WebSocketRuntime] Buffered late frame ${data.event_sequence} during active rebuild`);
           return;
         }
-        // Deterministic Event Envelope
         useTransportStore.getState().processEventEnvelope(data);
       }
     } catch (err) {
@@ -158,6 +185,8 @@ export class WebSocketRuntime {
   }
 
   handleClose(event) {
+    if (this.isDisposed) return;
+    
     this._cleanupTimers();
     this.ws = null;
 
@@ -171,17 +200,20 @@ export class WebSocketRuntime {
   }
 
   handleError(error) {
+    if (this.isDisposed) return;
     console.error('[WebSocketRuntime] Transport Error:', error);
-    // WS API doesn't provide rich error objects, the close event usually follows immediately.
   }
 
   send(payload) {
+    if (this.isDisposed) return;
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(payload));
     }
   }
 
   scheduleReconnect() {
+    if (this.isDisposed) return;
+    
     const { transitionState } = useTransportStore.getState();
     transitionState(TransportState.RECONNECTING);
 
@@ -194,14 +226,22 @@ export class WebSocketRuntime {
     console.info(`[WebSocketRuntime] Reconnecting in ${delay}ms (Attempt ${this.reconnectAttempts})`);
 
     this.reconnectTimer = setTimeout(() => {
-      this.connect();
+      if (!this.isDisposed) {
+        this.connect();
+      }
     }, delay);
   }
 
   _startAckLoop() {
+    if (this.isDisposed) return;
+    
     if (this.ackInterval) clearInterval(this.ackInterval);
     
     this.ackInterval = setInterval(() => {
+      if (this.isDisposed) {
+        this._cleanupTimers();
+        return;
+      }
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         const { replayCursor } = useTransportStore.getState();
         this.send({
@@ -213,12 +253,15 @@ export class WebSocketRuntime {
   }
 
   _resetHeartbeat() {
+    if (this.isDisposed) return;
+    
     if (this.heartbeatTimer) clearTimeout(this.heartbeatTimer);
     
     this.heartbeatTimer = setTimeout(() => {
+      if (this.isDisposed) return;
+      
       console.warn('[WebSocketRuntime] Heartbeat timeout. Server unresponsive. Reconnecting...');
       if (this.ws) {
-        // Forcibly close to trigger handleClose and reconnect
         this.ws.close(4000, 'Heartbeat Timeout');
       }
     }, HEARTBEAT_TIMEOUT);
@@ -234,4 +277,13 @@ export class WebSocketRuntime {
     const searchParams = new URLSearchParams(window.location.search);
     return searchParams.get('session_token');
   }
+}
+
+// ─── HMR Cleanup Hook ────────────────────────────────────────────────────────
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    if (WebSocketRuntime.instance) {
+      WebSocketRuntime.instance.disposeTransport();
+    }
+  });
 }

@@ -10,9 +10,12 @@ import { requireMinRole } from '../../middleware/auth.middleware';
 import { ROLES } from '../../types/rbac.types';
 import * as tableService from './services/table.service';
 import {
+  CreateFloorSchema,
+  UpdateFloorSchema,
+  CreateSectionSchema,
+  UpdateSectionSchema,
   CreateTableSchema,
   UpdateTableSchema,
-  TransitionTableStatusSchema,
   CreateReservationSchema,
   UpdateReservationSchema,
   TableListQuerySchema,
@@ -20,9 +23,76 @@ import {
 
 const router: Router = Router({ mergeParams: true });
 
+// ─── Floors ───────────────────────────────────────────────────
+
+router.get('/floors', requireMinRole(ROLES.STAFF), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const tenantId = req.context.tenantId!;
+    // Assuming tableService has listFloors
+    const data = await tableService.listFloors(tenantId);
+    res.status(200).json({ success: true, data });
+  } catch (err) { next(err); }
+});
+
+router.post('/floors', requireMinRole(ROLES.MANAGER), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const dto = CreateFloorSchema.parse(req.body);
+    const floor = await tableService.createFloor(req.context.tenantId!, dto, req.context.userId);
+    res.status(201).json({ success: true, data: floor });
+  } catch (err) { next(err); }
+});
+
+router.patch('/floors/:floorId', requireMinRole(ROLES.MANAGER), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const dto = UpdateFloorSchema.parse(req.body);
+    const floor = await tableService.updateFloor(req.context.tenantId!, req.params.floorId as string, dto, req.context.userId);
+    res.status(200).json({ success: true, data: floor });
+  } catch (err) { next(err); }
+});
+
+router.delete('/floors/:floorId', requireMinRole(ROLES.MANAGER), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await tableService.deleteFloor(req.context.tenantId!, req.params.floorId as string, req.context.userId);
+    res.status(200).json({ success: true, message: 'Floor deleted.' });
+  } catch (err) { next(err); }
+});
+
+// ─── Sections ─────────────────────────────────────────────────
+
+router.get('/sections', requireMinRole(ROLES.STAFF), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const tenantId = req.context.tenantId!;
+    const data = await tableService.listSections(tenantId);
+    res.status(200).json({ success: true, data });
+  } catch (err) { next(err); }
+});
+
+router.post('/sections', requireMinRole(ROLES.MANAGER), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const dto = CreateSectionSchema.parse(req.body);
+    const section = await tableService.createSection(req.context.tenantId!, dto, req.context.userId);
+    res.status(201).json({ success: true, data: section });
+  } catch (err) { next(err); }
+});
+
+router.patch('/sections/:sectionId', requireMinRole(ROLES.MANAGER), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const dto = UpdateSectionSchema.parse(req.body);
+    const section = await tableService.updateSection(req.context.tenantId!, req.params.sectionId as string, dto, req.context.userId);
+    res.status(200).json({ success: true, data: section });
+  } catch (err) { next(err); }
+});
+
+router.delete('/sections/:sectionId', requireMinRole(ROLES.MANAGER), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await tableService.deleteSection(req.context.tenantId!, req.params.sectionId as string, req.context.userId);
+    res.status(200).json({ success: true, message: 'Section deleted.' });
+  } catch (err) { next(err); }
+});
+
 // ─── Tables ───────────────────────────────────────────────────
 
-// GET /api/v1/admin/tables?branch_id=&status=&page=&limit=
+// GET /api/v1/admin/tables?branch_id=&page=&limit=
 router.get('/', requireMinRole(ROLES.STAFF), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const query = TableListQuerySchema.parse(req.query);
@@ -58,22 +128,11 @@ router.patch('/:tableId', requireMinRole(ROLES.MANAGER), async (req: Request, re
   } catch (err) { next(err); }
 });
 
-// POST /api/v1/admin/tables/:tableId/status
-router.post('/:tableId/status', requireMinRole(ROLES.STAFF), async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const dto = TransitionTableStatusSchema.parse(req.body);
-    const table = await tableService.transitionTableStatus(
-      req.context.tenantId!, req.params.tableId as string, dto, req.context.userId,
-    );
-    res.status(200).json({ success: true, data: table });
-  } catch (err) { next(err); }
-});
-
 // DELETE /api/v1/admin/tables/:tableId
 router.delete('/:tableId', requireMinRole(ROLES.MANAGER), async (req: Request, res: Response, next: NextFunction) => {
   try {
     await tableService.deleteTable(req.context.tenantId!, req.params.tableId as string, req.context.userId);
-    res.status(200).json({ success: true, message: 'Table deleted.' });
+    res.status(200).json({ success: true, message: 'Table soft deleted.' });
   } catch (err) { next(err); }
 });
 
@@ -87,7 +146,6 @@ router.get('/:tableId/history', requireMinRole(ROLES.MANAGER), async (req: Reque
 
 // ─── Reservations ─────────────────────────────────────────────
 
-// GET /api/v1/admin/tables/:tableId/reservations
 router.get('/:tableId/reservations', requireMinRole(ROLES.STAFF), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = await tableService.getReservationsForTable(req.context.tenantId!, req.params.tableId as string);
@@ -95,7 +153,6 @@ router.get('/:tableId/reservations', requireMinRole(ROLES.STAFF), async (req: Re
   } catch (err) { next(err); }
 });
 
-// POST /api/v1/admin/tables/reservations
 router.post('/reservations', requireMinRole(ROLES.STAFF), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const dto = CreateReservationSchema.parse(req.body);
@@ -104,7 +161,6 @@ router.post('/reservations', requireMinRole(ROLES.STAFF), async (req: Request, r
   } catch (err) { next(err); }
 });
 
-// PATCH /api/v1/admin/tables/reservations/:reservationId
 router.patch('/reservations/:reservationId', requireMinRole(ROLES.STAFF), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const dto = UpdateReservationSchema.parse(req.body);

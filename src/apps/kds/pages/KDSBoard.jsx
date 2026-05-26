@@ -6,6 +6,7 @@ import { useKitchenMetricsProjection } from '../../../store/projections/kitchenM
 import { useMutationCoordinator } from '../../../store/mutationCoordinator.js';
 import { useKdsIdentityStore } from '../../../store/kdsIdentityStore.js';
 import { useLeadershipStore } from '../../../store/leadershipStore.js';
+import { clearLeadershipState, clearAllRuntimeState } from '../../../lib/idbStorage.js';
 import OrderCard from '../components/OrderCard.jsx';
 import { Loader2 } from 'lucide-react';
 
@@ -30,7 +31,7 @@ const KDSBoard = () => {
   const { branchId, stationId } = useKdsIdentityStore();
   
   // Leadership Election (Multi-tab protection)
-  const { isLeader, requestLeadership } = useLeadershipStore();
+  const { isLeader, isAttemptingLock, leaderHeartbeatAge, requestLeadership, forceLeadershipRecovery, disposeLeadership } = useLeadershipStore();
 
   // Legacy (History only)
   const historyOrders     = useOrderStore(s => s.historyOrders);
@@ -76,7 +77,12 @@ const KDSBoard = () => {
     }
 
     // No probe needed, ProjectionCoordinator + WebSocketRuntime handles lifecycle
-  }, [tenantId, branchId, stationId, activeTab]);
+    
+    // Centralized disposal delegation on unmount
+    return () => {
+      disposeLeadership();
+    };
+  }, [tenantId, branchId, stationId, activeTab, requestLeadership, disposeLeadership, rebuildOrders, rebuildMetrics, fetchHistory]);
 
   /* ── Realtime subscription is now handled globally by WebSocketRuntime ── */
 
@@ -192,18 +198,53 @@ const KDSBoard = () => {
       {!isLeader && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(242, 244, 246, 0.95)', zIndex: 9999,
+          background: 'rgba(242, 244, 246, 0.97)', zIndex: 9999,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           backdropFilter: 'blur(8px)',
         }}>
           <span className="material-symbols-outlined" style={{ fontSize: '48px', color: '#8D4B00', marginBottom: '16px' }}>lock</span>
           <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#191C1E', marginBottom: '8px' }}>Station in Use</h2>
-          <p style={{ fontSize: '14px', color: '#554336', marginBottom: '24px', textAlign: 'center', maxWidth: '400px', lineHeight: 1.5 }}>
+          <p style={{ fontSize: '14px', color: '#554336', marginBottom: '8px', textAlign: 'center', maxWidth: '400px', lineHeight: 1.5 }}>
             Another KDS screen is actively managing this station. Only one active screen is permitted per station to prevent conflicting operations.
           </p>
-          <div style={{ padding: '12px 24px', background: '#FFF4EC', color: '#8D4B00', borderRadius: '8px', fontWeight: 900, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+          {/* Leader heartbeat age indicator */}
+          {leaderHeartbeatAge > 0 && (
+            <p style={{ fontSize: '11px', color: '#887364', marginBottom: '20px', fontFamily: 'monospace' }}>
+              Leader last seen: {(leaderHeartbeatAge / 1000).toFixed(1)}s ago
+              {leaderHeartbeatAge > 6000 && ' ⚠️ Stale — recovering...'}
+            </p>
+          )}
+          <div style={{ padding: '12px 24px', background: '#FFF4EC', color: '#8D4B00', borderRadius: '8px', fontWeight: 900, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '16px' }}>
             Standby Viewer Mode Active
           </div>
+          {/* Dev-only controls */}
+          {import.meta.env.DEV && (
+            <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+              <button
+                onClick={() => forceLeadershipRecovery(stationId)}
+                style={{
+                  padding: '8px 16px', borderRadius: '6px', border: '1px solid #D97706',
+                  background: '#FFFBEB', color: '#92400E', fontSize: '11px', fontWeight: 700,
+                  cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em',
+                }}
+              >
+                ⚡ Force Take Leadership
+              </button>
+              <button
+                onClick={async () => {
+                  await clearLeadershipState();
+                  window.location.reload();
+                }}
+                style={{
+                  padding: '8px 16px', borderRadius: '6px', border: '1px solid #6B7280',
+                  background: '#F9FAFB', color: '#374151', fontSize: '11px', fontWeight: 700,
+                  cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em',
+                }}
+              >
+                🗑 Reset IDB Lease
+              </button>
+            </div>
+          )}
         </div>
       )}
 

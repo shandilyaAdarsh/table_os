@@ -3,9 +3,9 @@ import type { IncomingMessage } from 'http';
 import crypto from 'crypto';
 import { logger } from '../../shared/utils/logger';
 import { RuntimeAuthService } from '../auth/services/runtime-auth.service';
-import { validateSessionToken } from '../qr/qr.service';
+import { validateSessionToken } from '../tables/qr/qr.service';
 import { logTransportAudit } from './transport-audit.repository';
-import type { ConnectionIdentity, EventEnvelope, SyncFrame, AckFrame } from './transport.contracts';
+import type { ConnectionIdentity, EventEnvelope } from './transport.contracts';
 
 // ============================================================
 // Deterministic Transport Governance (Single Node)
@@ -152,7 +152,7 @@ export class WebSocketManager {
   /**
    * Handles incoming client frames (SYNC, ACK).
    */
-  private handleClientFrame(ws: WebSocket, identity: ConnectionIdentity, data: Buffer): void {
+  private handleClientFrame(_ws: WebSocket, identity: ConnectionIdentity, data: Buffer): void {
     try {
       const frame = JSON.parse(data.toString());
       
@@ -222,7 +222,7 @@ export class WebSocketManager {
    */
   private setupHeartbeat(): void {
     this.heartbeatInterval = setInterval(() => {
-      this.branchChannels.forEach((clients, branchId) => {
+      this.branchChannels.forEach((clients, _branchId) => {
         clients.forEach((ws: any) => {
           if (ws.isAlive === false) {
             void logTransportAudit({

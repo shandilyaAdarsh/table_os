@@ -5,8 +5,8 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import { validateSessionToken, touchSession } from './qr.service';
-import { AppError } from '../../shared/errors/AppError';
-import { ErrorCode } from '../../shared/errors/error-codes';
+import { AppError } from '../../../shared/errors/AppError';
+import { ErrorCode } from '../../../shared/errors/error-codes';
 import type { QrSession } from './qr.types';
 
 declare global {

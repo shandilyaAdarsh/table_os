@@ -4,7 +4,7 @@
 // ============================================================
 
 import { Router } from 'express';
-import { requireQrSession } from '../qr/qr.middleware';
+import { requireQrSession } from '../tables/qr/qr.middleware';
 import { authenticate } from '../../middleware/auth.middleware';
 import { requestIdempotency } from '../../middleware/idempotency.middleware';
 import { requireMutationEnvelope } from '../../middleware/mutation.middleware';
