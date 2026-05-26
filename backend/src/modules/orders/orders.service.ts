@@ -11,8 +11,8 @@ import * as ordersRepo from './orders.repository';
 import { createOrderSnapshot } from '../snapshot/order-snapshot.service';
 import { supabaseAdmin } from '../../config/supabase';
 import { allocateSequenceNumber } from './sequence-allocator.service';
-
 import { BranchMenuResolutionService } from '../overrides/services/branch-menu-resolution.service';
+import { ProjectionService } from '../projection/projection.service';
 
 const VALID_TRANSITIONS: Record<ordersRepo.OrderStatus, ordersRepo.OrderStatus[]> = {
   pending: ['accepted', 'cancelled'],
@@ -215,6 +215,22 @@ export async function transitionOrderStatus(params: {
     to_status: targetStatus,
     changed_by: userId,
     reason: reason || `State transitioned from ${order.status} to ${targetStatus}.`,
+  });
+
+  // 5. Dispatch Realtime Projection Update
+  await ProjectionService.dispatchProjectionUpdate({
+    projection_id: order.branch_id, // For KDS/Dashboard branch-level order stream
+    projection_type: 'BRANCH_ORDERS',
+    branch_id: order.branch_id,
+    tenant_id: tenantId,
+    projection_revision: updatedOrder.version_num, // Map OCC version to projection revision safely
+    source_revision: order.version_num,
+    source_mutation_id: undefined, // Add trace ID if available in context
+    payload: {
+      action: 'ORDER_TRANSITIONED',
+      order: updatedOrder
+    },
+    eventSource: 'ORDERING',
   });
 
   return updatedOrder;
