@@ -9,6 +9,8 @@ import { createApp } from './app';
 import { logger } from './shared/utils/logger';
 import { GracefulShutdownService } from './modules/infrastructure/graceful-shutdown.service';
 
+import { WebSocketManager } from './modules/transport/websocket.manager';
+
 const app = createApp();
 const PORT = env.PORT;
 
@@ -23,6 +25,17 @@ const server = app.listen(PORT, () => {
   );
 });
 
+// ─── WebSocket Upgrade Hook ──────────────────────────────────
+server.on('upgrade', (request, socket, head) => {
+  const pathname = new URL(request.url!, `http://${request.headers.host}`).pathname;
+
+  if (pathname === '/api/v1/realtime') {
+    void WebSocketManager.getInstance().handleUpgrade(request, socket, head);
+  } else {
+    socket.destroy();
+  }
+});
+
 // ─── Graceful shutdown ────────────────────────────────────────
 
 // Register HTTP Server cleanup hook
@@ -33,6 +46,12 @@ GracefulShutdownService.registerHook('HTTP Server', 50, () => {
       resolve();
     });
   });
+});
+
+// Register WebSocketManager cleanup hook
+GracefulShutdownService.registerHook('WebSocket Transport', 60, async () => {
+  await WebSocketManager.getInstance().shutdown();
+  logger.info('WebSocket connections cleanly terminated');
 });
 
 process.on('unhandledRejection', (reason) => {

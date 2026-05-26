@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useOrderStore } from '../../../store/index.js';
+import { useKitchenMutations } from '../hooks/useKitchenMutations.js';
+import { useMutationCoordinator } from '../../../store/mutationCoordinator.js';
+import { useTransportStore, TransportState } from '../../../store/transportStore.js';
 
 // Re-export formatTime for any parent that needs it
 export const formatTime = (s) =>
@@ -81,11 +84,20 @@ const chipStyle = (key) => {
    OrderCard
 ══════════════════════════════════════════════════ */
 const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
-  const { id, tableNum, items, status, createdAt } = order;
-  const acceptPartialOrder = useOrderStore(s => s.acceptPartialOrder);
-  const updateOrderStatus  = useOrderStore(s => s.updateOrderStatus);
-  const toggleOrderItem    = useOrderStore(s => s.toggleOrderItem);
-  const rejectOrder        = useOrderStore(s => s.rejectOrder);
+  const { id, tableNum, items, status, createdAt, isPendingOperationalConfirmation } = order;
+  const { markPreparing, markReady, bumpOrder, recallTicket } = useKitchenMutations();
+
+  // Legacy fallback for history or if not fully implemented in mutation coordinator
+  const rejectOrder = useOrderStore(s => s.rejectOrder);
+
+  // Operational Resilience Checks
+  const stuckMutations = useMutationCoordinator(s => s.getStuckMutations(10000));
+  const isStuck = stuckMutations.some(m => m.payload?.orderId === id);
+
+  const transportState = useTransportStore(s => s.state);
+  const isSyncing = useTransportStore(s => s.isSyncing);
+  const isTransportDegraded = transportState !== TransportState.CONNECTED || isSyncing;
+  const isLocked = isPendingOperationalConfirmation || isTransportDegraded;
 
   // Default: all items are selected (kitchen accepts the full order unless they deselect)
   const [selectedItems, setSelectedItems]     = useState(() => items.map(i => i.id));
@@ -116,16 +128,15 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
     );
 
   const handleAction = async () => {
-    if (isActionLoading || isHistory) return;
+    if (isActionLoading || isHistory || isLocked) return;
     setIsActionLoading(true);
     try {
       if (status === 'pending') {
-        // acceptPartialOrder: moves to cooking + marks unselected items as rejected
-        await acceptPartialOrder(id, selectedItems);
+        await markPreparing(order, selectedItems);
       } else if (status === 'cooking') {
-        await updateOrderStatus(id, 'ready');
+        await markReady(order);
       } else if (status === 'ready') {
-        await updateOrderStatus(id, 'served');
+        await bumpOrder(order);
       }
     } catch (err) {
       console.error('[KDS] Action error:', err);
@@ -218,8 +229,21 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
             letterSpacing: '0.12em',
             color:         '#887364',
             marginTop:     '4px',
+            display:       'flex',
+            alignItems:    'center',
+            gap:           '6px'
           }}>
             #{id.slice(0, 8)}
+            {isStuck && (
+              <span className="material-symbols-outlined" style={{ fontSize: '14px', color: '#BA1A1A' }} title="Action stuck/pending over 10s">
+                warning
+              </span>
+            )}
+            {isTransportDegraded && !isStuck && (
+              <span className="material-symbols-outlined" style={{ fontSize: '14px', color: '#F59E0B' }} title="Transport degraded or syncing">
+                cloud_off
+              </span>
+            )}
           </p>
         </div>
 
@@ -501,7 +525,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleAction(); }}
-              disabled={isActionLoading}
+              disabled={isActionLoading || isLocked}
               className="cubic-transition"
               style={{
                 flex:        2,
@@ -514,14 +538,14 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
                 padding:     '13px 8px',
                 borderRadius:'6px',
                 border:      'none',
-                cursor:      'pointer',
-                opacity:     isActionLoading ? 0.6 : 1,
+                cursor:      isLocked ? 'not-allowed' : 'pointer',
+                opacity:     (isActionLoading || isLocked) ? 0.6 : 1,
                 display:     'flex',
                 alignItems:  'center',
                 justifyContent: 'center',
               }}
             >
-              {isActionLoading ? <Loader2 size={14} className="animate-spin" /> : 'MARK READY'}
+              {(isActionLoading || isLocked) ? <Loader2 size={14} className="animate-spin" /> : 'MARK READY'}
             </button>
           </div>
         )}
@@ -530,7 +554,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
         {status === 'ready' && (
           <button
             onClick={(e) => { e.stopPropagation(); handleAction(); }}
-            disabled={isActionLoading}
+            disabled={isActionLoading || isLocked}
             className="cubic-transition"
             style={{
               width:        '100%',
@@ -543,15 +567,15 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
               padding:      '13px',
               borderRadius: '6px',
               border:       'none',
-              cursor:       'pointer',
-              opacity:      isActionLoading ? 0.6 : 1,
+              cursor:       isLocked ? 'not-allowed' : 'pointer',
+              opacity:      (isActionLoading || isLocked) ? 0.6 : 1,
               display:      'flex',
               alignItems:   'center',
               justifyContent:'center',
               gap:          '8px',
             }}
           >
-            {isActionLoading
+            {(isActionLoading || isLocked)
               ? <Loader2 size={14} className="animate-spin" />
               : <>
                   CLEAR / SERVED

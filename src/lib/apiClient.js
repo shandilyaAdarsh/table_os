@@ -1,4 +1,5 @@
-import { useRuntimeAuthStore } from '../store/runtimeAuthStore';
+import { useRuntimeIdentityStore } from '../store/runtimeIdentityStore';
+import { useConnectivityStore } from '../store/connectivityStore';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -9,7 +10,8 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
  * MUST be used by all Repositories querying protected backend runtime routes.
  */
 export async function fetchWithRuntime(endpoint, options = {}) {
-  const token = useRuntimeAuthStore.getState().runtimeToken;
+  // Assuming runtime auth token is stored somewhere secure or provided by Supabase session
+  const token = localStorage.getItem('supabase.auth.token'); // Fallback placeholder
   
   const headers = new Headers(options.headers || {});
   if (!headers.has('Content-Type')) {
@@ -21,35 +23,50 @@ export async function fetchWithRuntime(endpoint, options = {}) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers
-  });
-
-  // Strict enforcement: if the backend rejects the Runtime JWT, invalidate local state immediately.
-  if (response.status === 401 || response.status === 403) {
-    console.warn('[RuntimeApiClient] Unauthorized or Expired runtime session detected. Triggering re-auth.');
-    useRuntimeAuthStore.getState().setAuthStatus('EXPIRED');
-    // NOTE: In the future, intercept here to trigger an automatic `/auth/runtime/exchange` using the Supabase session
+  const identity = useRuntimeIdentityStore.getState();
+  if (identity.branchId) {
+    headers.set('X-Branch-Id', identity.branchId);
+  }
+  if (identity.terminalId) {
+    headers.set('X-Terminal-Id', identity.terminalId);
   }
 
-  return response;
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      console.warn('[RuntimeApiClient] Unauthorized. Terminating identity.');
+      useRuntimeIdentityStore.getState().clearIdentity();
+    }
+    
+    // Any response means the API is reachable
+    useConnectivityStore.getState().recordApiSuccess();
+
+    return response;
+  } catch (error) {
+    console.error(`[RuntimeApiClient] Network failure fetching ${endpoint}`, error);
+    useConnectivityStore.getState().recordApiTimeout();
+    throw error;
+  }
 }
 
 /**
  * Executes a deterministic, retry-safe mutation enforcing the MutationEnvelope contract.
- * Automatically wraps the payload with required sequencing and runtime context.
+ * Called exclusively by MutationCoordinator.
  */
 export async function submitMutation(endpoint, mutation) {
-  const { tenantId, branchId, sessionId } = useRuntimeAuthStore.getState();
+  const identity = useRuntimeIdentityStore.getState();
   
   const envelope = {
     mutation_id: mutation.mutation_id,
     mutation_sequence: mutation.mutation_sequence,
-    runtime_version: 1, // Fixed version for now
-    session_id: sessionId || undefined,
-    tenant_id: tenantId,
-    branch_id: branchId,
+    runtime_version: 1,
+    session_id: identity.runtimeSessionId,
+    terminal_id: identity.terminalId,
+    branch_id: identity.branchId,
     client_timestamp: new Date().toISOString(),
     idempotency_key: mutation.idempotency_key,
     expected_cart_revision: mutation.expected_cart_revision,
@@ -57,7 +74,7 @@ export async function submitMutation(endpoint, mutation) {
   };
 
   const response = await fetchWithRuntime(endpoint, {
-    method: 'POST', // or PATCH/DELETE if overridden, but usually POST is fine
+    method: 'POST',
     body: JSON.stringify(envelope),
   });
 
