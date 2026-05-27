@@ -28,6 +28,7 @@ import { infrastructureRouter } from './modules/infrastructure/infrastructure.ro
 import { chaosRouter } from './modules/infrastructure/chaos.router';
 import { runtimeRouter } from './modules/projection/runtime.router';
 import { eventReplayRouter } from './modules/projection/event-replay.router';
+import { deploymentRouter } from './modules/projection/deployment.router';
 import { ObservabilityService } from './modules/infrastructure/observability.service';
 import { errorMiddleware } from './middleware/error.middleware';
 import { loggingMiddleware } from './middleware/logging.middleware';
@@ -110,6 +111,7 @@ export function createApp(): express.Application {
   // ─── Public Snapshot API (no auth required) ─────────────────
   // CDN-cacheable branch menu snapshots for QR ordering.
   // Per public_api_contracts.md — versioned at /api/v1/public/branches.
+  // Wires up Snapshot and Availability routers.
   app.use('/api/v1/public/branches', snapshotRouter);
   app.use('/api/v1/public/branches', publicAvailabilityRouter);
   app.use('/public', publicMenuRouter);
@@ -138,6 +140,7 @@ export function createApp(): express.Application {
   // ─── Operational Runtime API ───────────────────────────────
   app.use('/api/v1/runtime', runtimeRouter);
   app.use('/api/v1/runtime/events', eventReplayRouter);
+  app.use('/api/v1/runtime', deploymentRouter);
 
   // ─── Admin API (requires auth & tenant context) ──────────────
   // The authoritative operational interface for the dashboard/admin panel.
