@@ -7,8 +7,8 @@ import type { Request, Response, NextFunction } from 'express';
 import { CreateQrCodeSchema, InvalidateQrCodeSchema } from './qr.validators';
 import { createQrCode } from './qr.service';
 import { invalidateQrCode } from './qr.repository';
-import { AppError } from '../../shared/errors/AppError';
-import { ErrorCode } from '../../shared/errors/error-codes';
+import { AppError } from '../../../shared/errors/AppError';
+import { ErrorCode } from '../../../shared/errors/error-codes';
 
 export async function createCode(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {

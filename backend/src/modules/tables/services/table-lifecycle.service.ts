@@ -1,129 +1,78 @@
 // ============================================================
 // src/modules/tables/services/table-lifecycle.service.ts
-// TableLifecycleService managing state transition validation,
-// occupancy validation, cleaning flow, reservation compatibility,
-// and atomic table state orchestration.
+// Table operational event coordinator.
+// NOTE: As of the Table Infrastructure Rework, table status is NO LONGER a
+// mutable column. Runtime state is derived from operational projections.
+// This service now coordinates domain event emission for table operational
+// events (guest arrived, session closed, etc.) that drive projection rebuilds.
 // ============================================================
 
 import { AppError, NotFoundError } from '../../../shared/errors/AppError';
 import { ErrorCode } from '../../../shared/errors/error-codes';
 import * as tableRepo from '../repositories/table.repository';
-import type { Table, TableStatus } from '../tables.types';
-import { VALID_TABLE_TRANSITIONS } from '../tables.types';
+import type { Table } from '../tables.types';
 import { supabaseAdmin } from '../../../config/supabase';
 import { logger } from '../../../shared/utils/logger';
+import { rebuildTableProjection } from '../projections/table-runtime.projection';
 
-export interface TableTransitionParams {
+export interface TableEventParams {
   tenantId: string;
   tableId: string;
-  toStatus: TableStatus;
-  versionNum: number;
+  eventType: 'TABLE_GUEST_ARRIVED' | 'TABLE_SESSION_CLOSED' | 'TABLE_CLEANED' | 'TABLE_FORCE_RESET';
   actorId: string;
   reason?: string;
   metadata?: Record<string, unknown>;
 }
 
 export class TableLifecycleService {
-  /**
-   * Validates if a transition from `from` to `to` status is allowed.
-   */
-  public static isValidTransition(from: TableStatus, to: TableStatus): boolean {
-    const allowed = VALID_TABLE_TRANSITIONS[from];
-    return allowed ? allowed.includes(to) : false;
-  }
 
   /**
-   * Orchestrates an atomic table status transition with OCC protection, audit trail,
-   * outbox event queueing, and reservation/occupancy rules.
+   * Emits a table operational domain event and rebuilds the runtime projection.
+   * All state inference happens through the projection — no mutable status column.
    */
-  public static async transitionTable(params: TableTransitionParams): Promise<Table> {
-    const { tenantId, tableId, toStatus, versionNum, actorId, reason, metadata = {} } = params;
+  public static async emitTableEvent(params: TableEventParams): Promise<Table> {
+    const { tenantId, tableId, eventType, actorId, reason, metadata = {} } = params;
 
-    // 1. Fetch current table
+    // 1. Verify table exists and is active
     const table = await tableRepo.findTableById(tenantId, tableId);
     if (!table) {
       throw new NotFoundError('Table');
     }
 
-    const fromStatus = table.status;
-    if (fromStatus === toStatus) {
-      return table; // Idempotent transition
-    }
-
-    // 2. Validate FSM transition rules
-    if (!this.isValidTransition(fromStatus, toStatus)) {
+    if (!table.is_active || table.deleted_at !== null) {
       throw new AppError(
-        `Invalid table status transition from '${fromStatus}' to '${toStatus}'.`,
+        `Cannot emit events on an inactive or deleted table.`,
         422,
         ErrorCode.VALIDATION_ERROR
       );
     }
 
-    // 3. Occupancy restrictions
-    // Cannot delete or lock an active table if it is occupied, ordering, or payment pending
-    if (toStatus === 'available' && ['occupied', 'ordering', 'payment_pending'].includes(fromStatus)) {
-      // Must go through proper payment/dirty lifecycle unless manually overridden by admin (reason specified)
-      if (!reason?.includes('FORCE_OVERRIDE_BY_ADMIN')) {
-        throw new AppError(
-          `Cannot reset table to available directly from '${fromStatus}' without proper lifecycle resolution.`,
-          400,
-          ErrorCode.VALIDATION_ERROR
-        );
-      }
-    }
-
-    // 4. Reservation Seated Flow integration
-    if (toStatus === 'occupied' && fromStatus === 'reserved') {
-      // Find active reservation for this table and mark it as seated
-      await this.seatActiveReservation(tenantId, tableId, actorId);
-    }
-
-    // 5. Atomic state update with OCC protection
-    const updatedTable = await tableRepo.updateTableStatus(
-      tenantId,
-      tableId,
-      toStatus,
-      versionNum,
-      actorId
-    );
-
-    if (!updatedTable) {
-      throw new AppError(
-        'Table status transition failed. Version mismatch or concurrent edit.',
-        409,
-        ErrorCode.CONFLICT
-      );
-    }
-
-    // 6. Append audit history trail
+    // 2. Append audit history entry (status-free, event-driven)
     await tableRepo.appendTableStateHistory(
       tenantId,
       table.branch_id,
       tableId,
-      fromStatus,
-      toStatus,
       actorId,
-      reason || `Table status transitioned to ${toStatus}`,
+      reason || `Event: ${eventType}`,
       metadata
     );
 
-    // 7. Emit Domain Outbox Event
+    // 3. Emit domain event to outbox
     const { error: outboxError } = await supabaseAdmin
       .from('domain_events')
       .insert({
-        tenant_id: tenantId,
-        branch_id: table.branch_id,
-        event_type: 'table.updated',
-        aggregate_id: tableId,
+        tenant_id:      tenantId,
+        branch_id:      table.branch_id,
+        event_type:     `table.${eventType.toLowerCase()}`,
+        aggregate_id:   tableId,
         aggregate_type: 'Table',
         payload: {
-          id: tableId,
+          id:         tableId,
           table_number: table.table_number,
-          from_status: fromStatus,
-          to_status: toStatus,
-          version_num: updatedTable.version_num,
-          actor_id: actorId,
-          reason: reason || null,
+          event_type: eventType,
+          actor_id:   actorId,
+          reason:     reason || null,
+          metadata,
         },
       });
 
@@ -134,15 +83,24 @@ export class TableLifecycleService {
       );
     }
 
-    return updatedTable;
+    // 4. Trigger projection rebuild so runtime state reflects current reality
+    try {
+      await rebuildTableProjection(supabaseAdmin, tenantId, tableId);
+    } catch (projErr: any) {
+      logger.error(
+        { err: projErr.message, tableId },
+        '[TableLifecycleService] Projection rebuild failed after table event — will self-heal on next event.'
+      );
+    }
+
+    return table;
   }
 
   /**
-   * Helper to automatically find the active reservation and mark it seated.
+   * Helper: auto-seat the active reservation when a guest arrives.
    */
-  private static async seatActiveReservation(tenantId: string, tableId: string, actorId: string): Promise<void> {
+  public static async seatActiveReservation(tenantId: string, tableId: string, actorId: string): Promise<void> {
     try {
-      // Fetch active reservations (pending or confirmed status)
       const { data, error } = await supabaseAdmin
         .from('table_reservations')
         .select('*')
@@ -155,34 +113,20 @@ export class TableLifecycleService {
         .maybeSingle();
 
       if (error) {
-        logger.error({ err: error.message, tableId }, '[TableLifecycleService] Failed to lookup reservations for seating.');
+        logger.error({ err: error.message, tableId }, '[TableLifecycleService] Failed to lookup reservations.');
         return;
       }
 
       if (data) {
-        // Seat the reservation
-        const { error: updateError } = await supabaseAdmin
+        await supabaseAdmin
           .from('table_reservations')
-          .update({
-            status: 'seated',
-            seated_at: new Date().toISOString(),
-            updated_by: actorId,
-            updated_at: new Date().toISOString(),
-          })
+          .update({ status: 'seated', seated_at: new Date().toISOString(), updated_by: actorId, updated_at: new Date().toISOString() })
           .eq('tenant_id', tenantId)
           .eq('id', data.id);
-
-        if (updateError) {
-          logger.error(
-            { err: updateError.message, reservationId: data.id },
-            '[TableLifecycleService] Failed to auto-seat reservation.'
-          );
-        } else {
-          logger.info({ reservationId: data.id, tableId }, '[TableLifecycleService] Auto-seated active reservation successfully.');
-        }
+        logger.info({ reservationId: data.id, tableId }, '[TableLifecycleService] Auto-seated reservation.');
       }
     } catch (err: any) {
-      logger.error({ err: err.message, tableId }, '[TableLifecycleService] Error in reservation seating callback.');
+      logger.error({ err: err.message, tableId }, '[TableLifecycleService] Error in reservation seating.');
     }
   }
 }

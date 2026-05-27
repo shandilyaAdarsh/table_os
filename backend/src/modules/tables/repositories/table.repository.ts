@@ -6,7 +6,7 @@
 
 import { supabaseAdmin } from '../../../config/supabase';
 import { logger } from '../../../shared/utils/logger';
-import type { Table, TableStateHistory, TableReservation, TableStatus } from '../tables.types';
+import type { Table, TableStateHistory, TableReservation } from '../tables.types';
 import type {
   CreateTableDto,
   UpdateTableDto,
@@ -19,7 +19,7 @@ import type {
 export async function findTableById(tenantId: string, tableId: string): Promise<Table | null> {
   const { data, error } = await supabaseAdmin
     .from('tables')
-    .select('*')
+    .select('*, table_runtime_projections(runtime_state)')
     .eq('tenant_id', tenantId)
     .eq('id', tableId)
     .is('deleted_at', null)
@@ -29,7 +29,11 @@ export async function findTableById(tenantId: string, tableId: string): Promise<
     logger.error({ err: error, tenantId, tableId }, 'findTableById failed');
     throw new Error(`[TableRepo] findTableById: ${error.message}`);
   }
-  return data;
+  if (!data) return null;
+  return {
+    ...data,
+    runtime_state: (data as any).table_runtime_projections?.runtime_state ?? 'FREE',
+  } as any;
 }
 
 export async function findTableByNumber(
@@ -39,7 +43,7 @@ export async function findTableByNumber(
 ): Promise<Table | null> {
   const { data, error } = await supabaseAdmin
     .from('tables')
-    .select('*')
+    .select('*, table_runtime_projections(runtime_state)')
     .eq('tenant_id', tenantId)
     .eq('branch_id', branchId)
     .eq('table_number', tableNumber)
@@ -47,7 +51,11 @@ export async function findTableByNumber(
     .maybeSingle();
 
   if (error) throw new Error(`[TableRepo] findTableByNumber: ${error.message}`);
-  return data;
+  if (!data) return null;
+  return {
+    ...data,
+    runtime_state: (data as any).table_runtime_projections?.runtime_state ?? 'FREE',
+  } as any;
 }
 
 export async function listTables(
@@ -56,12 +64,13 @@ export async function listTables(
 ): Promise<{ data: Table[]; total: number }> {
   let q = supabaseAdmin
     .from('tables')
-    .select('*', { count: 'exact' })
+    .select('*, table_runtime_projections(runtime_state)', { count: 'exact' })
     .eq('tenant_id', tenantId)
     .is('deleted_at', null);
 
   if (query.branch_id) q = q.eq('branch_id', query.branch_id);
-  if (query.status)    q = q.eq('status', query.status);
+  if (query.floor_id)   q = q.eq('floor_id', query.floor_id);
+  if (query.section_id) q = q.eq('section_id', query.section_id);
   if (query.is_active !== undefined) q = q.eq('is_active', query.is_active);
 
   const page  = query.page  ?? 1;
@@ -75,7 +84,11 @@ export async function listTables(
     logger.error({ err: error, tenantId, query }, 'listTables failed');
     throw new Error(`[TableRepo] listTables: ${error.message}`);
   }
-  return { data: data ?? [], total: count ?? 0 };
+  const mapped = (data ?? []).map(t => ({
+    ...t,
+    runtime_state: (t as any).table_runtime_projections?.runtime_state ?? 'FREE',
+  }));
+  return { data: mapped as any, total: count ?? 0 };
 }
 
 export async function createTable(
@@ -91,7 +104,10 @@ export async function createTable(
       table_number: dto.table_number,
       display_name: dto.display_name ?? null,
       capacity:     dto.capacity,
-      notes:        dto.notes ?? null,
+      floor_id:     (dto as any).floor_id ?? null,
+      section_id:   (dto as any).section_id ?? null,
+      sort_order:   (dto as any).sort_order ?? 0,
+      notes:        (dto as any).notes ?? null,
       created_by:   createdBy,
     })
     .select()
@@ -126,55 +142,9 @@ export async function updateTable(
   return data;
 }
 
-export async function updateTableStatus(
-  tenantId: string,
-  tableId: string,
-  newStatus: TableStatus,
-  versionNum: number,
-  updatedBy: string | null,
-): Promise<Table | null> {
-  const { data, error } = await supabaseAdmin
-    .from('tables')
-    .update({
-      status:     newStatus,
-      updated_by: updatedBy ?? null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('tenant_id', tenantId)
-    .eq('id', tableId)
-    .eq('version_num', versionNum)
-    .is('deleted_at', null)
-    .select()
-    .maybeSingle();
+// updateTableStatus is removed — runtime state is a derived projection, not a mutable column.
 
-  if (error) throw new Error(`[TableRepo] updateTableStatus: ${error.message}`);
-  return data;
-}
-
-export async function assignQrCodeToTable(
-  tenantId: string,
-  tableId: string,
-  qrCodeId: string,
-  versionNum: number,
-  updatedBy: string | null,
-): Promise<Table | null> {
-  const { data, error } = await supabaseAdmin
-    .from('tables')
-    .update({
-      qr_code_id: qrCodeId,
-      updated_by: updatedBy ?? null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('tenant_id', tenantId)
-    .eq('id', tableId)
-    .eq('version_num', versionNum)
-    .is('deleted_at', null)
-    .select()
-    .maybeSingle();
-
-  if (error) throw new Error(`[TableRepo] assignQrCodeToTable: ${error.message}`);
-  return data;
-}
+// assignQrCodeToTable is superseded by table_qr_tokens — removed.
 
 export async function softDeleteTable(
   tenantId: string,
@@ -197,8 +167,6 @@ export async function appendTableStateHistory(
   tenantId: string,
   branchId: string,
   tableId: string,
-  fromStatus: TableStatus | null,
-  toStatus: TableStatus,
   changedBy: string | null,
   reason?: string,
   metadata: Record<string, unknown> = {},
@@ -206,13 +174,11 @@ export async function appendTableStateHistory(
   const { data, error } = await supabaseAdmin
     .from('table_state_history')
     .insert({
-      tenant_id:   tenantId,
-      branch_id:   branchId,
-      table_id:    tableId,
-      from_status: fromStatus,
-      to_status:   toStatus,
-      changed_by:  changedBy,
-      reason:      reason ?? null,
+      tenant_id:  tenantId,
+      branch_id:  branchId,
+      table_id:   tableId,
+      changed_by: changedBy,
+      reason:     reason ?? null,
       metadata,
     })
     .select()

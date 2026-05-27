@@ -9,7 +9,7 @@ import { Router } from 'express';
 import { getPublicMenuSnapshot } from './public-menu.controller';
 import { checkoutPublicOrder, getPublicOrderStatus } from '../orders/public-orders.controller';
 import { createCall } from '../waiter-call/waiter-call.controller';
-import { requireQrSession } from '../qr/qr.middleware';
+import { requireQrSession } from '../tables/qr/qr.middleware';
 import { requestIdempotency } from '../../middleware/idempotency.middleware';
 
 const publicMenuRouter: Router = Router();

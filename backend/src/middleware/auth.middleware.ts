@@ -10,12 +10,10 @@ import type { Request, Response, NextFunction } from 'express';
 import {
   AuthenticationError,
   ForbiddenError,
-  SessionRevokedError,
   MustChangePasswordError,
 } from '../shared/errors/AppError';
 import type { AuthContext, Permission, Role } from '../types/rbac.types';
 import { ROLES, ROLE_HIERARCHY } from '../types/rbac.types';
-import { logger } from '../shared/utils/logger';
 
 // ─── Augment Express Request ──────────────────────────────────
 
@@ -36,14 +34,15 @@ declare global {
 // ─── authenticate ─────────────────────────────────────────────
 
 import { RuntimeAuthService } from '../modules/auth/services/runtime-auth.service';
+import { validateAccessToken } from '../modules/auth/services/auth.service';
 
 /**
- * Core authentication middleware (Runtime Governance).
+ * Core authentication middleware.
  *
  * Flow:
- * 1. Extract Bearer token (Must be a backend-minted Runtime JWT)
- * 2. Validate JWT symmetrically via jsonwebtoken
- * 3. Populate req.context from the deterministic JWT payload (NO DB lookups)
+ * 1. Extract Bearer token.
+ * 2. Try validating as a deterministic Runtime JWT (fast, no DB lookups).
+ * 3. Fallback to validating as a Supabase JWT via validateAccessToken (Admin App).
  */
 export async function authenticate(
   req: Request,
@@ -65,22 +64,42 @@ export async function authenticate(
     }
 
     // ── Step 1: Validate deterministic Runtime JWT
-    const payload = RuntimeAuthService.verifyRuntimeSession(token);
-
-    // ── Step 2: Populate request context from VERIFIED strict payload only
-    const context: Request['context'] = {
-      id:                   payload.sub,
-      userId:               payload.sub,
-      email:                '', // Payload no longer carries email to remain lightweight
-      role:                 payload.role as Role,
-      tenantId:             payload.tenant_id,
-      tenant_id:            payload.tenant_id,
-      branchIds:            [payload.branch_id], // The runtime context operates in ONE strict branch
-      permissions:          new Set(payload.permissions),
-      device_session_id:    payload.session_id,
-      full_name:            '', 
-      must_change_password: false,
-    };
+    let context: Request['context'];
+    try {
+      const payload = RuntimeAuthService.verifyRuntimeSession(token);
+      context = {
+        id:                   payload.sub,
+        userId:               payload.sub,
+        email:                '', // Payload no longer carries email to remain lightweight
+        role:                 payload.role as Role,
+        tenantId:             payload.tenant_id,
+        tenant_id:            payload.tenant_id,
+        branchIds:            [payload.branch_id], // The runtime context operates in ONE strict branch
+        permissions:          new Set(payload.permissions) as unknown as Set<Permission>,
+        device_session_id:    payload.session_id,
+        full_name:            '', 
+        must_change_password: false,
+      };
+    } catch (runtimeErr) {
+      // Fallback for Admin App: Validate Supabase JWT
+      const validation = await validateAccessToken(token);
+      if (!validation.valid) {
+        throw new AuthenticationError('Invalid authentication token');
+      }
+      context = {
+        id:                   validation.user_id!,
+        userId:               validation.user_id!,
+        email:                validation.email ?? '',
+        role:                 validation.role as Role,
+        tenantId:             validation.tenant_id!,
+        tenant_id:            validation.tenant_id!,
+        branchIds:            validation.branch_ids ?? [],
+        permissions:          new Set<Permission>(), // Permissions are derived via role hierarchies
+        device_session_id:    '', // Admin app doesn't rely on strict single device sessions here
+        full_name:            validation.full_name ?? 'Admin',
+        must_change_password: validation.must_change_password ?? false,
+      };
+    }
 
     req.context           = context;
     req.device_fingerprint = deviceFingerprint;

@@ -40,7 +40,7 @@ declare global {
  * Replaces req.body with the inner payload so existing controllers remain unaffected.
  */
 export function requireMutationEnvelope() {
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return (req: Request, _res: Response, next: NextFunction): void => {
     // Only apply to mutations
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
       return next();
@@ -62,7 +62,7 @@ export function requireMutationEnvelope() {
       const envelope = parsed.data;
 
       // 1. Governance checks
-      const contextTenantId = req.headers['x-tenant-id'] as string || req.qrSession?.tenant_id || req.user?.tenant_id;
+      const contextTenantId = req.headers['x-tenant-id'] as string || req.qrSession?.tenant_id || req.context?.tenantId;
       if (contextTenantId && contextTenantId !== envelope.tenant_id) {
         throw new AppError('Tenant context mismatch in mutation envelope', 403, ErrorCode.FORBIDDEN);
       }

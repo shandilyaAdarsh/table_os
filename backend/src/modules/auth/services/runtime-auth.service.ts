@@ -8,7 +8,7 @@ import { env } from '../../../config/env';
 import { validateAccessToken } from './auth.service';
 import { resolvePermissions } from '../../../utils/permission-checker';
 import { AuthenticationError, ForbiddenError } from '../../../shared/errors/AppError';
-import { ROLES, type Permission, type Role } from '../../../types/rbac.types';
+import { ROLES, type Role } from '../../../types/rbac.types';
 import { logger } from '../../../shared/utils/logger';
 
 export interface RuntimeJwtPayload {
@@ -70,9 +70,9 @@ export class RuntimeAuthService {
     // 4. Construct strict envelope
     const payload: Omit<RuntimeJwtPayload, 'iat' | 'exp'> = {
       sub: validation.user_id,
-      tenant_id: validation.tenant_id,
+      tenant_id: validation.tenant_id!,
       branch_id: branchId,
-      role: validation.role,
+      role,
       permissions,
       session_id: deviceSessionId,
     };

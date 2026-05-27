@@ -5,7 +5,7 @@ export interface MutationAuditLogInput {
   mutation_id: string;
   mutation_sequence: number;
   idempotency_key: string;
-  session_id: string;
+  session_id?: string;
   tenant_id: string;
   branch_id: string;
   mutation_type: string;

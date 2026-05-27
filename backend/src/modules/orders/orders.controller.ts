@@ -96,7 +96,7 @@ export async function checkoutCart(req: any, res: Response, next: any): Promise<
     });
 
     void updateMutationAuditStatus(ctx.mutation_id, 'ACKNOWLEDGED');
-    formatMutationResponse(res, 201, { order }, ctx, order.cart_version);
+    formatMutationResponse(res, 201, { order }, ctx, ctx.expected_cart_revision);
   } catch (err: any) {
     void updateMutationAuditStatus(ctx.mutation_id, 'FAILED_FATAL', err.message);
     next(err);

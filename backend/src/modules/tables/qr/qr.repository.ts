@@ -3,9 +3,9 @@
 // Repository layer for QR code and session persistence.
 // ============================================================
 
-import { supabaseAdmin } from '../../config/supabase';
-import { AppError } from '../../shared/errors/AppError';
-import { ErrorCode } from '../../shared/errors/error-codes';
+import { supabaseAdmin } from '../../../config/supabase';
+import { AppError } from '../../../shared/errors/AppError';
+import { ErrorCode } from '../../../shared/errors/error-codes';
 import type { QrCode, QrScanNonce, QrSession, QrSessionStatus } from './qr.types';
 
 export async function findQrCodeById(tenantId: string, qrCodeId: string): Promise<QrCode | null> {

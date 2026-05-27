@@ -3,15 +3,18 @@
 // Data Transfer Objects for table management.
 // ============================================================
 
-import type { TableStatus, ReservationStatus, Table, TableReservation, TableStateHistory } from './tables.types';
+import type { Table, TableReservation, TableStateHistory, ReservationStatus, TableRuntimeState } from './tables.types';
 
-// ─── Input DTOs ───────────────────────────────────────────────
+// ─── Input DTOs (kept for repo-layer backward compatibility) ───
 
 export interface CreateTableDto {
   branch_id: string;
   table_number: string;
   display_name?: string;
   capacity: number;
+  floor_id?: string;
+  section_id?: string;
+  sort_order?: number;
   notes?: string;
 }
 
@@ -19,14 +22,11 @@ export interface UpdateTableDto {
   table_number?: string;
   display_name?: string;
   capacity?: number;
+  floor_id?: string | null;
+  section_id?: string | null;
+  sort_order?: number;
   notes?: string;
   assigned_waiter_id?: string | null;
-  version_num: number;
-}
-
-export interface TransitionTableStatusDto {
-  status: TableStatus;
-  reason?: string;
   version_num: number;
 }
 
@@ -48,7 +48,8 @@ export interface UpdateReservationDto {
 
 export interface TableListQuery {
   branch_id?: string;
-  status?: TableStatus;
+  floor_id?: string;
+  section_id?: string;
   is_active?: boolean;
   page?: number;
   limit?: number;
@@ -56,7 +57,9 @@ export interface TableListQuery {
 
 // ─── Public Output DTOs ───────────────────────────────────────
 
-export type TablePublicDto = Omit<Table, 'deleted_at'>;
+export interface TablePublicDto extends Omit<Table, 'deleted_at'> {
+  runtime_state?: TableRuntimeState;
+}
 
 export interface TableDetailDto extends TablePublicDto {
   current_history?: TableStateHistory | null;

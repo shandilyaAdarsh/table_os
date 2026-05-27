@@ -21,6 +21,7 @@ import { formatETag, parseIfNoneMatch } from './snapshot-hash.util';
 import { AppError } from '../../shared/errors/AppError';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import { supabaseAdmin } from '../../config/supabase';
+import { BranchMenuSnapshotDto } from './snapshot.dtos';
 
 // ─── Cache-Control constants (60s CDN max-age, 300s SWR) ──────────────────────
 const CDN_MAX_AGE_SECONDS = 60;
@@ -127,13 +128,55 @@ export async function getPublicMenuSnapshot(
       );
     }
 
-    // ── 4. Generate Snapshot ───────────────────────────────────────────────────
-    const service = new SnapshotService(supabaseAdmin);
-    const { snapshot, metrics } = await service.generateSnapshot({
-      tenantId: resolvedTenantId,
-      branchId: params.branch_id,
-      timestamp: params.as_of,
-    });
+    // ── 4. Resolve pre-compiled Snapshot from menu_snapshots ───────────────────
+    const resolutionStart = performance.now();
+    const { data: snapshotRow, error: _snapshotErr } = await supabaseAdmin
+      .from('menu_snapshots')
+      .select('id, version_num, snapshot_data, updated_at')
+      .eq('branch_id', params.branch_id)
+      .eq('tenant_id', resolvedTenantId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    let snapshot: BranchMenuSnapshotDto;
+    let totalMs = 0;
+
+    if (snapshotRow && snapshotRow.snapshot_data) {
+      snapshot = {
+        snapshot_id: snapshotRow.id,
+        ...(snapshotRow.snapshot_data as any),
+        etag: snapshotRow.id,
+      };
+      totalMs = Math.round(performance.now() - resolutionStart);
+    } else {
+      // If no pre-compiled snapshot exists, assert strict public isolation
+      // Prevent querying live table models in production environments
+      if (process.env['NODE_ENV'] === 'production') {
+        throw new AppError(
+          'Branch menu snapshot is not yet compiled. Direct menu access is disabled.',
+          503,
+          ErrorCode.INTERNAL_SERVER_ERROR,
+          true
+        );
+      }
+
+      // Safe dev-only fallback using dynamic snapshot engine
+      const service = new SnapshotService(supabaseAdmin);
+      const { snapshot: dynamicSnapshot, metrics } = await service.generateSnapshot({
+        tenantId: resolvedTenantId,
+        branchId: params.branch_id,
+        timestamp: params.as_of,
+      });
+      snapshot = dynamicSnapshot;
+      totalMs = metrics.totalMs;
+    }
+
+    const metrics = {
+      resolutionMs: totalMs,
+      serializationMs: 0,
+      hashingMs: 0,
+      totalMs,
+    };
 
     // ── 5. Conditional GET: If-None-Match ──────────────────────────────────────
     const requestETag = parseIfNoneMatch(

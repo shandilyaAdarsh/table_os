@@ -4,6 +4,7 @@
 // All auth decisions made here — never trust frontend state.
 // ============================================================
 
+import { createClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '../../../config/supabase';
 import {
   findAdminProfileById,
@@ -85,8 +86,12 @@ export async function loginWithEmail(
     throw new RateLimitError(retryAfter);
   }
 
-  // 2. Authenticate with Supabase Auth
-  const { data: authData, error: authError } = await supabaseAdmin.auth.signInWithPassword({
+  // 2. Authenticate with Supabase Auth (using a throwaway client to prevent global session mutation)
+  const throwawayClient = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+
+  const { data: authData, error: authError } = await throwawayClient.auth.signInWithPassword({
     email: request.email,
     password: request.password,
   });

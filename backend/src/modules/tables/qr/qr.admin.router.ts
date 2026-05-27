@@ -5,8 +5,8 @@
 // ============================================================
 
 import { Router } from 'express';
-import { requireMinRole } from '../../middleware/auth.middleware';
-import { ROLES } from '../../types/rbac.types';
+import { requireMinRole } from '../../../middleware/auth.middleware';
+import { ROLES } from '../../../types/rbac.types';
 import { createCode, invalidateCode } from './qr.admin.controller';
 
 const router: Router = Router({ mergeParams: true });

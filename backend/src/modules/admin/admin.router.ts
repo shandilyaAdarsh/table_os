@@ -11,7 +11,7 @@ import { adminMenuRouter } from './menu/menu.admin.router';
 import { adminPricingRouter } from './pricing/pricing.admin.router';
 import { adminTaxRouter } from './tax/tax.admin.router';
 import { tablesRouter } from '../tables/tables.router';
-import { qrAdminRouter } from '../qr/qr.admin.router';
+import { qrAdminRouter } from '../tables/qr/qr.admin.router';
 import { maintenanceRouter } from '../maintenance/maintenance.router';
 import { waiterCallRouter } from '../waiter-call/waiter-call.router';
 

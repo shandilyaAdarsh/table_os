@@ -94,13 +94,13 @@ export class EventPayloadFactory {
 
   public static createTableEvent(
     table: Table,
-    meta: { eventId?: string; reason?: string; actorId?: string } = {}
+    meta: { eventId?: string; reason?: string; actorId?: string; runtimeState?: string } = {}
   ): CanonicalRealtimeEvent<{
     id: string;
     tableNumber: string;
     displayName: string | null;
     capacity: number;
-    status: string;
+    runtimeState: string | null;
     assignedWaiterId: string | null;
     versionNum: number;
     actorId: string | null;
@@ -122,7 +122,7 @@ export class EventPayloadFactory {
         tableNumber: table.table_number,
         displayName: table.display_name,
         capacity: table.capacity,
-        status: table.status,
+        runtimeState: meta.runtimeState || null,  // Derived from projection, passed in by caller
         assignedWaiterId: table.assigned_waiter_id,
         versionNum: table.version_num,
         actorId: meta.actorId || table.updated_by || null,

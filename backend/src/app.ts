@@ -19,12 +19,16 @@ import { snapshotRouter } from './modules/snapshot/snapshot.router';
 import { publicMenuRouter } from './modules/snapshot/public-menu.router';
 import { publicAvailabilityRouter } from './modules/availability/public-availability.router';
 import { adminRouter } from './modules/admin/admin.router';
-import { qrRouter } from './modules/qr/qr.router';
+import { publicQrRouter } from './modules/tables/qr/table-qr.router';
 import { cartRouter } from './modules/cart/cart.router';
 import { ordersRouter } from './modules/orders/orders.router';
 import { kitchenRouter } from './modules/kitchen/kitchen.router';
 import { billingRouter } from './modules/billing/billing.router';
 import { infrastructureRouter } from './modules/infrastructure/infrastructure.router';
+import { chaosRouter } from './modules/infrastructure/chaos.router';
+import { runtimeRouter } from './modules/projection/runtime.router';
+import { eventReplayRouter } from './modules/projection/event-replay.router';
+import { deploymentRouter } from './modules/projection/deployment.router';
 import { ObservabilityService } from './modules/infrastructure/observability.service';
 import { errorMiddleware } from './middleware/error.middleware';
 import { loggingMiddleware } from './middleware/logging.middleware';
@@ -38,7 +42,16 @@ export function createApp(): express.Application {
   // ─── CORS ──────────────────────────────────────────────────
   app.use(
     cors({
-      origin: corsOrigins,
+      origin: (requestOrigin, callback) => {
+        if (!requestOrigin) return callback(null, true);
+        if (env.NODE_ENV === 'development' && requestOrigin.startsWith('http://localhost:')) {
+          return callback(null, true);
+        }
+        if (corsOrigins.includes(requestOrigin)) {
+          return callback(null, true);
+        }
+        return callback(new Error('Not allowed by CORS'));
+      },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowedHeaders: [
@@ -80,8 +93,14 @@ export function createApp(): express.Application {
 
   // ─── Routes ────────────────────────────────────────────────
   app.use('/auth',    authRouter);
+  app.use('/api/v1/auth', authRouter);
+  
   app.use('/tenants', tenantRouter);
+  app.use('/api/v1/tenants', tenantRouter);
+  
   app.use('/rbac',    rbacRouter);
+  app.use('/api/v1/rbac', rbacRouter);
+  
   // Menu routes: /api/tenants/:tenantId/menu/**
   app.use('/tenants/:tenantId/menu', menuRouter);
   app.use('/tenants/:tenantId/pricing', pricingRouter);
@@ -92,12 +111,13 @@ export function createApp(): express.Application {
   // ─── Public Snapshot API (no auth required) ─────────────────
   // CDN-cacheable branch menu snapshots for QR ordering.
   // Per public_api_contracts.md — versioned at /api/v1/public/branches.
+  // Wires up Snapshot and Availability routers.
   app.use('/api/v1/public/branches', snapshotRouter);
   app.use('/api/v1/public/branches', publicAvailabilityRouter);
   app.use('/public', publicMenuRouter);
 
-  // ─── Public QR Session API (no auth required) ───────────────
-  app.use('/api/v1/qr', qrRouter);
+  // ─── Public QR Runtime API (no auth required, rate limited) ──────────
+  app.use('/api/v1/public/qr', publicQrRouter);
 
   // ─── Public Cart API (requires QR session token) ────────────
   app.use('/api/v1/cart', cartRouter);
@@ -113,6 +133,14 @@ export function createApp(): express.Application {
 
   // ─── Infrastructure/Hardening API ──────────────────────────
   app.use('/api/v1/infrastructure', infrastructureRouter);
+  if (process.env.NODE_ENV !== 'production') {
+    app.use('/api/v1/infrastructure/chaos', chaosRouter);
+  }
+
+  // ─── Operational Runtime API ───────────────────────────────
+  app.use('/api/v1/runtime', runtimeRouter);
+  app.use('/api/v1/runtime/events', eventReplayRouter);
+  app.use('/api/v1/runtime', deploymentRouter);
 
   // ─── Admin API (requires auth & tenant context) ──────────────
   // The authoritative operational interface for the dashboard/admin panel.
