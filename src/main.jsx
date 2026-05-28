@@ -30,12 +30,18 @@ import {
   CheckIn
 } from './apps/customer/index'
 
-// Waiter / Staff
+// Waiter / Staff App (Placeholder for real staff app)
 import { 
   StaffLogin, 
   StaffTables, 
   StaffTableDetail 
 } from './apps/staff/index'
+
+// POS Runtime
+import {
+  POSTableOverview,
+  POSTableDetail
+} from './apps/pos/index'
 
 
 
@@ -111,7 +117,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/kds" element={<KDSBoard />} />
           <Route path="/kds/settings" element={<KDSSettings />} />
 
-          {/* Waiter / Staff */}
+          {/* Staff Runtime */}
           <Route path="/staff/login" element={<StaffLogin />} />
           <Route path="/staff/tables" element={
             <ProtectedRoute allowedRoles={['waiter', 'manager', 'owner']} redirectTo="/staff/login">
@@ -121,6 +127,18 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/staff/table/:id" element={
             <ProtectedRoute allowedRoles={['waiter', 'manager', 'owner']} redirectTo="/staff/login">
               <StaffTableDetail />
+            </ProtectedRoute>
+          } />
+
+          {/* POS Runtime */}
+          <Route path="/pos/tables" element={
+            <ProtectedRoute allowedRoles={['waiter', 'manager', 'owner']} redirectTo="/staff/login">
+              <POSTableOverview />
+            </ProtectedRoute>
+          } />
+          <Route path="/pos/table/:id" element={
+            <ProtectedRoute allowedRoles={['waiter', 'manager', 'owner']} redirectTo="/staff/login">
+              <POSTableDetail />
             </ProtectedRoute>
           } />
 
