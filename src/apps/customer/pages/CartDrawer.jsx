@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCartStore, useSessionStore } from '../../../store/index'
 import { submitMutation } from '../../../lib/apiClient'
+import { supabase } from '../../../lib/supabase'
 import { AnimatePresence, motion } from 'framer-motion'
 import { getTableNum } from '../utils/tableNum'
 
@@ -79,27 +80,30 @@ export default function CartDrawer({ open, onClose }) {
       // Read guest session saved by CheckIn screen
       const guestSession = JSON.parse(localStorage.getItem('customerSession') || '{}')
 
-      const response = await submitMutation('/api/v1/runtime/mutations', {
-        mutation_id: 'create_order',
-        idempotency_key: crypto.randomUUID(),
-        payload: {
-          tenant_id: TENANT_ID,
-          ...(TABLE_ID ? { table_id: TABLE_ID } : {}),
-          table_session_id: useSessionStore.getState().session_id,
-          table_num: resolvedTableNum,
-          note: note || `Order by ${guestSession.name || 'Guest'} · Party of ${guestSession.guestCount || 1}`,
-          guest_name: guestSession.name || 'Guest',
-          guest_phone: guestSession.phone || null,
-          guest_count: guestSession.guestCount || 1,
-          items: cartItems.map(item => ({
-            menu_item_id: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id) ? item.id : null,
-            name: item.name,
-            qty: item.qty,
-          }))
-        }
-      })
+      const { data: order, error } = await supabase.from('orders').insert({
+        tenant_id: TENANT_ID,
+        table_num: resolvedTableNum,
+        note: note || `Order by ${guestSession.name || 'Guest'} · Party of ${guestSession.guestCount || 1}`,
+      }).select().single()
 
-      const newOrderId = response.order_id || response.data?.order_id || 'pending'
+      if (error) {
+        throw error
+      }
+
+      const { error: itemsError } = await supabase.from('order_items').insert(
+        cartItems.map(item => ({
+          order_id:     order.id,
+          name:         item.name,
+          qty:          item.qty,
+          unit_price:   item.unit_price || item.price || 0,
+        }))
+      )
+
+      if (itemsError) {
+        throw itemsError
+      }
+
+      const newOrderId = order.id
       clear()
       onClose()
       navigate(`/menu/confirmed/${newOrderId}`, { state: { orderId: newOrderId } })

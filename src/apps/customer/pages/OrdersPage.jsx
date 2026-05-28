@@ -29,18 +29,31 @@ export default function OrdersPage() {
 
     const fetchOrders = async () => {
       try {
-        const queryParams = new URLSearchParams({
-          tenant_id: TENANT_ID,
-          table_num: tableNum,
-        });
-        if (session.phone) queryParams.append('guest_phone', session.phone);
-        else if (session.name) queryParams.append('guest_name', session.name);
-        if (!session.phone && session.checkedInAt) queryParams.append('since', session.checkedInAt);
+        let query = supabase
+          .from('orders')
+          .select(`*, order_items(
+            id, name, qty, unit_price,
+            is_rejected, status
+          )`)
+          .eq('tenant_id', TENANT_ID)
+          .order('created_at', { ascending: false })
+          .limit(20)
 
-        const res = await fetchWithRuntime(`/api/v1/customer/orders?${queryParams.toString()}`);
-        if (res.ok) {
-          const { data } = await res.json();
-          if (data) setOrders(data);
+        if (session.phone) {
+          query = query.eq('guest_phone', session.phone).eq('table_num', tableNum)
+        } else {
+          query = query
+            .eq('guest_name', session.name)
+            .eq('table_num', tableNum)
+          if (session.checkedInAt) {
+            query = query.gte('created_at', session.checkedInAt)
+          }
+        }
+
+        const { data, error } = await query
+        if (error) throw error
+        if (data && data.length > 0) {
+          setOrders(data)
         }
       } catch (err) {
         console.error('Error fetching orders:', err);

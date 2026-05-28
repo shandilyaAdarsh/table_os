@@ -8,6 +8,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchWithRuntime } from '../../../lib/apiClient'
+import { supabase } from '../../../lib/supabase'
 import { useMenuStore, useCartStore } from '../../../store/index'
 import { useAvailabilityStore } from '../../../store/availabilityStore'
 import { useAvailabilityPolling } from '../../../hooks/useAvailabilityPolling'
@@ -271,9 +272,14 @@ export default function MenuHome() {
     const fetchItems = async () => {
       setItemsLoading(true)
       try {
-        const res = await fetchWithRuntime(`/api/v1/runtime/menu?tenant_id=${TENANT_ID}`)
-        if (!res.ok) throw new Error('Menu fetch failed')
-        const { data } = await res.json()
+        const { data, error } = await supabase
+          .from('menu_items')
+          .select('*')
+          .eq('tenant_id', TENANT_ID)
+          .order('sort_order', { ascending: true })
+        if (error || !data || data.length === 0) {
+          throw new Error('Fallback')
+        }
         console.log('Fetched items:', data?.length, data)
         setItems(data || [])
       } catch (error) {
