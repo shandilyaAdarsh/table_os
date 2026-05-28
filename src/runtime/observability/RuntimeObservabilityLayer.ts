@@ -42,15 +42,65 @@ export type TelemetryEventType =
   | 'REALTIME_INVALIDATION_EMITTED'
   | 'REALTIME_DEBOUNCE_COLLAPSE'
   | 'REALTIME_MALFORMED_EVENT'
-  | 'REALTIME_SEQUENCE_GAP';
+  | 'REALTIME_SEQUENCE_GAP'
+  | 'REALTIME_WATERMARK_UPDATED'
+  // Buffer
+  | 'BUFFER_OVERFLOW';
 
 export interface TelemetryEvent {
   timestamp: string;
   event_type: TelemetryEventType;
+  surface?: string;
   [key: string]: any;
 }
 
-// ─── Telemetry Ring Buffer ──────────────────────────────────────────────────
+// ─── Runtime Snapshot (derived from buffer — no direct runtime access) ───────
+
+export interface DomainStats {
+  rebuildCount: number;
+  cancelledCount: number;
+  staleCount: number;
+  failedCount: number;
+  avgDurationMs: number;
+  lastRebuildMs: number;
+  watermark: number;
+  gapCount: number;
+  recoveryCount: number;
+}
+
+export interface RuntimeSnapshot {
+  // Transport
+  transportState: string;
+  isRealtimeConnected: boolean;
+  isDegraded: boolean;
+  isRecovering: boolean;
+  reconnectAttempts: number;
+  reconnectFailures: number;
+  degradedPollingActive: boolean;
+  lastConnectionId: string;
+  // Mutation
+  mutationSubmitted: number;
+  mutationAcknowledged: number;
+  mutationConfirmed: number;
+  mutationStalled: number;
+  mutationFailed: number;
+  mutationRejected: number;
+  // Domains
+  domains: Record<string, DomainStats>;
+  watermarks: Record<string, number>;
+  // Realtime
+  staleRejected: number;
+  debounceCollapses: number;
+  invalidationsEmitted: number;
+  malformedEvents: number;
+  sequenceGaps: number;
+  // Buffer health
+  bufferSize: number;
+  droppedEvents: number;
+  bufferOverflows: number;
+}
+
+// ─── Ring buffer constants ───────────────────────────────────────────────────
 
 const MAX_BUFFER_SIZE = 500;
 
@@ -61,6 +111,13 @@ export class RuntimeObservabilityLayer {
   private currentSurface: string = 'unknown';
   private currentConnectionId: string = crypto.randomUUID();
 
+  // Buffer overflow tracking
+  private droppedEvents: number = 0;
+  private bufferOverflows: number = 0;
+
+  // Watermark cache (updated via telemetry — panel never reads router directly)
+  private watermarkCache: Record<string, number> = {};
+
   public setSurface(surfaceId: string): void {
     this.currentSurface = surfaceId;
   }
@@ -70,7 +127,8 @@ export class RuntimeObservabilityLayer {
   }
 
   /**
-   * Core structured telemetry emitter. ALL runtime events flow through here.
+   * Core structured telemetry emitter.
+   * ALL runtime observable events flow through here.
    */
   private emit(
     level: 'info' | 'warn' | 'error' | 'debug',
@@ -84,13 +142,26 @@ export class RuntimeObservabilityLayer {
       ...fields,
     };
 
-    // Ring buffer — evict oldest when full
+    // Ring buffer overflow: evict oldest, track drop count
     if (this.eventBuffer.length >= MAX_BUFFER_SIZE) {
       this.eventBuffer.shift();
+      this.droppedEvents++;
+      this.bufferOverflows++;
+
+      // Emit a single overflow marker (don't recurse — push directly)
+      if (this.bufferOverflows % 50 === 1) {
+        this.eventBuffer.push({
+          timestamp: new Date().toISOString(),
+          event_type: 'BUFFER_OVERFLOW',
+          surface: this.currentSurface,
+          dropped_total: this.droppedEvents,
+          overflow_count: this.bufferOverflows,
+        });
+      }
     }
+
     this.eventBuffer.push(event);
 
-    // Structured console output
     const line = JSON.stringify(event);
     switch (level) {
       case 'info':  console.info(`[OBS] ${line}`); break;
@@ -100,7 +171,7 @@ export class RuntimeObservabilityLayer {
     }
   }
 
-  // ─── Telemetry Query API (for test harness + observability UI) ────────────
+  // ─── Buffer Query API ─────────────────────────────────────────────────────
 
   public getEventBuffer(): TelemetryEvent[] {
     return [...this.eventBuffer];
@@ -114,8 +185,128 @@ export class RuntimeObservabilityLayer {
     return this.eventBuffer.filter(e => e.domain === domain);
   }
 
+  public getDroppedEventCount(): number {
+    return this.droppedEvents;
+  }
+
   public clearBuffer(): void {
     this.eventBuffer = [];
+    this.droppedEvents = 0;
+    this.bufferOverflows = 0;
+  }
+
+  /**
+   * Derives a full runtime snapshot from the telemetry buffer.
+   * Panel consumes ONLY this — zero direct runtime access.
+   */
+  public getRuntimeSnapshot(): RuntimeSnapshot {
+    const buf = this.eventBuffer;
+
+    // ── Transport state ─────────────────────────────────────────────────────
+    const stateEvents = buf.filter(e => e.event_type === 'TRANSPORT_STATE_TRANSITION');
+    const lastState = stateEvents.at(-1);
+    const transportState = lastState?.to_state ?? 'BOOTSTRAPPING';
+    const isDegraded = transportState === 'DEGRADED';
+    const isRecovering = transportState === 'RECOVERING';
+    const isRealtimeConnected = transportState === 'LIVE';
+
+    const reconnectStarts = buf.filter(e => e.event_type === 'TRANSPORT_RECONNECT_STARTED');
+    const reconnectFails = buf.filter(e => e.event_type === 'TRANSPORT_RECONNECT_FAILED');
+    const reconnectAttempts = reconnectStarts.length;
+    const reconnectFailures = reconnectFails.length;
+
+    const pollingEnables = buf.filter(e => e.event_type === 'TRANSPORT_DEGRADED_POLLING_ENABLED');
+    const pollingDisables = buf.filter(e => e.event_type === 'TRANSPORT_DEGRADED_POLLING_DISABLED');
+    const degradedPollingActive = pollingEnables.length > pollingDisables.length;
+
+    const lastConn = buf.filter(e => e.event_type === 'TRANSPORT_CONNECTED').at(-1);
+    const lastConnectionId = lastConn?.connection_id ?? this.currentConnectionId;
+
+    // ── Mutation counters ────────────────────────────────────────────────────
+    const mutationSubmitted    = buf.filter(e => e.event_type === 'MUTATION_SUBMITTED').length;
+    const mutationAcknowledged = buf.filter(e => e.event_type === 'MUTATION_ACKNOWLEDGED').length;
+    const mutationConfirmed    = buf.filter(e => e.event_type === 'MUTATION_CONFIRMED').length;
+    const mutationStalled      = buf.filter(e => e.event_type === 'MUTATION_STALLED').length;
+    const mutationFailed       = buf.filter(e => e.event_type === 'MUTATION_FAILED').length;
+    const mutationRejected     = buf.filter(e => e.event_type === 'MUTATION_REJECTED').length;
+
+    // ── Domain stats ─────────────────────────────────────────────────────────
+    const ALL_DOMAINS = ['orders', 'tables', 'kds', 'analytics', 'system'];
+    const domains: Record<string, DomainStats> = {};
+
+    for (const domain of ALL_DOMAINS) {
+      const domainBuf = buf.filter(e => e.domain === domain);
+
+      const rebuildsStarted  = domainBuf.filter(e => e.event_type === 'PROJECTION_REBUILD_STARTED');
+      const rebuildsApplied  = domainBuf.filter(e => e.event_type === 'PROJECTION_REBUILD_APPLIED');
+      const rebuildsCancelled = domainBuf.filter(e => e.event_type === 'PROJECTION_REBUILD_CANCELLED');
+      const rebuildsStale    = domainBuf.filter(e => e.event_type === 'PROJECTION_REBUILD_STALE_IGNORED');
+      const rebuildsFailed   = domainBuf.filter(e => e.event_type === 'PROJECTION_REBUILD_FAILED');
+
+      const durations = rebuildsApplied.map(e => e.rebuild_duration_ms ?? 0).filter(Boolean);
+      const avgDurationMs = durations.length > 0
+        ? durations.reduce((a, b) => a + b, 0) / durations.length
+        : 0;
+      const lastRebuildMs = rebuildsApplied.at(-1)?.rebuild_duration_ms ?? 0;
+
+      const watermarkEvents = domainBuf.filter(e => e.event_type === 'REALTIME_WATERMARK_UPDATED');
+      const watermark = watermarkEvents.at(-1)?.watermark ?? this.watermarkCache[domain] ?? 0;
+
+      const gapCount = domainBuf.filter(e => e.event_type === 'REPLAY_GAP_DETECTED').length;
+      const recoveryCount = domainBuf.filter(e => e.event_type === 'REPLAY_RECOVERY_COMPLETED').length;
+
+      domains[domain] = {
+        rebuildCount: rebuildsStarted.length,
+        cancelledCount: rebuildsCancelled.length,
+        staleCount: rebuildsStale.length,
+        failedCount: rebuildsFailed.length,
+        avgDurationMs,
+        lastRebuildMs,
+        watermark,
+        gapCount,
+        recoveryCount,
+      };
+    }
+
+    // ── Watermarks ────────────────────────────────────────────────────────────
+    const watermarks: Record<string, number> = {};
+    for (const domain of ALL_DOMAINS) {
+      watermarks[domain] = domains[domain].watermark;
+    }
+
+    // ── Realtime ─────────────────────────────────────────────────────────────
+    const staleRejected       = buf.filter(e => e.event_type === 'REALTIME_STALE_REJECTED').length;
+    const debounceCollapses   = buf.filter(e => e.event_type === 'REALTIME_DEBOUNCE_COLLAPSE').length;
+    const invalidationsEmitted = buf.filter(e => e.event_type === 'REALTIME_INVALIDATION_EMITTED').length;
+    const malformedEvents     = buf.filter(e => e.event_type === 'REALTIME_MALFORMED_EVENT').length;
+    const sequenceGaps        = buf.filter(e => e.event_type === 'REALTIME_SEQUENCE_GAP').length;
+
+    return {
+      transportState,
+      isRealtimeConnected,
+      isDegraded,
+      isRecovering,
+      reconnectAttempts,
+      reconnectFailures,
+      degradedPollingActive,
+      lastConnectionId,
+      mutationSubmitted,
+      mutationAcknowledged,
+      mutationConfirmed,
+      mutationStalled,
+      mutationFailed,
+      mutationRejected,
+      domains,
+      watermarks,
+      staleRejected,
+      debounceCollapses,
+      invalidationsEmitted,
+      malformedEvents,
+      sequenceGaps,
+      bufferSize: this.eventBuffer.length,
+      droppedEvents: this.droppedEvents,
+      bufferOverflows: this.bufferOverflows,
+    };
   }
 
   // ─── Transport Events ─────────────────────────────────────────────────────
@@ -217,7 +408,7 @@ export class RuntimeObservabilityLayer {
     });
   }
 
-  /** @deprecated Use granular methods above. Kept for backward compat during migration. */
+  /** @deprecated Use granular methods above. Kept for backward compat. */
   public recordProjectionRebuild(domain: RuntimeDomain, durationMs: number, success: boolean, meta?: Record<string, any>): void {
     if (success) {
       this.recordProjectionRebuildApplied(domain, meta?.epoch ?? 0, meta?.newWatermark ?? 0, durationMs);
@@ -239,7 +430,6 @@ export class RuntimeObservabilityLayer {
       mutation_sequence: identity.mutation_sequence,
       idempotency_key: identity.idempotency_key,
       request_id: identity.request_id,
-      domain: 'unknown', // populated by caller context
     });
   }
 
@@ -339,6 +529,14 @@ export class RuntimeObservabilityLayer {
       domain,
       local_watermark: localWatermark,
       incoming_version: incomingVersion,
+    });
+  }
+
+  public recordWatermarkUpdated(domain: RuntimeDomain, watermark: number): void {
+    this.watermarkCache[domain] = watermark;
+    this.emit('debug', 'REALTIME_WATERMARK_UPDATED', {
+      domain,
+      watermark,
     });
   }
 

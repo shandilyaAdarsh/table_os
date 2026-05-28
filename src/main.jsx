@@ -43,6 +43,11 @@ import {
   POSTableDetail
 } from './apps/pos/index'
 
+// Runtime Observability Panel — DEV / QA / INTERNAL_PILOT only
+// Stripped from production builds via import.meta.env.DEV guard at route level.
+import RuntimeObservabilityPanel from './runtime/validation/RuntimeObservabilityPanel'
+import RuntimeCertificationPanel from './runtime/validation/RuntimeCertificationPanel'
+
 
 
 /**
@@ -141,6 +146,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <POSTableDetail />
             </ProtectedRoute>
           } />
+
+          {/* Runtime Observability — DEV / QA / INTERNAL_PILOT only */}
+          {import.meta.env.DEV && (
+            <>
+              <Route path="/runtime/panel" element={<RuntimeObservabilityPanel />} />
+              <Route path="/runtime/certify" element={<RuntimeCertificationPanel />} />
+            </>
+          )}
 
 
 

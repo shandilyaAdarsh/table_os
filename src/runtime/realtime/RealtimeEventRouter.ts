@@ -70,16 +70,17 @@ export class RealtimeEventRouter {
       console.warn(`[RealtimeEventRouter] Sequence gap detected in domain ${domain}. Expected ${currentWatermark + 1}, got ${incomingVersion}. Deferring to ReplayRecoveryEngine.`);
       this.observability.recordSequenceGap(domain, currentWatermark, incomingVersion);
       
-      // Defer to Replay Engine to request authoritative rebuild
       this.replayEngine.handleGapDetected(domain, currentWatermark, incomingVersion);
       
-      // We still update the watermark so we don't trigger continuous gap detection for the same missed window
+      // Advance watermark so we don't loop on the same gap window
       this.watermarks[domain] = incomingVersion;
+      this.observability.recordWatermarkUpdated(domain, incomingVersion);
       return;
     }
 
     // 3. Normal Execution & Invalidation Routing
     this.watermarks[domain] = incomingVersion;
+    this.observability.recordWatermarkUpdated(domain, incomingVersion);
     
     // Track target IDs to potentially optimize targeted rebuilds
     if (event.target_id) {
@@ -128,6 +129,7 @@ export class RealtimeEventRouter {
    */
   public resetWatermark(domain: RuntimeDomain, newVersion: number): void {
     this.watermarks[domain] = newVersion;
+    this.observability.recordWatermarkUpdated(domain, newVersion);
     console.info(`[RealtimeEventRouter] Reset watermark for ${domain} to ${newVersion}`);
   }
 }
