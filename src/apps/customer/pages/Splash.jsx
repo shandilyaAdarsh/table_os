@@ -11,7 +11,7 @@ export default function Splash() {
   }, [navigate])
 
   return (
-    <div style={{ minHeight: '100vh', background: '#1B2B4B', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', px: 24, position: 'relative', fontFamily: 'Inter, sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: '#E31E24', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', px: 24, position: 'relative', fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
 
       {/* Logo circle */}
       <motion.div
@@ -20,7 +20,7 @@ export default function Splash() {
         transition={{ duration: 0.6, ease: 'easeOut' }}
         style={{ width: 100, height: 100, background: '#FFFFFF', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 32, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}
       >
-        <span style={{ color: '#1B2B4B', fontSize: 44, fontWeight: 900 }}>G</span>
+        <span style={{ color: '#E31E24', fontSize: 44, fontWeight: 900 }}>G</span>
       </motion.div>
 
       {/* Restaurant name */}
@@ -65,7 +65,7 @@ export default function Splash() {
             key={i}
             animate={{ scale: [1, 1.4, 1], opacity: [0.3, 1, 0.3] }}
             transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
-            style={{ width: 6, height: 6, background: '#F97316', borderRadius: '50%' }}
+            style={{ width: 6, height: 6, background: '#E31E24', borderRadius: '50%' }}
           />
         ))}
       </motion.div>

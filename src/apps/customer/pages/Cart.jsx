@@ -20,7 +20,7 @@ export default function Cart() {
     setCart(prev => prev.map(i => i.id === id ? { ...i, qty: Math.max(0, i.qty + delta) } : i).filter(i => i.qty > 0))
 
   return (
-    <div style={{ maxWidth: '430px', margin: '0 auto', minHeight: '100vh', background: '#1B2B4B', position: 'relative', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', overflow: 'hidden' }}>
+    <div style={{ maxWidth: '430px', margin: '0 auto', minHeight: '100vh', background: '#E31E24', position: 'relative', display: 'flex', flexDirection: 'column', fontFamily: '"Plus Jakarta Sans", sans-serif', overflow: 'hidden' }}>
       
       {/* Dimmed Background Overlay mapping to prior screen */}
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.05)', opacity: 0.4 }}>
@@ -48,10 +48,10 @@ export default function Cart() {
         {/* Header content */}
         <div style={{ padding: '8px 24px 24px', borderBottom: '1px solid #F3F4F6', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
            <div>
-             <h1 style={{ color: '#1B2B4B', fontWeight: 800, fontSize: 24, margin: 0, letterSpacing: '-0.02em' }}>Your Order</h1>
-             <p style={{ color: '#6B7280', fontSize: 14, margin: '4px 0 0', fontWeight: 500 }}>{cart.reduce((a,c) => a+c.qty, 0)} items selected</p>
+             <h1 style={{ color: '#E31E24', fontWeight: 800, fontSize: 24, margin: 0, letterSpacing: '-0.02em' }}>Your Order</h1>
+             <p style={{ color: '#6C757D', fontSize: 14, margin: '4px 0 0', fontWeight: 500 }}>{cart.reduce((a,c) => a+c.qty, 0)} items selected</p>
            </div>
-           <button onClick={() => navigate(-1)} style={{ width: 36, height: 36, background: '#F3F4F6', border: 'none', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1B2B4B' }}>
+           <button onClick={() => navigate(-1)} style={{ width: 36, height: 36, background: '#F3F4F6', border: 'none', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#E31E24' }}>
              <span className="material-symbols-outlined" style={{ fontSize: 20 }}>close</span>
            </button>
         </div>
@@ -73,18 +73,18 @@ export default function Cart() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 12 }}>
                       <div>
-                        <p style={{ color: '#1B2B4B', fontWeight: 700, fontSize: 16, margin: 0, lineHeight: 1.2 }}>{item.name}</p>
+                        <p style={{ color: '#E31E24', fontWeight: 700, fontSize: 16, margin: 0, lineHeight: 1.2 }}>{item.name}</p>
                         <p style={{ color: '#9CA3AF', fontSize: 12, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.modifier || item.note}</p>
                       </div>
-                      <p style={{ color: '#1B2B4B', fontWeight: 800, fontSize: 16, margin: 0 }}>₹{(item.price * item.qty).toLocaleString()}</p>
+                      <p style={{ color: '#E31E24', fontWeight: 800, fontSize: 16, margin: 0 }}>₹{(item.price * item.qty).toLocaleString()}</p>
                     </div>
 
                     {/* Controls Row */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
                       <div style={{ display: 'flex', alignItems: 'center', background: '#F3F4F6', borderRadius: 10, padding: '2px' }}>
-                        <button onClick={() => change(item.id, -1)} style={{ width: 32, height: 32, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1B2B4B', fontWeight: 800, fontSize: 18 }}>−</button>
-                        <span style={{ width: 28, textAlign: 'center', color: '#1B2B4B', fontWeight: 700, fontSize: 14 }}>{item.qty}</span>
-                        <button onClick={() => change(item.id, 1)} style={{ width: 32, height: 32, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#F97316', fontWeight: 800, fontSize: 18 }}>+</button>
+                        <button onClick={() => change(item.id, -1)} style={{ width: 32, height: 32, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#E31E24', fontWeight: 800, fontSize: 18 }}>−</button>
+                        <span style={{ width: 28, textAlign: 'center', color: '#E31E24', fontWeight: 700, fontSize: 14 }}>{item.qty}</span>
+                        <button onClick={() => change(item.id, 1)} style={{ width: 32, height: 32, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#E31E24', fontWeight: 800, fontSize: 18 }}>+</button>
                       </div>
                       <button onClick={() => change(item.id, -item.qty)} style={{ background: 'transparent', border: 'none', color: '#EF4444', padding: 8, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>delete</span>
@@ -112,18 +112,18 @@ export default function Cart() {
 
           {/* Totals */}
           <div style={{ background: '#F9FAFB', borderRadius: 20, padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6B7280', fontSize: 14 }}>
+             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6C757D', fontSize: 14 }}>
                <span>Subtotal</span>
-               <span style={{ fontWeight: 600, color: '#1B2B4B' }}>₹{subtotal.toLocaleString()}</span>
+               <span style={{ fontWeight: 600, color: '#E31E24' }}>₹{subtotal.toLocaleString()}</span>
              </div>
-             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6B7280', fontSize: 14 }}>
+             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6C757D', fontSize: 14 }}>
                <span>Taxes</span>
-               <span style={{ fontWeight: 600, color: '#1B2B4B' }}>Calculated at checkout</span>
+               <span style={{ fontWeight: 600, color: '#E31E24' }}>Calculated at checkout</span>
              </div>
              <div style={{ height: 1, background: '#E5E7EB', margin: '4px 0' }}></div>
              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: '#1B2B4B', fontWeight: 800, fontSize: 18 }}>Estimated Total</span>
-                <span style={{ color: '#F97316', fontWeight: 900, fontSize: 24 }}>₹{subtotal.toLocaleString()}</span>
+                <span style={{ color: '#E31E24', fontWeight: 800, fontSize: 18 }}>Estimated Total</span>
+                <span style={{ color: '#E31E24', fontWeight: 900, fontSize: 24 }}>₹{subtotal.toLocaleString()}</span>
              </div>
           </div>
 
@@ -134,7 +134,7 @@ export default function Cart() {
            <button
              onClick={() => navigate('/menu/pay')}
              style={{ 
-               width: '100%', background: '#1B2B4B', color: 'white', 
+               width: '100%', background: '#E31E24', color: 'white', 
                padding: '18px 0', borderRadius: 16, border: 'none', 
                fontWeight: 700, fontSize: 16, cursor: 'pointer', 
                boxShadow: '0 10px 30px rgba(27,43,75,0.2)',

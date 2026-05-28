@@ -30,7 +30,7 @@ export function BottomNav({ visible = true }) {
           padding: '10px 16px',
           paddingBottom: 'calc(20px + env(safe-area-inset-bottom))',
           transition: 'transform 0.3s cubic-bezier(0.32,0.72,0,1)',
-          fontFamily: 'Inter, sans-serif',
+          fontFamily: '"Plus Jakarta Sans", sans-serif',
         }}
       >
         {NAV_ITEMS.map(item => {
@@ -45,8 +45,8 @@ export function BottomNav({ visible = true }) {
                 minHeight: 44, minWidth: 44,
                 borderRadius: 14, border: 'none', cursor: 'pointer',
                 transition: 'all 0.2s',
-                backgroundColor: isActive ? '#1B2B4B' : 'transparent',
-                color: isActive ? 'white' : '#6B7280',
+                backgroundColor: isActive ? '#E31E24' : 'transparent',
+                color: isActive ? 'white' : '#6C757D',
               }}
               aria-label={item.label}
               aria-current={isActive ? 'page' : undefined}

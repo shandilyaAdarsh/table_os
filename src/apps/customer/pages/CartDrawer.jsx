@@ -141,18 +141,18 @@ export default function CartDrawer({ open, onClose }) {
               background: '#FFFFFF',
               borderRadius: '32px 32px 0 0',
               boxShadow: '0 -10px 40px rgba(0,0,0,0.1)',
-              fontFamily: 'Inter, sans-serif'
+              fontFamily: '"Plus Jakarta Sans", sans-serif'
             }}
           >
             <div style={{ width: 36, height: 4, background: '#E5E7EB', borderRadius: 2, margin: '12px auto', flexShrink: 0 }} />
 
             <div style={{ padding: '4px 20px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F3F4F6' }}>
               <div>
-                <h2 style={{ fontWeight: 800, fontSize: 20, color: '#1B2B4B', margin: 0 }}>Your Basket</h2>
-                <span style={{ fontSize: 13, color: '#6B7280', fontWeight: 500 }}>{totalQty} {totalQty === 1 ? 'item' : 'items'} selected</span>
+                <h2 style={{ fontWeight: 800, fontSize: 20, color: '#E31E24', margin: 0 }}>Your Basket</h2>
+                <span style={{ fontSize: 13, color: '#6C757D', fontWeight: 500 }}>{totalQty} {totalQty === 1 ? 'item' : 'items'} selected</span>
               </div>
               <button onClick={onClose} style={{ border: 'none', background: '#F3F4F6', borderRadius: '50%', width: 36, height: 36, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#1B2B4B' }}>close</span>
+                <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#E31E24' }}>close</span>
               </button>
             </div>
 
@@ -162,9 +162,9 @@ export default function CartDrawer({ open, onClose }) {
                   <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
                     <span className="material-symbols-outlined" style={{ fontSize: 32, color: '#9CA3AF' }}>shopping_basket</span>
                   </div>
-                  <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1B2B4B', margin: '0 0 8px' }}>Your basket is empty</h3>
-                  <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.5, margin: '0 0 24px' }}>Add some delicious items from the menu to place an order</p>
-                  <button onClick={onClose} style={{ background: '#1B2B4B', color: 'white', border: 'none', borderRadius: 12, padding: '12px 32px', fontWeight: 700, cursor: 'pointer' }}>Browse Menu</button>
+                  <h3 style={{ fontSize: 18, fontWeight: 800, color: '#E31E24', margin: '0 0 8px' }}>Your basket is empty</h3>
+                  <p style={{ fontSize: 14, color: '#6C757D', lineHeight: 1.5, margin: '0 0 24px' }}>Add some delicious items from the menu to place an order</p>
+                  <button onClick={onClose} style={{ background: '#E31E24', color: 'white', border: 'none', borderRadius: 12, padding: '12px 32px', fontWeight: 700, cursor: 'pointer' }}>Browse Menu</button>
                 </div>
               ) : (
                 <>
@@ -175,16 +175,16 @@ export default function CartDrawer({ open, onClose }) {
                           <img src={item.image_url || `https://placehold.co/64x64?text=${item.name[0]}`} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         </div>
                         <div style={{ flex: 1 }}>
-                          <h4 style={{ fontWeight: 700, fontSize: 15, color: '#1B2B4B', margin: '0 0 2px' }}>{item.name}</h4>
+                          <h4 style={{ fontWeight: 700, fontSize: 15, color: '#E31E24', margin: '0 0 2px' }}>{item.name}</h4>
                           {item.modifiers?.length > 0 && (
-                            <p style={{ fontSize: 12, color: '#6B7280', margin: '0 0 6px' }}>{item.modifiers.join(', ')}</p>
+                            <p style={{ fontSize: 12, color: '#6C757D', margin: '0 0 6px' }}>{item.modifiers.join(', ')}</p>
                           )}
-                          <span style={{ fontWeight: 800, fontSize: 15, color: '#F97316' }}>₹{(item.unit_price || item.price || 0) * item.qty}</span>
+                          <span style={{ fontWeight: 800, fontSize: 15, color: '#E31E24' }}>₹{(item.unit_price || item.price || 0) * item.qty}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', background: '#F3F4F6', borderRadius: 10, height: 36, padding: '0 4px', alignSelf: 'center' }}>
-                          <button onClick={() => updateQty(item.id, item.modifiers, item.qty - 1)} style={{ width: 28, height: 28, border: 'none', background: 'transparent', color: '#1B2B4B', fontWeight: 800, cursor: 'pointer', fontSize: 18 }}>−</button>
-                          <span style={{ width: 30, textAlign: 'center', fontSize: 13, fontWeight: 700, color: '#111827' }}>{item.qty}</span>
-                          <button onClick={() => addItem({ ...item, qty: 1, unit_price: item.unit_price || item.price || 0 })} style={{ width: 28, height: 28, border: 'none', background: 'transparent', color: '#1B2B4B', fontWeight: 800, cursor: 'pointer', fontSize: 18 }}>+</button>
+                          <button onClick={() => updateQty(item.id, item.modifiers, item.qty - 1)} style={{ width: 28, height: 28, border: 'none', background: 'transparent', color: '#E31E24', fontWeight: 800, cursor: 'pointer', fontSize: 18 }}>−</button>
+                          <span style={{ width: 30, textAlign: 'center', fontSize: 13, fontWeight: 700, color: '#1A1C1E' }}>{item.qty}</span>
+                          <button onClick={() => addItem({ ...item, qty: 1, unit_price: item.unit_price || item.price || 0 })} style={{ width: 28, height: 28, border: 'none', background: 'transparent', color: '#E31E24', fontWeight: 800, cursor: 'pointer', fontSize: 18 }}>+</button>
                         </div>
                       </div>
                     ))}
@@ -198,10 +198,10 @@ export default function CartDrawer({ open, onClose }) {
                       {UPSELL.filter(u => !cartItems.find(i => i.id === u.id)).map(rec => (
                         <div key={rec.id} style={{ width: 130, flexShrink: 0, background: 'white', border: '1px solid #F3F4F6', borderRadius: 14, padding: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
                           <img src={rec.image_url} alt={rec.name} style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 10, marginBottom: 8 }} />
-                          <p style={{ fontWeight: 700, fontSize: 12, color: '#1B2B4B', margin: '0 0 4px', lineHeight: 1.3, height: 32, overflow: 'hidden' }}>{rec.name}</p>
+                          <p style={{ fontWeight: 700, fontSize: 12, color: '#E31E24', margin: '0 0 4px', lineHeight: 1.3, height: 32, overflow: 'hidden' }}>{rec.name}</p>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-                            <span style={{ fontWeight: 800, fontSize: 13, color: '#F97316' }}>₹{rec.price}</span>
-                            <button onClick={() => addItem({ ...rec, qty: 1, unit_price: rec.price, modifiers: [], note: '' })} style={{ width: 28, height: 28, borderRadius: 8, background: '#1B2B4B', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>+</button>
+                            <span style={{ fontWeight: 800, fontSize: 13, color: '#E31E24' }}>₹{rec.price}</span>
+                            <button onClick={() => addItem({ ...rec, qty: 1, unit_price: rec.price, modifiers: [], note: '' })} style={{ width: 28, height: 28, borderRadius: 8, background: '#E31E24', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>+</button>
                           </div>
                         </div>
                       ))}
@@ -209,29 +209,29 @@ export default function CartDrawer({ open, onClose }) {
                   </div>
 
                   <div style={{ padding: '16px 20px' }}>
-                    <label style={{ fontSize: 11, fontWeight: 800, color: '#1B2B4B', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 10 }}>Special Instructions</label>
+                    <label style={{ fontSize: 11, fontWeight: 800, color: '#E31E24', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 10 }}>Special Instructions</label>
                     <textarea
                       value={note}
                       onChange={e => setNote(e.target.value)}
                       placeholder="e.g. No salt, extra spicy..."
                       rows={2}
-                      style={{ width: '100%', background: '#F9FAFB', border: '1.5px solid #F3F4F6', borderRadius: 12, padding: '12px 16px', fontSize: 14, color: '#1B2B4B', resize: 'none', outline: 'none', boxSizing: 'border-box' }}
+                      style={{ width: '100%', background: '#F9FAFB', border: '1.5px solid #F3F4F6', borderRadius: 12, padding: '12px 16px', fontSize: 14, color: '#E31E24', resize: 'none', outline: 'none', boxSizing: 'border-box' }}
                     />
                   </div>
 
                   <div style={{ padding: '20px', margin: '0 20px', background: '#F9FAFB', borderRadius: 16, border: '1px dashed #E5E7EB' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                      <span style={{ color: '#6B7280', fontSize: 13 }}>Item Subtotal</span>
-                      <span style={{ color: '#1B2B4B', fontWeight: 600, fontSize: 13 }}>₹{subtotal}</span>
+                      <span style={{ color: '#6C757D', fontSize: 13 }}>Item Subtotal</span>
+                      <span style={{ color: '#E31E24', fontWeight: 600, fontSize: 13 }}>₹{subtotal}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                      <span style={{ color: '#6B7280', fontSize: 13 }}>Taxes</span>
-                      <span style={{ color: '#1B2B4B', fontWeight: 600, fontSize: 13 }}>Calculated at checkout</span>
+                      <span style={{ color: '#6C757D', fontSize: 13 }}>Taxes</span>
+                      <span style={{ color: '#E31E24', fontWeight: 600, fontSize: 13 }}>Calculated at checkout</span>
                     </div>
                     <div style={{ height: 1, background: '#E5E7EB', marginBottom: 12 }} />
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#1B2B4B', fontWeight: 800, fontSize: 16 }}>Estimated Total</span>
-                      <span style={{ color: '#F97316', fontWeight: 800, fontSize: 18 }}>₹{subtotal}</span>
+                      <span style={{ color: '#E31E24', fontWeight: 800, fontSize: 16 }}>Estimated Total</span>
+                      <span style={{ color: '#E31E24', fontWeight: 800, fontSize: 18 }}>₹{subtotal}</span>
                     </div>
                   </div>
                 </>
@@ -245,7 +245,7 @@ export default function CartDrawer({ open, onClose }) {
                   onClick={handlePlaceOrder}
                   disabled={isPlacing}
                   style={{
-                    width: '100%', height: 56, background: isPlacing ? '#9CA3AF' : '#1B2B4B', color: 'white',
+                    width: '100%', height: 56, background: isPlacing ? '#9CA3AF' : '#E31E24', color: 'white',
                     border: 'none', borderRadius: 14, fontSize: 16, fontWeight: 700, cursor: isPlacing ? 'not-allowed' : 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, transition: 'all 0.2s'
                   }}
@@ -256,7 +256,7 @@ export default function CartDrawer({ open, onClose }) {
                     <>
                       <span>Place Order</span>
                       <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.2)' }} />
-                      <span style={{ color: '#F97316' }}>Submit</span>
+                      <span style={{ color: '#E31E24' }}>Submit</span>
                     </>
                   )}
                 </button>

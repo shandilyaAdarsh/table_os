@@ -117,7 +117,7 @@ function LangToggle({ lang, setLang, dark }) {
           style={{
             ...base,
             background: lang === l ? (dark ? '#D97706' : 'white') : 'transparent',
-            color: lang === l ? (dark ? '#0F172A' : '#1A365D') : (dark ? '#94A3B8' : 'rgba(255,255,255,0.8)'),
+            color: lang === l ? (dark ? '#0F172A' : '#E31E24') : (dark ? '#94A3B8' : 'rgba(255,255,255,0.8)'),
             border: lang === l ? 'none' : (dark ? '1px solid rgba(217,119,6,0.4)' : '1px solid rgba(255,255,255,0.4)'),
           }}
         >{l === 'HI' ? 'हि' : l}</button>
@@ -138,7 +138,7 @@ function ReturningScreen({ guest, T, lang, setLang, guestCount, setGuestCount, o
       style={{
         minHeight: '100vh', background: '#0F172A', display: 'flex',
         flexDirection: 'column', padding: '32px 24px 40px',
-        fontFamily: 'Inter, sans-serif', position: 'relative',
+        fontFamily: '"Plus Jakarta Sans", sans-serif', position: 'relative',
         maxWidth: 430, margin: '0 auto',
       }}
     >
@@ -246,7 +246,7 @@ function ReturningScreen({ guest, T, lang, setLang, guestCount, setGuestCount, o
           style={{
             width: '100%', background: '#D97706', border: 'none', borderRadius: 14,
             padding: 15, color: '#0F172A', fontWeight: 700, fontSize: 15,
-            cursor: 'pointer', fontFamily: 'Inter, sans-serif',
+            cursor: 'pointer', fontFamily: '"Plus Jakarta Sans", sans-serif',
           }}
         >
           {T.continueAs(guest.name)}
@@ -283,7 +283,7 @@ function NewGuestScreen({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      style={{ minHeight: '100vh', background: '#1A365D', position: 'relative', fontFamily: 'Inter, sans-serif', maxWidth: 430, margin: '0 auto' }}
+      style={{ minHeight: '100vh', background: '#E31E24', position: 'relative', fontFamily: '"Plus Jakarta Sans", sans-serif', maxWidth: 430, margin: '0 auto' }}
     >
       <LangToggle lang={lang} setLang={setLang} dark={false} />
 
@@ -311,7 +311,7 @@ function NewGuestScreen({
           marginTop: -24, padding: '28px 24px 40px', minHeight: '60vh',
         }}
       >
-        <p style={{ color: '#6B7280', fontSize: 13, textAlign: 'center', marginBottom: 24, marginTop: 0 }}>
+        <p style={{ color: '#6C757D', fontSize: 13, textAlign: 'center', marginBottom: 24, marginTop: 0 }}>
           {T.subtitle}
         </p>
 
@@ -323,7 +323,7 @@ function NewGuestScreen({
           <div style={{ position: 'relative' }}>
             <span style={{
               position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
-              color: nameFocused ? '#1A365D' : '#9CA3AF', fontSize: 18, pointerEvents: 'none',
+              color: nameFocused ? '#E31E24' : '#9CA3AF', fontSize: 18, pointerEvents: 'none',
               fontFamily: 'Material Symbols Outlined',
             }}>person</span>
             <input
@@ -335,10 +335,10 @@ function NewGuestScreen({
               placeholder={T.namePlaceholder}
               style={{
                 width: '100%', background: '#F8FAFC',
-                border: `1.5px solid ${error ? '#EF4444' : nameFocused ? '#1A365D' : '#E5E7EB'}`,
+                border: `1.5px solid ${error ? '#EF4444' : nameFocused ? '#E31E24' : '#E5E7EB'}`,
                 borderRadius: 12, padding: '13px 16px 13px 44px',
-                fontSize: 15, color: '#111827', outline: 'none',
-                boxSizing: 'border-box', fontFamily: 'Inter, sans-serif',
+                fontSize: 15, color: '#1A1C1E', outline: 'none',
+                boxSizing: 'border-box', fontFamily: '"Plus Jakarta Sans", sans-serif',
               }}
             />
           </div>
@@ -353,7 +353,7 @@ function NewGuestScreen({
           <div style={{ position: 'relative' }}>
             <span style={{
               position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
-              color: phoneFocused ? '#1A365D' : '#9CA3AF', fontSize: 18, pointerEvents: 'none',
+              color: phoneFocused ? '#E31E24' : '#9CA3AF', fontSize: 18, pointerEvents: 'none',
               fontFamily: 'Material Symbols Outlined',
             }}>phone</span>
             <input
@@ -365,16 +365,16 @@ function NewGuestScreen({
               placeholder={T.phonePlaceholder}
               style={{
                 width: '100%', background: '#F8FAFC',
-                border: `1.5px solid ${phoneFocused ? '#1A365D' : '#E5E7EB'}`,
+                border: `1.5px solid ${phoneFocused ? '#E31E24' : '#E5E7EB'}`,
                 borderRadius: 12, padding: '13px 44px 13px 44px',
-                fontSize: 15, color: '#111827', outline: 'none',
-                boxSizing: 'border-box', fontFamily: 'Inter, sans-serif',
+                fontSize: 15, color: '#1A1C1E', outline: 'none',
+                boxSizing: 'border-box', fontFamily: '"Plus Jakarta Sans", sans-serif',
               }}
             />
             {checkingPhone && (
               <span style={{
                 position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
-                width: 16, height: 16, border: '2px solid #1A365D', borderTopColor: 'transparent',
+                width: 16, height: 16, border: '2px solid #E31E24', borderTopColor: 'transparent',
                 borderRadius: '50%', display: 'inline-block',
                 animation: 'spin 0.7s linear infinite',
               }} />
@@ -397,17 +397,17 @@ function NewGuestScreen({
               onClick={() => setGuestCount(c => Math.max(1, c - 1))}
               style={{
                 width: 44, height: 44, borderRadius: 12,
-                border: '1.5px solid #1A365D', background: 'transparent',
-                color: '#1A365D', fontSize: 22, cursor: 'pointer',
+                border: '1.5px solid #E31E24', background: 'transparent',
+                color: '#E31E24', fontSize: 22, cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >−</button>
-            <span style={{ color: '#1A365D', fontSize: 32, fontWeight: 700 }}>{guestCount}</span>
+            <span style={{ color: '#E31E24', fontSize: 32, fontWeight: 700 }}>{guestCount}</span>
             <button
               onClick={() => setGuestCount(c => Math.min(8, c + 1))}
               style={{
                 width: 44, height: 44, borderRadius: 12,
-                background: '#1A365D', border: 'none',
+                background: '#E31E24', border: 'none',
                 color: 'white', fontSize: 22, cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
@@ -421,11 +421,11 @@ function NewGuestScreen({
           onClick={() => onCheckIn()}
           disabled={isLoading}
           style={{
-            width: '100%', background: '#1A365D', border: 'none', borderRadius: 14,
+            width: '100%', background: '#E31E24', border: 'none', borderRadius: 14,
             padding: 15, color: 'white', fontWeight: 600, fontSize: 15,
             cursor: isLoading ? 'not-allowed' : 'pointer',
             opacity: isLoading ? 0.6 : 1,
-            fontFamily: 'Inter, sans-serif', transition: 'opacity 0.2s',
+            fontFamily: '"Plus Jakarta Sans", sans-serif', transition: 'opacity 0.2s',
           }}
         >
           {isLoading ? 'Checking in...' : T.checkin(tableNum)}

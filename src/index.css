@@ -82,9 +82,9 @@
 :root {
   /* Core Brand Colors from "The Elevated Heritage" */
   --primary: #002045;
-  --primary-container: #1A365D;
+  --primary-container: #E31E24;
   --secondary: #904D00;
-  --secondary-container: #FE932C;
+  --secondary-container: #E31E24;
   --surface: #F8F9FA;
   --surface-container-low: #F3F4F5;
   --surface-container-lowest: #FFFFFF;
@@ -101,15 +101,15 @@ html, body {
   height: 100%;
   background-color: var(--color-background);
   color: var(--color-on-surface);
-  font-family: 'Manrope', var(--font-body), 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Plus Jakarta Sans', var(--font-body), "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.6;
 }
 
-/* Headings use Epilogue */
+/* Headings use Plus Jakarta Sans */
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'Epilogue', var(--font-headline), system-ui, sans-serif;
+  font-family: 'Plus Jakarta Sans', var(--font-headline), system-ui, sans-serif;
   font-weight: 700;
   letter-spacing: -0.02em;
 }

@@ -61,7 +61,7 @@ function spawnFlyToCart(startX, startY) {
   dot.style.cssText = `
     position:fixed; pointer-events:none; z-index:99999;
     width:16px; height:16px; border-radius:50%;
-    background:#F97316; opacity:1;
+    background:#E31E24; opacity:1;
     left:${startX - 8}px; top:${startY - 8}px;
   `
   document.body.appendChild(dot)
@@ -135,7 +135,7 @@ function AddButton({ item, onAdd, onCustomize, onAnimate }) {
   }
 
   const btnBase = {
-    background: '#1B2B4B', color: 'white',
+    background: '#E31E24', color: 'white',
     minWidth: 32, minHeight: 32, borderRadius: 8, cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     fontSize: 20, border: 'none', transition: 'transform 0.1s',
@@ -156,9 +156,9 @@ function AddButton({ item, onAdd, onCustomize, onAnimate }) {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#F3F4F6', padding: '4px', borderRadius: 10 }}>
-      <button onClick={decrement} style={{ border: 'none', background: 'transparent', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1B2B4B', cursor: 'pointer', fontSize: 18 }}>−</button>
-      <span style={{ fontSize: 13, fontWeight: 700, color: '#111827', minWidth: 12, textAlign: 'center' }}>{qty}</span>
-      <button onClick={increment} style={{ border: 'none', background: 'transparent', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1B2B4B', cursor: 'pointer', fontSize: 18 }}>+</button>
+      <button onClick={decrement} style={{ border: 'none', background: 'transparent', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#E31E24', cursor: 'pointer', fontSize: 18 }}>−</button>
+      <span style={{ fontSize: 13, fontWeight: 700, color: '#1A1C1E', minWidth: 12, textAlign: 'center' }}>{qty}</span>
+      <button onClick={increment} style={{ border: 'none', background: 'transparent', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#E31E24', cursor: 'pointer', fontSize: 18 }}>+</button>
     </div>
   )
 }
@@ -196,15 +196,15 @@ function MenuItemCard({ item, idx, navigate, handleItemAdd }) {
           <div style={{ width: 12, height: 12, borderRadius: 2, border: mergedItem.is_veg ? '2px solid #22C55E' : '2px solid #EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: mergedItem.is_veg ? '#22C55E' : '#EF4444' }} />
           </div>
-          <span style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{mergedItem.name}</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#1A1C1E' }}>{mergedItem.name}</span>
         </div>
         {mergedItem.description && (
-          <p style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.4, margin: '0 0 10px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          <p style={{ fontSize: 12, color: '#6C757D', lineHeight: 1.4, margin: '0 0 10px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
             {mergedItem.description}
           </p>
         )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
-          <span style={{ fontSize: 17, fontWeight: 800, color: '#F97316' }}>₹{mergedItem.price}</span>
+          <span style={{ fontSize: 17, fontWeight: 800, color: '#E31E24' }}>₹{mergedItem.price}</span>
           <AddButton item={mergedItem} onAdd={handleItemAdd} onAnimate={(e) => spawnFlyToCart(e.clientX, e.clientY)} />
         </div>
       </div>
@@ -485,13 +485,13 @@ export default function MenuHome() {
   // ── JSX ───────────────────────────────────────────────────────────────────
   return (
     <div
-      style={{ maxWidth: 430, margin: '0 auto', minHeight: '100vh', backgroundColor: '#F8F8F8', position: 'relative', fontFamily: 'Inter, sans-serif', overflowX: 'hidden' }}
+      style={{ maxWidth: 430, margin: '0 auto', minHeight: '100vh', backgroundColor: '#F8F8F8', position: 'relative', fontFamily: '"Plus Jakarta Sans", sans-serif', overflowX: 'hidden' }}
     >
       {/* Keyframe */}
       <style>{`@keyframes flyUp { to { transform: translateY(-40px); opacity: 0; } } @keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
       {/* ── HEADER ── */}
-      <header data-sticky style={{ position: 'sticky', top: 0, zIndex: 30, backgroundColor: '#1B2B4B', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <header data-sticky style={{ position: 'sticky', top: 0, zIndex: 30, backgroundColor: '#E31E24', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <div style={{ fontWeight: 800, fontSize: 18, color: 'white', lineHeight: 1.2, letterSpacing: '-0.02em' }}>The Grand Spice</div>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 2 }}>
@@ -502,7 +502,7 @@ export default function MenuHome() {
           {/* Voice mic */}
           <button
             onClick={startVoiceSearch}
-            style={{ width: 38, height: 38, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer', background: isRecording ? '#EF4444' : '#FE932C', boxShadow: '0 2px 8px rgba(254,147,44,0.35)', transition: 'background 0.2s' }}
+            style={{ width: 38, height: 38, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer', background: isRecording ? '#EF4444' : '#E31E24', boxShadow: '0 2px 8px rgba(254,147,44,0.35)', transition: 'background 0.2s' }}
             aria-label={isRecording ? 'Stop recording' : 'Voice search'}
           >
             <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'white' }}>
@@ -518,7 +518,7 @@ export default function MenuHome() {
           >
             <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'white', fontVariationSettings: "'FILL' 1" }}>shopping_cart</span>
             {cartItems.length > 0 && (
-              <span style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', backgroundColor: '#FE932C', color: 'white', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #1A365D' }}>
+              <span style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', backgroundColor: '#E31E24', color: 'white', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #E31E24' }}>
                 {cartItems.reduce((a, i) => a + i.qty, 0)}
               </span>
             )}
@@ -563,7 +563,7 @@ export default function MenuHome() {
               outline: 'none',
               fontSize: '15px',
               width: '100%',
-              color: '#111827',
+              color: '#1A1C1E',
               fontWeight: 500
             }}
           />
@@ -624,8 +624,8 @@ export default function MenuHome() {
                   padding: '8px 18px',
                   borderRadius: 999,
                   border: 'none',
-                  background: isActive ? '#1B2B4B' : 'white',
-                  color: isActive ? 'white' : '#6B7280',
+                  background: isActive ? '#E31E24' : 'white',
+                  color: isActive ? 'white' : '#6C757D',
                   fontWeight: isActive ? 700 : 500,
                   fontSize: 13,
                   cursor: 'pointer',
@@ -675,9 +675,9 @@ export default function MenuHome() {
         ) : displayedItems.length === 0 && items.length > 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>
             <span style={{ fontSize: '48px' }}>🔍</span>
-            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#1B2B4B', marginTop: '16px' }}>No items found</h3>
-            <p style={{ color: '#6B7280', fontSize: '14px', marginTop: '4px' }}>Try adjusting your search or filters</p>
-            <button onClick={() => { setSearchQuery(''); setVegOnly(false); setActiveCategory('all') }} style={{ marginTop: '20px', color: '#F97316', fontWeight: 700, border: 'none', background: 'transparent' }}>Clear all filters</button>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#E31E24', marginTop: '16px' }}>No items found</h3>
+            <p style={{ color: '#6C757D', fontSize: '14px', marginTop: '4px' }}>Try adjusting your search or filters</p>
+            <button onClick={() => { setSearchQuery(''); setVegOnly(false); setActiveCategory('all') }} style={{ marginTop: '20px', color: '#E31E24', fontWeight: 700, border: 'none', background: 'transparent' }}>Clear all filters</button>
           </div>
         ) : (
           // Always render grouped — categories are scroll anchors, not filters
@@ -697,7 +697,7 @@ export default function MenuHome() {
                       ref={el => sectionRefs.current[cat] = el}
                       style={{
                         fontSize: '11px', fontWeight: '600',
-                        letterSpacing: '0.08em', color: '#6B7280',
+                        letterSpacing: '0.08em', color: '#6C757D',
                         textTransform: 'uppercase',
                         padding: '16px 0 8px', margin: '0'
                       }}

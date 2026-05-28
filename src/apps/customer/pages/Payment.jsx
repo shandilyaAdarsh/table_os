@@ -61,7 +61,7 @@ export default function PaymentScreen() {
   if (loading) {
      return (
        <div style={{ minHeight: '100vh', background: '#F9FAFB', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-         <div style={{ width: 32, height: 32, border: '4px solid #E5E7EB', borderTop: '4px solid #1B2B4B', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+         <div style={{ width: 32, height: 32, border: '4px solid #E5E7EB', borderTop: '4px solid #E31E24', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
          <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
        </div>
      )
@@ -69,9 +69,9 @@ export default function PaymentScreen() {
 
   if (!order) {
      return (
-       <div style={{ minHeight: '100vh', background: '#F9FAFB', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>
-         <h1 style={{ fontSize: 20, fontWeight: 800, color: '#1B2B4B', marginBottom: 8 }}>Order not found</h1>
-         <button onClick={() => navigate('/menu/browse')} style={{ marginTop: 16, padding: '12px 32px', background: '#1B2B4B', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, cursor: 'pointer' }}>Back to Menu</button>
+       <div style={{ minHeight: '100vh', background: '#F9FAFB', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center', fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
+         <h1 style={{ fontSize: 20, fontWeight: 800, color: '#E31E24', marginBottom: 8 }}>Order not found</h1>
+         <button onClick={() => navigate('/menu/browse')} style={{ marginTop: 16, padding: '12px 32px', background: '#E31E24', color: 'white', border: 'none', borderRadius: 12, fontWeight: 700, cursor: 'pointer' }}>Back to Menu</button>
        </div>
      )
   }
@@ -79,10 +79,10 @@ export default function PaymentScreen() {
   const itemCount = order.order_items?.reduce((acc, item) => acc + item.qty, 0) || 0
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F9FAFB', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', position: 'relative', margin: '0 auto', paddingBottom: 110, maxWidth: '430px' }}>
+    <div style={{ minHeight: '100vh', background: '#F9FAFB', display: 'flex', flexDirection: 'column', fontFamily: '"Plus Jakarta Sans", sans-serif', position: 'relative', margin: '0 auto', paddingBottom: 110, maxWidth: '430px' }}>
       
       {/* HEADER */}
-      <header style={{ sticky: 'top', background: '#1B2B4B', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', zIndex: 10, width: '100%', height: 64, boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
+      <header style={{ sticky: 'top', background: '#E31E24', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', zIndex: 10, width: '100%', height: 64, boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
         <button onClick={() => navigate(-1)} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
@@ -93,7 +93,7 @@ export default function PaymentScreen() {
       </header>
 
       {/* HERO AMOUNT BLOCK */}
-      <div style={{ background: '#1B2B4B', padding: '12px 24px 64px', textAlign: 'center', color: 'white' }}>
+      <div style={{ background: '#E31E24', padding: '12px 24px 64px', textAlign: 'center', color: 'white' }}>
         <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.6, display: 'block', marginBottom: 8 }}>Total Payable</span>
         <span style={{ fontSize: 48, fontWeight: 900, letterSpacing: '-0.02em', display: 'block', marginBottom: 12 }}>₹{order.total_amount}</span>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.1)', padding: '6px 16px', borderRadius: 999, fontSize: 13, fontWeight: 600 }}>
@@ -108,7 +108,7 @@ export default function PaymentScreen() {
        {/* ORDER SUMMARY CARD */}
        <section style={{ background: 'white', borderRadius: 20, boxShadow: '0 10px 40px rgba(27,43,75,0.08)', padding: 20, marginTop: -32, marginBottom: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h2 style={{ fontWeight: 800, fontSize: 16, color: '#1B2B4B', margin: 0 }}>Order Summary</h2>
+            <h2 style={{ fontWeight: 800, fontSize: 16, color: '#E31E24', margin: 0 }}>Order Summary</h2>
             <span className="material-symbols-outlined" style={{ color: '#9CA3AF' }}>receipt_long</span>
           </div>
           
@@ -116,20 +116,20 @@ export default function PaymentScreen() {
             {order.order_items?.map(item => (
               <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#F3F4F6', color: '#1B2B4B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>
+                  <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#F3F4F6', color: '#E31E24', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>
                     {item.qty}
                   </div>
                   <span style={{ color: '#4B5563', fontWeight: 600 }}>{item.name}</span>
                 </div>
-                <span style={{ fontWeight: 700, color: '#1B2B4B' }}>₹{item.unit_price * item.qty}</span>
+                <span style={{ fontWeight: 700, color: '#E31E24' }}>₹{item.unit_price * item.qty}</span>
               </div>
             ))}
             
             <div style={{ height: 1, background: '#F3F4F6', margin: '8px 0' }} />
             
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontWeight: 800, color: '#1B2B4B', fontSize: 16 }}>Grand Total</span>
-              <span style={{ fontWeight: 900, color: '#F97316', fontSize: 22 }}>₹{order.total_amount}</span>
+              <span style={{ fontWeight: 800, color: '#E31E24', fontSize: 16 }}>Grand Total</span>
+              <span style={{ fontWeight: 900, color: '#E31E24', fontSize: 22 }}>₹{order.total_amount}</span>
             </div>
           </div>
        </section>
@@ -147,16 +147,16 @@ export default function PaymentScreen() {
               style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', padding: '16px 20px', borderBottom: '1px solid #F3F4F6', cursor: 'pointer', background: method === 'card' ? 'rgba(27,43,75,0.02)' : 'transparent' }}
             >
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 16 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(27,43,75,0.05)', color: '#1B2B4B', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(27,43,75,0.05)', color: '#E31E24', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <span className="material-symbols-outlined">credit_card</span>
                 </div>
                 <div>
-                  <div style={{ fontWeight: 800, color: '#1B2B4B', fontSize: 15 }}>Credit / Debit Card</div>
-                  <div style={{ fontSize: 12, color: '#6B7280' }}>Visa, Mastercard, RuPay</div>
+                  <div style={{ fontWeight: 800, color: '#E31E24', fontSize: 15 }}>Credit / Debit Card</div>
+                  <div style={{ fontSize: 12, color: '#6C757D' }}>Visa, Mastercard, RuPay</div>
                 </div>
               </div>
-              <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${method === 'card' ? '#1B2B4B' : '#E5E7EB'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {method === 'card' && <div style={{ width: 12, height: 12, background: '#1B2B4B', borderRadius: '50%' }} />}
+              <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${method === 'card' ? '#E31E24' : '#E5E7EB'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {method === 'card' && <div style={{ width: 12, height: 12, background: '#E31E24', borderRadius: '50%' }} />}
               </div>
             </div>
 
@@ -170,12 +170,12 @@ export default function PaymentScreen() {
                   <span className="material-symbols-outlined">account_balance_wallet</span>
                 </div>
                 <div>
-                  <div style={{ fontWeight: 800, color: '#1B2B4B', fontSize: 15 }}>UPI Payment</div>
-                  <div style={{ fontSize: 12, color: '#6B7280' }}>GPay, PhonePe, Paytm</div>
+                  <div style={{ fontWeight: 800, color: '#E31E24', fontSize: 15 }}>UPI Payment</div>
+                  <div style={{ fontSize: 12, color: '#6C757D' }}>GPay, PhonePe, Paytm</div>
                 </div>
               </div>
-              <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${method === 'upi' ? '#1B2B4B' : '#E5E7EB'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {method === 'upi' && <div style={{ width: 12, height: 12, background: '#1B2B4B', borderRadius: '50%' }} />}
+              <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${method === 'upi' ? '#E31E24' : '#E5E7EB'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {method === 'upi' && <div style={{ width: 12, height: 12, background: '#E31E24', borderRadius: '50%' }} />}
               </div>
             </div>
 
@@ -185,16 +185,16 @@ export default function PaymentScreen() {
               style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', padding: '16px 20px', cursor: 'pointer', background: method === 'cash' ? 'rgba(27,43,75,0.02)' : 'transparent' }}
             >
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 16 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(249,115,22,0.05)', color: '#F97316', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(249,115,22,0.05)', color: '#E31E24', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <span className="material-symbols-outlined">payments</span>
                 </div>
                 <div>
-                  <div style={{ fontWeight: 800, color: '#1B2B4B', fontSize: 15 }}>Pay at Counter</div>
-                  <div style={{ fontSize: 12, color: '#6B7280' }}>Settlement by staff</div>
+                  <div style={{ fontWeight: 800, color: '#E31E24', fontSize: 15 }}>Pay at Counter</div>
+                  <div style={{ fontSize: 12, color: '#6C757D' }}>Settlement by staff</div>
                 </div>
               </div>
-              <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${method === 'cash' ? '#1B2B4B' : '#E5E7EB'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {method === 'cash' && <div style={{ width: 12, height: 12, background: '#1B2B4B', borderRadius: '50%' }} />}
+              <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${method === 'cash' ? '#E31E24' : '#E5E7EB'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {method === 'cash' && <div style={{ width: 12, height: 12, background: '#E31E24', borderRadius: '50%' }} />}
               </div>
             </div>
           </div>
@@ -207,7 +207,7 @@ export default function PaymentScreen() {
           disabled={paying || success}
           onClick={handlePay}
           style={{
-            width: '100%', maxWidth: 430, height: 60, background: success ? '#16A34A' : '#1B2B4B', color: 'white',
+            width: '100%', maxWidth: 430, height: 60, background: success ? '#16A34A' : '#E31E24', color: 'white',
             border: 'none', borderRadius: 16, fontSize: 17, fontWeight: 700, cursor: (paying || success) ? 'not-allowed' : 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: paying ? 'center' : 'space-between', padding: '0 24px', transition: 'all 0.3s',
             boxShadow: '0 10px 30px rgba(27,43,75,0.2)'
@@ -250,23 +250,23 @@ export function ReceiptScreen() {
   const navigate = useNavigate()
 
   return (
-    <div style={{ minHeight: '100vh', background: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center', fontFamily: 'Inter, sans-serif', maxWidth: 430, margin: '0 auto' }}>
+    <div style={{ minHeight: '100vh', background: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center', fontFamily: '"Plus Jakarta Sans", sans-serif', maxWidth: 430, margin: '0 auto' }}>
       
       <div style={{ width: 90, height: 90, background: '#DCFCE7', color: '#16A34A', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24, boxShadow: '0 10px 40px rgba(34,197,94,0.15)' }}>
         <span className="material-symbols-outlined" style={{ fontSize: 44, fontWeight: 900 }}>check</span>
       </div>
 
-      <h1 style={{ fontSize: 28, fontWeight: 800, color: '#1B2B4B', marginBottom: 8 }}>Order Paid!</h1>
-      <p style={{ fontSize: 15, color: '#6B7280', marginBottom: 32 }}>Your transaction was successful. Thank you for dining with us!</p>
+      <h1 style={{ fontSize: 28, fontWeight: 800, color: '#E31E24', marginBottom: 8 }}>Order Paid!</h1>
+      <p style={{ fontSize: 15, color: '#6C757D', marginBottom: 32 }}>Your transaction was successful. Thank you for dining with us!</p>
 
       {orderId && (
-        <div style={{ background: '#F3F4F6', color: '#1B2B4B', borderRadius: 999, padding: '8px 20px', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 40 }}>
+        <div style={{ background: '#F3F4F6', color: '#E31E24', borderRadius: 999, padding: '8px 20px', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 40 }}>
           Order Reference: {orderId.substring(0, 8).toUpperCase()}
         </div>
       )}
 
       <div style={{ width: '100%', marginBottom: 48 }}>
-        <p style={{ fontWeight: 800, color: '#1B2B4B', marginBottom: 16, fontSize: 15 }}>How was your meals today?</p>
+        <p style={{ fontWeight: 800, color: '#E31E24', marginBottom: 16, fontSize: 15 }}>How was your meals today?</p>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
           {[1, 2, 3, 4, 5].map(star => (
             <span key={star} style={{ fontSize: 32, color: '#E5E7EB', cursor: 'pointer' }}>
@@ -278,7 +278,7 @@ export function ReceiptScreen() {
 
       <button 
         onClick={() => navigate('/menu/browse')}
-        style={{ width: '100%', py: 18, background: '#1B2B4B', color: 'white', border: 'none', borderRadius: 16, padding: '18px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer', boxShadow: '0 10px 30px rgba(27,43,75,0.2)' }}
+        style={{ width: '100%', py: 18, background: '#E31E24', color: 'white', border: 'none', borderRadius: 16, padding: '18px 0', fontSize: 16, fontWeight: 700, cursor: 'pointer', boxShadow: '0 10px 30px rgba(27,43,75,0.2)' }}
       >
         Explore More
       </button>

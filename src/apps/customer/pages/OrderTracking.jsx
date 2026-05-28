@@ -111,16 +111,16 @@ export default function OrderTracking() {
         flexDirection: 'column',
         gap: '16px',
         background: '#F8F8F8',
-        fontFamily: 'Inter, sans-serif'
+        fontFamily: '"Plus Jakarta Sans", sans-serif'
       }}>
         <div style={{
           width: '40px', height: '40px',
-          border: '3px solid #F97316',
+          border: '3px solid #E31E24',
           borderTop: '3px solid transparent',
           borderRadius: '50%',
           animation: 'spin 0.8s linear infinite'
         }} />
-        <p style={{ color: '#6B7280', fontSize: '14px', fontWeight: 500 }}>
+        <p style={{ color: '#6C757D', fontSize: '14px', fontWeight: 500 }}>
           Loading your order...
         </p>
       </div>
@@ -154,7 +154,7 @@ export default function OrderTracking() {
   const statusConfig = {
     rejected: { text: '✕ Not Prepared', color: '#EF4444', bg: '#FEF2F2' },
     done:     { text: '✓ Ready',        color: '#16A34A', bg: '#F0FDF4' },
-    cooking:  { text: '🍳 Preparing',   color: '#1A365D', bg: '#EFF6FF' },
+    cooking:  { text: '🍳 Preparing',   color: '#E31E24', bg: '#EFF6FF' },
     pending:  { text: '⏳ Waiting',     color: '#D97706', bg: '#FFFBEB' },
   }
 
@@ -261,19 +261,19 @@ export default function OrderTracking() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F8F8F8', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', position: 'relative', margin: '0 auto', maxWidth: '430px' }}>
+    <div style={{ minHeight: '100vh', background: '#F8F8F8', display: 'flex', flexDirection: 'column', fontFamily: '"Plus Jakarta Sans", sans-serif', position: 'relative', margin: '0 auto', maxWidth: '430px' }}>
       
       {/* 1. HEADER ROW */}
       <header style={{ position: 'sticky', top: 0, background: 'white', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 20, width: '100%', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
         <button onClick={() => navigate('/menu/browse')} style={{ width: 40, height: 40, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span className="material-symbols-outlined" style={{ color: '#1B2B4B' }}>arrow_back</span>
+          <span className="material-symbols-outlined" style={{ color: '#E31E24' }}>arrow_back</span>
         </button>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <h1 style={{ fontSize: 16, fontWeight: 700, color: '#1B2B4B', margin: 0 }}>Order #{(order?.id || '').substring(0, 8).toUpperCase()}</h1>
-          <span style={{ fontSize: 12, color: '#6B7280' }}>Table {order?.table_num}</span>
+          <h1 style={{ fontSize: 16, fontWeight: 700, color: '#E31E24', margin: 0 }}>Order #{(order?.id || '').substring(0, 8).toUpperCase()}</h1>
+          <span style={{ fontSize: 12, color: '#6C757D' }}>Table {order?.table_num}</span>
         </div>
         <button onClick={() => navigate('/menu/browse')} style={{ width: 40, height: 40, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span className="material-symbols-outlined" style={{ color: '#1B2B4B' }}>shopping_cart</span>
+          <span className="material-symbols-outlined" style={{ color: '#E31E24' }}>shopping_cart</span>
         </button>
       </header>
 
@@ -288,7 +288,7 @@ export default function OrderTracking() {
           boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 10, height: 10, background: orderStatus === 'rejected' ? '#EF4444' : orderStatus === 'ready' ? '#22C55E' : '#F97316', borderRadius: '50%' }} />
+            <div style={{ width: 10, height: 10, background: orderStatus === 'rejected' ? '#EF4444' : orderStatus === 'ready' ? '#22C55E' : '#E31E24', borderRadius: '50%' }} />
             <span style={{ fontSize: 14, fontWeight: 600, color: orderStatus === 'rejected' ? '#DC2626' : '#16A34A' }}>
               {orderStatus === 'rejected' ? '✕ Order was rejected by kitchen'
                : orderStatus === 'served'  ? 'Enjoy your meal!'
@@ -310,7 +310,7 @@ export default function OrderTracking() {
         </div>
 
         {/* 3. RESTAURANT BANNER */}
-        <div style={{ position: 'relative', height: 100, margin: '0 16px 16px', borderRadius: 16, overflow: 'hidden', background: 'linear-gradient(135deg, #111D35, #1B2B4B)' }}>
+        <div style={{ position: 'relative', height: 100, margin: '0 16px 16px', borderRadius: 16, overflow: 'hidden', background: 'linear-gradient(135deg, #111D35, #E31E24)' }}>
           <div style={{ position: 'absolute', bottom: 16, left: 16 }}>
             <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>The Grand Spice</h2>
             <p style={{ color: 'white', fontSize: 12, opacity: 0.6, margin: '4px 0 0' }}>Estimated arrival: 5-7 mins</p>
@@ -336,8 +336,8 @@ export default function OrderTracking() {
                           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>check</span>
                         </div>
                       ) : isCurrent ? (
-                        <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid #F97316', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <div className="current-step" style={{ width: 12, height: 12, background: '#F97316', borderRadius: '50%' }} />
+                        <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid #E31E24', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <div className="current-step" style={{ width: 12, height: 12, background: '#E31E24', borderRadius: '50%' }} />
                         </div>
                       ) : (
                         <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid #E5E7EB' }} />
@@ -351,16 +351,16 @@ export default function OrderTracking() {
 
                   <div style={{ paddingBottom: 24, paddingTop: 4, flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <h3 style={{ fontSize: 15, margin: 0, color: isFuture ? '#6B7280' : '#111827', fontWeight: isFuture ? 400 : 600 }}>
+                      <h3 style={{ fontSize: 15, margin: 0, color: isFuture ? '#6C757D' : '#1A1C1E', fontWeight: isFuture ? 400 : 600 }}>
                         {s.title}
                       </h3>
                       {isCurrent && (
-                        <span style={{ background: '#FFF4ED', color: '#F97316', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999 }}>
+                        <span style={{ background: '#FFF4ED', color: '#E31E24', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999 }}>
                           IN PROGRESS
                         </span>
                       )}
                     </div>
-                    <p style={{ fontSize: 12, color: '#6B7280', margin: '2px 0 0' }}>
+                    <p style={{ fontSize: 12, color: '#6C757D', margin: '2px 0 0' }}>
                       {isPast ? 'Completed' : isCurrent ? 'Just now' : 'Waiting...'}
                     </p>
                   </div>
@@ -372,7 +372,7 @@ export default function OrderTracking() {
 
         {/* 5. YOUR ITEMS CARD */}
         <div style={{ background: 'white', borderRadius: 16, margin: '0 16px 16px', padding: 16, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: '#111827', margin: '0 0 16px' }}>Your Items</h3>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1A1C1E', margin: '0 0 16px' }}>Your Items</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {order?.order_items?.map(item => {
               const itemSt = getItemStatus(item)
@@ -390,9 +390,9 @@ export default function OrderTracking() {
                       <span style={{
                         fontSize: 14, fontWeight: 600,
                         textDecoration: item?.is_rejected ? 'line-through' : 'none',
-                        color: item?.is_rejected ? '#9CA3AF' : '#111827'
+                        color: item?.is_rejected ? '#9CA3AF' : '#1A1C1E'
                       }}>{item?.name}</span>
-                      <span style={{ fontSize: 12, color: '#6B7280' }}>Qty: {item?.qty}</span>
+                      <span style={{ fontSize: 12, color: '#6C757D' }}>Qty: {item?.qty}</span>
                     </div>
                   </div>
                   <span style={{
@@ -415,7 +415,7 @@ export default function OrderTracking() {
             padding: '16px',
             margin: '0 16px 16px'
           }}>
-            <p style={{ fontSize: '14px', fontWeight: '600', color: '#111827', marginBottom: '12px' }}>
+            <p style={{ fontSize: '14px', fontWeight: '600', color: '#1A1C1E', marginBottom: '12px' }}>
               Bill Summary
             </p>
 
@@ -435,13 +435,13 @@ export default function OrderTracking() {
             <div style={{ height: '1px', background: '#F3F4F6', margin: '8px 0 10px' }} />
 
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-              <span style={{ fontSize: '13px', color: '#6B7280' }}>Subtotal</span>
-              <span style={{ fontSize: '13px', color: '#6B7280' }}>₹{subtotal}</span>
+              <span style={{ fontSize: '13px', color: '#6C757D' }}>Subtotal</span>
+              <span style={{ fontSize: '13px', color: '#6C757D' }}>₹{subtotal}</span>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-              <span style={{ fontSize: '13px', color: '#6B7280' }}>Taxes</span>
-              <span style={{ fontSize: '13px', color: '#6B7280' }}>₹{tax}</span>
+              <span style={{ fontSize: '13px', color: '#6C757D' }}>Taxes</span>
+              <span style={{ fontSize: '13px', color: '#6C757D' }}>₹{tax}</span>
             </div>
 
             <div style={{
@@ -449,8 +449,8 @@ export default function OrderTracking() {
               borderTop: '0.5px solid #E5E7EB',
               paddingTop: '10px', marginBottom: '16px'
             }}>
-              <span style={{ fontSize: '15px', fontWeight: '600', color: '#111827' }}>Total</span>
-              <span style={{ fontSize: '15px', fontWeight: '600', color: '#111827' }}>₹{total}</span>
+              <span style={{ fontSize: '15px', fontWeight: '600', color: '#1A1C1E' }}>Total</span>
+              <span style={{ fontSize: '15px', fontWeight: '600', color: '#1A1C1E' }}>₹{total}</span>
             </div>
 
             {/* Pay button — shows when not yet paid */}
@@ -505,10 +505,10 @@ export default function OrderTracking() {
                 style={{
                   width: '100%',
                   background: 'white',
-                  border: '1.5px solid #1A365D',
+                  border: '1.5px solid #E31E24',
                   borderRadius: '14px',
                   padding: '13px',
-                  color: '#1A365D',
+                  color: '#E31E24',
                   fontSize: '14px',
                   fontWeight: '600',
                   cursor: 'pointer',
@@ -528,12 +528,12 @@ export default function OrderTracking() {
         <div style={{ padding: '0 16px', marginBottom: 8 }}>
           <button 
             onClick={() => navigate('/menu/browse')}
-            style={{ width: '100%', border: '1.5px solid #1B2B4B', background: 'white', color: '#1B2B4B', height: 48, borderRadius: 12, fontWeight: 600, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}
+            style={{ width: '100%', border: '1.5px solid #E31E24', background: 'white', color: '#E31E24', height: 48, borderRadius: 12, fontWeight: 600, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}
           >
             <span className="material-symbols-outlined" style={{ fontSize: 20 }}>add</span>
             Add more items
           </button>
-          <p style={{ fontSize: 12, color: '#6B7280', textAlign: 'center', marginTop: 12 }}>
+          <p style={{ fontSize: 12, color: '#6C757D', textAlign: 'center', marginTop: 12 }}>
             A server will bring your order to Table {order?.table_num}
           </p>
         </div>
@@ -568,11 +568,11 @@ export default function OrderTracking() {
             marginBottom: '20px'
           }}>✅</div>
 
-          <h2 style={{ fontSize: '24px', fontWeight: '700', color: '#111827', margin: '0 0 8px' }}>
+          <h2 style={{ fontSize: '24px', fontWeight: '700', color: '#1A1C1E', margin: '0 0 8px' }}>
             Thank you for dining with us!
           </h2>
 
-          <p style={{ fontSize: '14px', color: '#6B7280', margin: '0 0 32px', lineHeight: 1.6 }}>
+          <p style={{ fontSize: '14px', color: '#6C757D', margin: '0 0 32px', lineHeight: 1.6 }}>
             We hope you enjoyed your meal.<br/>
             Come back and visit us again soon 🙏
           </p>
@@ -581,7 +581,7 @@ export default function OrderTracking() {
             onClick={() => navigate('/menu/browse')}
             style={{
               width: '100%',
-              background: '#1A365D',
+              background: '#E31E24',
               color: 'white',
               border: 'none',
               borderRadius: '14px',
@@ -600,8 +600,8 @@ export default function OrderTracking() {
             style={{
               width: '100%',
               background: 'white',
-              color: '#1A365D',
-              border: '1.5px solid #1A365D',
+              color: '#E31E24',
+              border: '1.5px solid #E31E24',
               borderRadius: '14px',
               padding: '14px',
               fontSize: '15px',

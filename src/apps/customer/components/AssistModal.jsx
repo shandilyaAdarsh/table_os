@@ -76,7 +76,7 @@ export default function AssistModal({ open, onClose }) {
 
         <div style={{ padding: '0 24px 24px', flex: 1, overflowY: 'auto' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-            <h2 style={{ fontFamily: 'Epilogue, sans-serif', fontWeight: 800, fontSize: 22, color: '#002045', margin: 0 }}>How can we assist?</h2>
+            <h2 style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontWeight: 800, fontSize: 22, color: '#002045', margin: 0 }}>How can we assist?</h2>
             <button onClick={onClose} style={{ border: 'none', background: '#F3F4F6', borderRadius: '50%', width: 34, height: 34, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#43474E' }}>close</span>
             </button>
@@ -88,8 +88,8 @@ export default function AssistModal({ open, onClose }) {
           {success ? (
             <div style={{ padding: '30px', textAlign: 'center', animation: 'slideUp 0.3s' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 48, color: '#22C55E', marginBottom: 12 }}>check_circle</span>
-              <p style={{ fontFamily: 'Manrope, sans-serif', fontSize: 18, color: '#002045', fontWeight: 700, margin: 0 }}>Request Sent!</p>
-              <p style={{ fontFamily: 'Manrope, sans-serif', fontSize: 14, color: '#8A8F98', marginTop: 8 }}>A waiter will be right with you.</p>
+              <p style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontSize: 18, color: '#002045', fontWeight: 700, margin: 0 }}>Request Sent!</p>
+              <p style={{ fontFamily: 'Plus Jakarta Sans, sans-serif', fontSize: 14, color: '#8A8F98', marginTop: 8 }}>A waiter will be right with you.</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -98,7 +98,7 @@ export default function AssistModal({ open, onClose }) {
                 disabled={loading}
                 style={btnStyle}
               >
-                <span className="material-symbols-outlined" style={{ color: '#FE932C' }}>pan_tool</span>
+                <span className="material-symbols-outlined" style={{ color: '#E31E24' }}>pan_tool</span>
                 Call Waiter
               </button>
 
@@ -141,7 +141,7 @@ export default function AssistModal({ open, onClose }) {
                   <button 
                     onClick={() => sendAssistRequest('special')}
                     disabled={!customMsg.trim() || loading}
-                    style={{ padding: '0 20px', borderRadius: 12, background: '#1A365D', color: 'white', fontWeight: 700, border: 'none', cursor: 'pointer' }}
+                    style={{ padding: '0 20px', borderRadius: 12, background: '#E31E24', color: 'white', fontWeight: 700, border: 'none', cursor: 'pointer' }}
                   >
                     Send
                   </button>
@@ -151,7 +151,7 @@ export default function AssistModal({ open, onClose }) {
               {/* Special Request textarea (Issue 4) */}
               <div style={{ marginTop: '16px' }}>
                 <label style={{
-                  fontSize: '11px', fontWeight: '600', color: '#6B7280',
+                  fontSize: '11px', fontWeight: '600', color: '#6C757D',
                   textTransform: 'uppercase', letterSpacing: '0.5px',
                   display: 'block', marginBottom: '6px'
                 }}>
@@ -166,10 +166,10 @@ export default function AssistModal({ open, onClose }) {
                   style={{
                     width: '100%', background: '#F9FAFB',
                     border: '1.5px solid #E5E7EB', borderRadius: '12px',
-                    padding: '12px', fontSize: '14px', color: '#111827',
+                    padding: '12px', fontSize: '14px', color: '#1A1C1E',
                     resize: 'none', outline: 'none', boxSizing: 'border-box'
                   }}
-                  onFocus={e => e.target.style.borderColor = '#1A365D'}
+                  onFocus={e => e.target.style.borderColor = '#E31E24'}
                   onBlur={e => e.target.style.borderColor = '#E5E7EB'}
                 />
                 <div style={{ textAlign: 'right', fontSize: '11px', color: '#9CA3AF', marginTop: '4px' }}>
@@ -193,7 +193,7 @@ const btnStyle = {
   borderRadius: 16,
   fontSize: 16,
   fontWeight: 600,
-  fontFamily: 'Manrope, sans-serif',
+  fontFamily: 'Plus Jakarta Sans, sans-serif',
   color: '#002045',
   cursor: 'pointer',
   gap: 16,

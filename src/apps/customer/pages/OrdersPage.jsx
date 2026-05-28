@@ -84,8 +84,8 @@ export default function OrdersPage() {
 
   if (!session.name) {
     return (
-      <div style={{ padding: '60px 24px 120px', maxWidth: '430px', margin: '0 auto', fontFamily: 'Inter, sans-serif', background: 'white', minHeight: '100vh' }}>
-        <h1 style={{ fontSize: 28, fontWeight: 800, color: '#1B2B4B', marginBottom: 8 }}>Your Orders</h1>
+      <div style={{ padding: '60px 24px 120px', maxWidth: '430px', margin: '0 auto', fontFamily: '"Plus Jakarta Sans", sans-serif', background: 'white', minHeight: '100vh' }}>
+        <h1 style={{ fontSize: 28, fontWeight: 800, color: '#E31E24', marginBottom: 8 }}>Your Orders</h1>
         <div style={{ padding: '24px', background: '#FEF2F2', border: '1.5px solid #F87171', color: '#991B1B', borderRadius: 16, textAlign: 'center', marginTop: 32 }}>
            <span style={{ fontSize: 14, fontWeight: 600 }}>No active session found.</span>
            <p style={{ fontSize: 13, marginTop: 4, opacity: 0.8 }}>Please check-in to see your order history.</p>
@@ -96,13 +96,13 @@ export default function OrdersPage() {
   }
 
   return (
-    <div style={{ padding: '60px 24px 120px', maxWidth: '430px', margin: '0 auto', fontFamily: 'Inter, sans-serif', background: 'white', minHeight: '100vh' }}>
-      <h1 style={{ fontSize: 28, fontWeight: 800, color: '#1B2B4B', marginBottom: 4 }}>Your Orders</h1>
-      <p style={{ margin: '0 0 32px', fontSize: 14, color: '#6B7280', fontWeight: 500 }}>Active orders for {session.name}</p>
+    <div style={{ padding: '60px 24px 120px', maxWidth: '430px', margin: '0 auto', fontFamily: '"Plus Jakarta Sans", sans-serif', background: 'white', minHeight: '100vh' }}>
+      <h1 style={{ fontSize: 28, fontWeight: 800, color: '#E31E24', marginBottom: 4 }}>Your Orders</h1>
+      <p style={{ margin: '0 0 32px', fontSize: 14, color: '#6C757D', fontWeight: 500 }}>Active orders for {session.name}</p>
 
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '64px 0' }}>
-           <div style={{ width: 24, height: 24, border: '3px solid #F3F4F6', borderTop: '3px solid #1B2B4B', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+           <div style={{ width: 24, height: 24, border: '3px solid #F3F4F6', borderTop: '3px solid #E31E24', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
            <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
         </div>
       ) : orders.length === 0 ? (
@@ -110,8 +110,8 @@ export default function OrdersPage() {
           <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 32, color: '#9CA3AF' }}>restaurant</span>
           </div>
-          <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1B2B4B', margin: '0 0 8px' }}>No orders yet</h3>
-          <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.5 }}>Your delicious picks will appear here once you place them.</p>
+          <h3 style={{ fontSize: 18, fontWeight: 800, color: '#E31E24', margin: '0 0 8px' }}>No orders yet</h3>
+          <p style={{ fontSize: 14, color: '#6C757D', lineHeight: 1.5 }}>Your delicious picks will appear here once you place them.</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -195,10 +195,10 @@ function OrderCard({ order }) {
   }, [order.ends_at, isActive])
 
   const statusMap = {
-    pending:  { bg: 'rgba(27,43,75,0.05)', color: '#1B2B4B', label: 'Placed', icon: 'check_circle' },
-    cooking:  { bg: 'rgba(249,115,22,0.1)', color: '#F97316', label: 'Preparing', icon: 'skillet' },
+    pending:  { bg: 'rgba(27,43,75,0.05)', color: '#E31E24', label: 'Placed', icon: 'check_circle' },
+    cooking:  { bg: 'rgba(249,115,22,0.1)', color: '#E31E24', label: 'Preparing', icon: 'skillet' },
     ready:    { bg: 'rgba(34,197,94,0.1)', color: '#16A34A', label: 'Ready!', icon: 'shopping_bag' },
-    served:   { bg: '#F3F4F6', color: '#6B7280', label: 'Served', icon: 'done_all' },
+    served:   { bg: '#F3F4F6', color: '#6C757D', label: 'Served', icon: 'done_all' },
     cancelled:{ bg: '#FEF2F2', color: '#EF4444', label: 'Cancelled', icon: 'cancel' },
     rejected: { bg: '#FEE2E2', color: '#EF4444', label: 'Rejected', icon: 'cancel' }
   }
@@ -213,7 +213,7 @@ function OrderCard({ order }) {
       style={{ 
         background: 'white', 
         borderRadius: 16, 
-        border: isActive ? '1.5px solid #1B2B4B' : '1px solid #F3F4F6', 
+        border: isActive ? '1.5px solid #E31E24' : '1px solid #F3F4F6', 
         padding: 16, 
         boxShadow: isActive ? '0 8px 24px rgba(27,43,75,0.06)' : 'none',
         position: 'relative',
@@ -225,9 +225,9 @@ function OrderCard({ order }) {
         <div>
           <span style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Order #{order.id.split('-')[0].toUpperCase()}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-            <span style={{ fontSize: 18, fontWeight: 800, color: '#1B2B4B' }}>₹{order.total_amount}</span>
+            <span style={{ fontSize: 18, fontWeight: 800, color: '#E31E24' }}>₹{order.total_amount}</span>
             <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#D1D5DB' }} />
-            <span style={{ fontSize: 13, color: '#6B7280', fontWeight: 500 }}>{order.order_items?.length || 0} Items</span>
+            <span style={{ fontSize: 13, color: '#6C757D', fontWeight: 500 }}>{order.order_items?.length || 0} Items</span>
           </div>
         </div>
         
@@ -239,11 +239,11 @@ function OrderCard({ order }) {
 
       {isActive && timeRemaining && (
         <div style={{ background: '#FFF7ED', borderRadius: 12, padding: '12px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#F97316' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#E31E24' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 18 }}>timer</span>
             <span style={{ fontSize: 13, fontWeight: 700 }}>Estimated Arrival</span>
           </div>
-          <span style={{ fontSize: 13, fontWeight: 800, color: '#F97316' }}>{timeRemaining}</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: '#E31E24' }}>{timeRemaining}</span>
         </div>
       )}
 
@@ -252,7 +252,7 @@ function OrderCard({ order }) {
           {order.order_items.map(item => (
             <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 13, color: '#1B2B4B', fontWeight: 700 }}>{item.qty}x</span>
+                <span style={{ fontSize: 13, color: '#E31E24', fontWeight: 700 }}>{item.qty}x</span>
                 <span style={{ fontSize: 13, color: '#4B5563', fontWeight: 500 }}>{item.name}</span>
                 {item.status === 'out_of_stock' && (
                   <span style={{
@@ -263,7 +263,7 @@ function OrderCard({ order }) {
                   }}>Out of Stock</span>
                 )}
               </div>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#1B2B4B' }}>₹{item.unit_price * item.qty}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#E31E24' }}>₹{item.unit_price * item.qty}</span>
             </div>
           ))}
         </div>
@@ -273,9 +273,9 @@ function OrderCard({ order }) {
       <button
         onClick={(e) => { e.stopPropagation(); downloadInvoice() }}
         style={{
-          background: 'white', border: '1.5px solid #1A365D',
+          background: 'white', border: '1.5px solid #E31E24',
           borderRadius: '10px', padding: '8px 14px',
-          color: '#1A365D', fontSize: '12px', fontWeight: '600',
+          color: '#E31E24', fontSize: '12px', fontWeight: '600',
           cursor: 'pointer', display: 'flex', alignItems: 'center',
           gap: '6px', marginTop: '10px'
         }}
