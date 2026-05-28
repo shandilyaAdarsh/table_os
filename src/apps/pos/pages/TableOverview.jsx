@@ -1,16 +1,13 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useStaffStore } from '../../../store/index'
 import { useRuntimeIdentityStore } from '../../../store/runtimeIdentityStore'
 import { useTableOccupancyProjection } from '../../../store/projections/tableOccupancyProjection'
 import { useActiveOrdersProjection } from '../../../store/projections/activeOrdersProjection'
 import { fetchWithRuntime } from '../../../lib/apiClient'
-import { realtimeEventRouter } from '../../../lib/RealtimeEventRouter'
+import { runtime } from '../../../runtime'
+import { SupabaseTransportAdapter } from '../../../runtime/transport/SupabaseTransportAdapter'
+import { supabase } from '../../../lib/supabase'
 
 export default function TableOverview() {
-  const { staff_user, logout } = useStaffStore()
-  const navigate = useNavigate()
-  
   const { staff_user, logout } = useStaffStore()
   const navigate = useNavigate()
   
@@ -76,14 +73,16 @@ export default function TableOverview() {
         setLoadingRequests(false)
       }
 
-      // Start centralized realtime listening
-      realtimeEventRouter.start(tenantId, branchId)
+      // Start centralized realtime listening via formal runtime infrastructure
+      const topic = `tenant:${tenantId}:branch:${branchId}:operational`;
+      const adapter = new SupabaseTransportAdapter(supabase);
+      runtime.bootstrap('pos_table_overview', staff_user?.id || 'anonymous_session', adapter, topic);
     }
 
     bootstrapRuntime()
 
     return () => {
-      realtimeEventRouter.stop()
+      runtime.transport.suspend()
     }
   }, [staff_user, branchId, tenantId, rebuildTables, rebuildOrders])
 

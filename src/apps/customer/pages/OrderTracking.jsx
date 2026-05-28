@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { fetchWithRuntime, submitMutation } from '../../../lib/apiClient'
-import { realtimeEventRouter } from '../../../lib/RealtimeEventRouter'
+import { runtime } from '../../../runtime'
+import { SupabaseTransportAdapter } from '../../../runtime/transport/SupabaseTransportAdapter'
+import { supabase } from '../../../lib/supabase'
 import { motion } from 'framer-motion'
 import { playBeep } from '../../../utils/beep'
 import { BottomNav } from '../components/BottomNav'
@@ -57,14 +59,20 @@ export default function OrderTracking() {
     
     fetchOrder()
 
-    // Realtime Events are handled globally by RealtimeEventRouter.
+    // Bootstrap formal runtime infrastructure for realtime event routing
+    const TENANT_ID = '11111111-1111-1111-1111-111111111111'
     const BRANCH_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
-    realtimeEventRouter.start('11111111-1111-1111-1111-111111111111', BRANCH_ID)
+    const topic = `tenant:${TENANT_ID}:branch:${BRANCH_ID}:operational`;
+    const adapter = new SupabaseTransportAdapter(supabase);
+    runtime.bootstrap('customer_order_tracking', resolvedOrderId, adapter, topic);
 
-    // Fallback polling atomic rebuild strategy
+    // Fallback polling — degraded mode recovery until projection store is wired
     const fallbackPoll = setInterval(fetchOrder, 10000)
 
-    return () => clearInterval(fallbackPoll)
+    return () => {
+      clearInterval(fallbackPoll)
+      runtime.transport.suspend()
+    }
   }, [resolvedOrderId])
 
   // Unlock audio on first tap (iOS requirement)

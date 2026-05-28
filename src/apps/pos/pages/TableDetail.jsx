@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { fetchWithRuntime, submitMutation } from '../../../lib/apiClient'
-import { realtimeEventRouter } from '../../../lib/RealtimeEventRouter'
 import { useStaffStore } from '../../../store/index'
 import { useRuntimeIdentityStore } from '../../../store/runtimeIdentityStore'
 
@@ -43,9 +42,8 @@ export default function TableDetail() {
 
     fetchData()
 
-    // Realtime Events are handled globally by RealtimeEventRouter.
-    // For now, we will rely on the global router to trigger projection rebuilds.
-    // In a fully integrated state, we would subscribe to the Zustands directly.
+    // Realtime transport is owned by the parent surface (TableOverview via runtime.bootstrap).
+    // In a fully integrated state, this component subscribes directly to the projection stores.
   }, [tableId, staff_user, branchId, tenantId, navigate])
 
   const resolveRequest = async (requestId) => {

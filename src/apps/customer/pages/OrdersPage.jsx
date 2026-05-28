@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchWithRuntime } from '../../../lib/apiClient'
-import { realtimeEventRouter } from '../../../lib/RealtimeEventRouter'
+import { runtime } from '../../../runtime'
+import { SupabaseTransportAdapter } from '../../../runtime/transport/SupabaseTransportAdapter'
+import { supabase } from '../../../lib/supabase'
 import { BottomNav } from '../components/BottomNav'
 
 const TENANT_ID = '11111111-1111-1111-1111-111111111111'
@@ -49,10 +51,11 @@ export default function OrdersPage() {
 
     fetchOrders()
 
-    // Realtime Events are handled globally by RealtimeEventRouter.
     // Ensure the router is started (using a generic or hardcoded branch ID for customer demo)
     const BRANCH_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
-    realtimeEventRouter.start(TENANT_ID, BRANCH_ID)
+    const topic = `tenant:${TENANT_ID}:branch:${BRANCH_ID}:operational`;
+    const adapter = new SupabaseTransportAdapter(supabase);
+    runtime.bootstrap('customer_orders_page', session.sessionId || 'anonymous_session', adapter, topic);
 
     // A real implementation would subscribe to projectionCoordinator's store
     // For this migration, we'll assume fetchOrders is re-triggered on relevant events, 
@@ -62,7 +65,7 @@ export default function OrdersPage() {
 
     return () => {
       clearInterval(fallbackPoll)
-      // We don't stop the router if other components need it, but for demo we can.
+      runtime.transport.suspend()
     }
   }, [tableNum, session.phone, session.name, session.sessionId])
 
