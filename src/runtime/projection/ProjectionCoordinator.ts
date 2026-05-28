@@ -32,20 +32,21 @@ export class ProjectionCoordinator {
   public async handleInvalidation(domain: RuntimeDomain, targetId?: string): Promise<void> {
     const currentEpoch = (this.domainEpochs.get(domain) || 0) + 1;
     this.domainEpochs.set(domain, currentEpoch);
+    const currentWatermark = this.localWatermarks.get(domain) || 0;
 
     // Cancel any currently in-flight rebuild for this domain (Collapse/Deduplicate)
     if (this.activeRebuilds.has(domain)) {
       const active = this.activeRebuilds.get(domain)!;
       active.abortController.abort('Stale rebuild cancelled by newer invalidation');
-      this.observability.recordProjectionRebuild(domain, 0, false, { reason: 'CANCELLED_BY_NEW_INVALIDATION' });
+      this.observability.recordProjectionRebuildCancelled(domain, active.epoch, 'CANCELLED_BY_NEW_INVALIDATION');
       console.debug(`[ProjectionCoordinator] Cancelled stale rebuild for ${domain}. Starting epoch ${currentEpoch}.`);
     }
 
+    this.observability.recordProjectionRebuildStarted(domain, currentEpoch, currentWatermark, targetId ? 'TARGETED_INVALIDATION' : 'DOMAIN_INVALIDATION');
+
     const abortController = new AbortController();
     
-    // Create the serialized rebuild promise
     const rebuildPromise = this.executeRebuild(domain, currentEpoch, abortController.signal, targetId).finally(() => {
-      // Clean up active rebuild reference if it hasn't been replaced
       if (this.activeRebuilds.get(domain)?.epoch === currentEpoch) {
         this.activeRebuilds.delete(domain);
       }
@@ -129,6 +130,7 @@ export class ProjectionCoordinator {
     
     if (incomingVersion <= currentWatermark && incomingVersion !== 0) {
       console.warn(`[ProjectionCoordinator] Stale projection rebuild ignored for orders. Incoming: ${incomingVersion}, Current: ${currentWatermark}`);
+      this.observability.recordProjectionStaleIgnored('orders', incomingVersion, currentWatermark);
       return currentWatermark; // Do not apply
     }
 

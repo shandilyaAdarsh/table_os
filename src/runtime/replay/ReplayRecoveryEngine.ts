@@ -31,21 +31,22 @@ export class ReplayRecoveryEngine {
     }
 
     console.warn(`[ReplayRecoveryEngine] Divergence confirmed for domain: ${domain}. Initiating authoritative recovery.`);
+    this.observability.recordGapDetected(domain, expectedWatermark, actualVersion);
     this.observability.recordRecoveryStart(domain, expectedWatermark, actualVersion);
     
     this.recoveringDomains.add(domain);
+    const recoveryStart = performance.now();
 
     try {
-      // Defer purely to the ProjectionCoordinator for a normalized atomic state replacement.
-      // We do not attempt to fetch a delta ledger or apply patches locally.
       await this.projectionCoordinator.handleInvalidation(domain);
       
+      const durationMs = performance.now() - recoveryStart;
       console.info(`[ReplayRecoveryEngine] Successfully recovered domain: ${domain} via authoritative rebuild.`);
-      this.observability.recordRecoverySuccess(domain);
+      this.observability.recordRecoverySuccess(domain, durationMs);
     } catch (error) {
+      const durationMs = performance.now() - recoveryStart;
       console.error(`[ReplayRecoveryEngine] Failed to recover domain: ${domain}`, error);
-      this.observability.recordRecoveryError(domain, error as Error);
-      // NOTE: Transport Manager will handle shifting to DEGRADED state if this fails structurally.
+      this.observability.recordRecoveryError(domain, error as Error, durationMs);
     } finally {
       this.recoveringDomains.delete(domain);
     }

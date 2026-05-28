@@ -50,6 +50,7 @@ export class RuntimeTransportManager {
     this.transitionTo('SYNCING');
     this.connectWebsocket();
     this.startHeartbeat();
+    this.observability.setSurface(topic);
   }
 
   public getState(): RuntimeState {
@@ -93,11 +94,13 @@ export class RuntimeTransportManager {
   }
 
   private handleConnected() {
+    const latency = Date.now() - this.lastApiContact;
+    this.observability.recordTransportConnected(latency);
     this.recordApiSuccess();
     
     if (this.currentState === 'RECONNECTING' || this.currentState === 'DEGRADED') {
+      this.observability.recordReconnectSucceeded(this.consecutiveFailures, latency);
       this.transitionTo('RECOVERING');
-      // Trigger recovery on active domains (hardcoded for now, would typically be derived from context)
       this.replayEngine.handleReconnectRecovery(['orders', 'tables']).then(() => {
         this.transitionTo('LIVE');
       });
@@ -109,11 +112,14 @@ export class RuntimeTransportManager {
   private handleDisconnected() {
     if (this.currentState === 'SUSPENDED' || this.currentState === 'FAILED') return;
     
+    this.observability.recordTransportDisconnected();
+    this.observability.recordReconnectStarted(this.consecutiveFailures + 1);
     this.transitionTo('RECONNECTING');
     
     // Attempt reconnect after backoff or fall into degraded state
     setTimeout(() => {
       if (this.currentState === 'RECONNECTING') {
+        this.observability.recordReconnectFailed(this.consecutiveFailures, 'Reconnect timeout exceeded 5s');
         this.transitionTo('DEGRADED');
       }
     }, 5000);
@@ -158,9 +164,8 @@ export class RuntimeTransportManager {
   private startPollingFallback() {
     if (this.pollingInterval) return;
     console.info(`[RuntimeTransportManager] Initiating Polling Fallback Mode`);
+    this.observability.recordDegradedPollingEnabled();
     
-    // Replace all component-level polling with centralized polling.
-    // E.g., we explicitly poll the ProjectionCoordinator for domains we care about
     this.pollingInterval = setInterval(async () => {
       try {
         await this.projectionCoordinator.handleInvalidation('orders');
@@ -169,12 +174,13 @@ export class RuntimeTransportManager {
       } catch (err) {
         this.recordApiFailure();
       }
-    }, 10000); // Poll every 10 seconds in degraded mode
+    }, 10000);
   }
 
   private stopPollingFallback() {
     if (this.pollingInterval) {
       console.info(`[RuntimeTransportManager] Terminating Polling Fallback Mode`);
+      this.observability.recordDegradedPollingDisabled();
       clearInterval(this.pollingInterval);
       this.pollingInterval = null;
     }

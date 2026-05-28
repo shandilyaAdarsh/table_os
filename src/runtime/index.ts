@@ -4,6 +4,7 @@ import { MutationGateway } from './mutation/MutationGateway';
 import { ReplayRecoveryEngine } from './replay/ReplayRecoveryEngine';
 import { RuntimeTransportManager } from './transport/RuntimeTransportManager';
 import { RuntimeObservabilityLayer } from './observability/RuntimeObservabilityLayer';
+import { RuntimeStormValidator } from './validation/RuntimeStormValidator';
 
 class RuntimeCompositionRoot {
   public observability: RuntimeObservabilityLayer;
@@ -45,6 +46,9 @@ class RuntimeCompositionRoot {
   public bootstrap(surfaceId: string, sessionId: string, adapter?: any, topic?: string): void {
     console.info(`[Runtime] Bootstrapping Runtime Infrastructure (Surface: ${surfaceId})`);
     
+    // Register surface with observability layer for telemetry attribution
+    this.observability.setSurface(surfaceId);
+
     // Initialize session bounds for mutations
     this.mutation.initializeSession(sessionId, surfaceId);
     
@@ -52,6 +56,21 @@ class RuntimeCompositionRoot {
     if (adapter && topic) {
       this.transport.initialize(adapter, topic);
     }
+  }
+
+  /**
+   * Run the full Runtime Convergence Certification suite.
+   * Call from devtools or CI harness: runtime.certify().then(console.log)
+   */
+  public async certify() {
+    const validator = new RuntimeStormValidator({
+      router: this.router,
+      projection: this.projection,
+      replay: this.replay,
+      transport: this.transport,
+      observability: this.observability,
+    });
+    return validator.runAll();
   }
 }
 

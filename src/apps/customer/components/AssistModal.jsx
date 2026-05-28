@@ -25,7 +25,6 @@ export default function AssistModal({ open, onClose }) {
     setError(null)
 
     try {
-    try {
       await submitMutation('/api/v1/runtime/mutations', {
         mutation_id: 'create_assistance_request',
         idempotency_key: crypto.randomUUID(),

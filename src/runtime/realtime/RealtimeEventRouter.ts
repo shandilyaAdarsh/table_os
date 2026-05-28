@@ -100,11 +100,15 @@ export class RealtimeEventRouter {
       const targetList = targets ? Array.from(targets) : [];
       this.pendingTargets.delete(domain);
 
-      // If we have multiple distinct targets, it might be more efficient to just rebuild the whole domain,
-      // or we pass undefined to trigger a full collection rebuild.
-      const shouldTarget = targetList.length === 1;
+      const collapseSize = targetList.length;
+      const shouldTarget = collapseSize === 1;
       const finalTarget = shouldTarget ? targetList[0] : undefined;
 
+      if (collapseSize > 1) {
+        this.observability.recordDebounceCollapse(domain, collapseSize);
+      }
+
+      this.observability.recordInvalidationEmitted(domain, this.watermarks[domain], collapseSize);
       console.debug(`[RealtimeEventRouter] Routing collapsed domain-scoped invalidation for ${domain} version ${this.watermarks[domain]}`);
       this.projectionCoordinator.handleInvalidation(domain, finalTarget);
     }, 50); // 50ms collapse window
