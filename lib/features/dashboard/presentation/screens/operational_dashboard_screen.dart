@@ -10,10 +10,8 @@ import '../../../auth/presentation/state/auth_notifier.dart';
 import '../../../tables/presentation/state/table_grid_notifier.dart';
 import '../../../kitchen/presentation/state/kitchen_runtime_providers.dart';
 import '../../../tables/domain/entities/restaurant_table.dart';
-import '../../../orders/domain/entities/order.dart';
 import '../../../auth/domain/entities/branch.dart';
 import '../../../realtime/presentation/widgets/diagnostics/degraded_mode_coordinator_widget.dart';
-import '../../../../core/runtime/diagnostics/operational_health_publisher.dart';
 
 class OperationalDashboardScreen extends ConsumerStatefulWidget {
   const OperationalDashboardScreen({super.key});
@@ -462,7 +460,7 @@ class _OperationalDashboardScreenState
       padding: EdgeInsets.all(AppSpacing.md(context)),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: highlight
               ? AppColors.primary
@@ -566,7 +564,7 @@ class _OperationalDashboardScreenState
               padding: EdgeInsets.all(AppSpacing.md(context)),
               decoration: BoxDecoration(
                 color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: AppColors.error.withValues(alpha: 0.3),
                   width: 1.5,
@@ -644,7 +642,7 @@ class _OperationalDashboardScreenState
           padding: EdgeInsets.all(AppSpacing.md(context)),
           decoration: BoxDecoration(
             color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
             ),
@@ -742,7 +740,7 @@ class _OperationalDashboardScreenState
           padding: EdgeInsets.all(AppSpacing.md(context)),
           decoration: BoxDecoration(
             color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
             ),
@@ -846,7 +844,7 @@ class _OperationalDashboardScreenState
           padding: EdgeInsets.all(AppSpacing.md(context)),
           decoration: BoxDecoration(
             color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
             ),

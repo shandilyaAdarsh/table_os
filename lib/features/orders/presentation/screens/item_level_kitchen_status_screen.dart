@@ -1,6 +1,7 @@
 // lib/features/orders/presentation/screens/item_level_kitchen_status_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/order.dart';
 import '../../domain/entities/order_item.dart';
@@ -85,13 +86,21 @@ class _ItemLevelKitchenStatusScreenState extends ConsumerState<ItemLevelKitchenS
               children: _stations.map((station) {
                 final stationItems = allItems.where((i) => i['station'] == station.name).toList();
 
-                return Card(
-                  color: isDark ? AppColors.darkSurface : Colors.white,
-                  shape: RoundedRectangleBorder(
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 24),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.darkSurface : Colors.white,
                     borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                    border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                    boxShadow: [
+                      if (!isDark)
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          offset: const Offset(0, 4),
+                          blurRadius: 12,
+                        ),
+                    ],
                   ),
-                  margin: const EdgeInsets.only(bottom: 20),
                   child: ExpansionTile(
                     initiallyExpanded: true,
                     leading: Icon(station.icon, color: station.themeColor, size: 28),
@@ -100,7 +109,7 @@ class _ItemLevelKitchenStatusScreenState extends ConsumerState<ItemLevelKitchenS
                       children: [
                         Text(
                           '${station.name} Station',
-                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 18),
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -168,7 +177,7 @@ class _ItemLevelKitchenStatusScreenState extends ConsumerState<ItemLevelKitchenS
                                         children: [
                                           Text(
                                             '${item.quantity}x ${item.product.name}',
-                                            style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
+                                            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 16),
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
@@ -264,14 +273,14 @@ class _ItemLevelKitchenStatusScreenState extends ConsumerState<ItemLevelKitchenS
     if (status == OrderItemStatus.served) color = AppColors.primary;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(100),
       ),
       child: Text(
         status.name.toUpperCase(),
-        style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 9),
+        style: GoogleFonts.plusJakartaSans(color: color, fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 0.5),
       ),
     );
   }

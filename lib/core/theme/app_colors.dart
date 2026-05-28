@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 
 class AppColors {
   // Brand Colors
-  static const Color primary = Color(0xFFF25C05); // Vibrant orange
-  static const Color secondary = Color(0xFFF2A30F); // Warm gold
+  static const Color primary = Color(0xFFE31E24); // Primary Red
+  static const Color secondary = Color(0xFF1A1C1E); // Secondary Dark Slate
 
   // Dark Mode Palette
   static const Color darkBackground = Color(0xFF121214);

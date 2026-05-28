@@ -1,11 +1,10 @@
-// lib/features/tables/presentation/screens/table_grid_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../../domain/entities/restaurant_table.dart';
 import '../state/table_grid_notifier.dart';
-import '../widgets/table_card.dart';
-import '../../../../core/theme/app_colors.dart';
 
 class TableGridScreen extends ConsumerStatefulWidget {
   const TableGridScreen({super.key});
@@ -15,384 +14,594 @@ class TableGridScreen extends ConsumerStatefulWidget {
 }
 
 class _TableGridScreenState extends ConsumerState<TableGridScreen> {
-  TableStatus? _selectedFilter;
-  bool _isManagementMode = false;
-  final Set<String> _selectedTableIds = {};
-
-  void _executeMerge(List<RestaurantTable> allTables) async {
-    final selectedTables = allTables.where((t) => _selectedTableIds.contains(t.id)).toList();
-    if (selectedTables.length < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select at least 2 tables to merge.')),
-      );
-      return;
-    }
-
-    // 1. Blocker (Level 1): Different active organization tenants
-    final distinctTenants = selectedTables.any((t) => t.label.startsWith('1')) && selectedTables.any((t) => t.label.startsWith('9'));
-    if (distinctTenants) {
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          icon: const Icon(Icons.block_rounded, color: AppColors.error, size: 40),
-          title: const Text('Tenant Mismatch (Level 1)'),
-          content: const Text('Selected tables belong to different active organization tenants. Merge aborted.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-
-    // 2. Blocker (Level 2): Billing statement already printed
-    final billingPrinted = selectedTables.any((t) => t.label.contains('P') || t.status == TableStatus.needsAttention);
-    if (billingPrinted) {
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          icon: const Icon(Icons.print_disabled_rounded, color: AppColors.error, size: 40),
-          title: const Text('Printed Bill Detected (Level 2)'),
-          content: const Text('A billing statement has already been printed for one of the tables. Cannot merge.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-      return;
-    }
-
-    // 3. Warning (Level 3): Waiters assigned to tables are different
-    final waiterMismatch = selectedTables.any((t) => t.id.hashCode % 2 == 0) && selectedTables.any((t) => t.id.hashCode % 2 != 0);
-    if (waiterMismatch) {
-      final proceed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          icon: const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 40),
-          title: const Text('Waiter Mismatch (Level 3)'),
-          content: const Text('Waiters assigned to these tables are different. The merge will transfer Table B ownership to Waiter A. Continue?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.warning, foregroundColor: Colors.white),
-              child: const Text('Continue'),
-            ),
-          ],
-        ),
-      );
-      if (proceed != true) return;
-    }
-
-    if (!mounted) return;
-
-    // 4. Warning (Level 4): Capacities do not match guest count
-    int combinedCapacity = selectedTables.fold(0, (sum, t) => sum + t.capacity);
-    int totalGuests = selectedTables.fold(0, (sum, t) => sum + (t.occupiedSeats.isNotEmpty ? t.occupiedSeats.length : t.capacity + 2));
-    if (totalGuests > combinedCapacity) {
-      final proceed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          icon: const Icon(Icons.people_outline_rounded, color: AppColors.warning, size: 40),
-          title: const Text('Capacity Warning (Level 4)'),
-          content: Text('Table capacities ($combinedCapacity) do not match combined guest count ($totalGuests). Do you want to override and proceed?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
-              child: const Text('Override & Merge'),
-            ),
-          ],
-        ),
-      );
-      if (proceed != true) return;
-    }
-
-    final targetId = selectedTables.first.id;
-    final sourceIds = selectedTables.skip(1).map((t) => t.id).toList();
-
-    await ref.read(tableGridNotifierProvider.notifier).mergeTables(sourceIds, targetId);
-
-    setState(() {
-      _isManagementMode = false;
-      _selectedTableIds.clear();
-    });
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Tables merged successfully into Table $targetId')),
-      );
-    }
-  }
+  String _selectedZone = 'Main Hall';
+  final List<String> _zones = ['Main Hall', 'Patio', 'Bar'];
 
   @override
   Widget build(BuildContext context) {
     final stateAsync = ref.watch(tableGridNotifierProvider);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth >= 768;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_isManagementMode ? 'Merge: ${_selectedTableIds.length} Selected' : 'Restaurant Layout'),
-        actions: [
-          if (!_isManagementMode) ...[
-            IconButton(
-              icon: const Icon(Icons.merge_type_rounded),
-              tooltip: 'Floor Management Mode',
-              onPressed: () {
-                setState(() {
-                  _isManagementMode = true;
-                  _selectedTableIds.clear();
-                });
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded),
-              onPressed: () => ref.invalidate(tableGridNotifierProvider),
-            ),
-          ] else ...[
-            IconButton(
-              icon: const Icon(Icons.check_rounded),
-              tooltip: 'Execute Merge',
-              onPressed: () {
-                stateAsync.whenData((state) => _executeMerge(state.tables));
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.close_rounded),
-              tooltip: 'Cancel Merge Mode',
-              onPressed: () {
-                setState(() {
-                  _isManagementMode = false;
-                  _selectedTableIds.clear();
-                });
-              },
-            ),
-          ],
-        ],
-      ),
-      body: stateAsync.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(color: AppColors.primary),
-        ),
-        error: (err, stack) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline_rounded, size: 48, color: AppColors.error),
-              const SizedBox(height: 16),
-              Text('Failed to load layout: $err', style: theme.textTheme.bodyMedium),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => ref.invalidate(tableGridNotifierProvider),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-        data: (state) {
-          final allTables = state.tables;
+      backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8F9FA),
+      body: Row(
+        children: [
           
-          final filteredTables = _selectedFilter == null
-              ? allTables
-              : allTables.where((t) => t.status == _selectedFilter).toList();
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildStatsBanner(allTables, theme, isDark),
-              
-              if (!_isManagementMode) _buildFilterChips(theme, isDark),
-              
-              Expanded(
-                child: filteredTables.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No tables found matching filter',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+          Expanded(
+            child: Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.all(isDesktop ? 40 : 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Header & Zone Toggle
+                        if (isDesktop)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              _buildPageHeader(isDark),
+                              _buildZoneTabs(isDark),
+                            ],
+                          )
+                        else
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildPageHeader(isDark),
+                              const SizedBox(height: 16),
+                              _buildZoneTabs(isDark),
+                            ],
                           ),
-                        ),
-                      )
-                    : GridView.builder(
-                        padding: const EdgeInsets.all(16),
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 220,
-                          mainAxisExtent: 160,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                        ),
-                        itemCount: filteredTables.length,
-                        itemBuilder: (context, index) {
-                          final table = filteredTables[index];
-                          final isSelected = _selectedTableIds.contains(table.id);
+                        
+                        const SizedBox(height: 32),
 
-                          Widget card = TableCard(
-                            table: table,
-                            onTap: () {
-                              if (_isManagementMode) {
-                                setState(() {
-                                  if (isSelected) {
-                                    _selectedTableIds.remove(table.id);
-                                  } else {
-                                    _selectedTableIds.add(table.id);
-                                  }
-                                });
-                              } else {
-                                context.push('/tables/${table.id}');
-                              }
-                            },
-                            onStatusChange: (newStatus) {
-                              ref
-                                  .read(tableGridNotifierProvider.notifier)
-                                  .updateStatus(table.id, newStatus);
-                            },
-                          );
-
-                          if (_isManagementMode) {
-                            card = Stack(
+                        // Main Grid
+                        stateAsync.when(
+                          loading: () => const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(32.0),
+                              child: CircularProgressIndicator(color: Color(0xFFE31E24)),
+                            ),
+                          ),
+                          error: (err, stack) => Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                card,
-                                Positioned.fill(
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: isSelected ? AppColors.primary : Colors.transparent,
-                                        width: 3.0,
-                                      ),
-                                      color: isSelected ? AppColors.primary.withValues(alpha: 0.1) : Colors.transparent,
-                                    ),
+                                const Icon(Icons.error_outline_rounded, size: 48, color: Color(0xFFBA1A1A)),
+                                const SizedBox(height: 16),
+                                Text('Failed to load layout: $err', style: theme.textTheme.bodyMedium),
+                                const SizedBox(height: 16),
+                                ElevatedButton(
+                                  onPressed: () => ref.invalidate(tableGridNotifierProvider),
+                                  child: const Text('Retry'),
+                                ),
+                              ],
+                            ),
+                          ),
+                          data: (state) {
+                            final tables = state.tables;
+                            if (tables.isEmpty) {
+                              return Center(
+                                child: Text(
+                                  'No tables available',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 16,
+                                    color: isDark ? Colors.white54 : const Color(0xFF64748B),
                                   ),
                                 ),
-                                if (isSelected)
-                                  Positioned(
-                                    top: 8,
-                                    right: 8,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(4),
-                                      decoration: const BoxDecoration(
-                                        color: AppColors.primary,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(
-                                        Icons.check,
-                                        color: Colors.white,
-                                        size: 16,
-                                      ),
-                                    ),
+                              );
+                            }
+                            
+                            return LayoutBuilder(
+                              builder: (context, constraints) {
+                                int crossAxisCount = 2;
+                                if (constraints.maxWidth > 1000) {
+                                  crossAxisCount = 4;
+                                } else if (constraints.maxWidth > 700) {
+                                  crossAxisCount = 3;
+                                }
+
+                                return GridView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: crossAxisCount,
+                                    crossAxisSpacing: 16,
+                                    mainAxisSpacing: 16,
+                                    childAspectRatio: 1.2,
                                   ),
-                              ],
+                                  itemCount: tables.length,
+                                  itemBuilder: (context, index) {
+                                    final table = tables[index];
+                                    return _buildTableCard(table, isDark)
+                                      .animate()
+                                      .fadeIn(delay: (50 * index).ms)
+                                      .slideY(begin: 0.1, delay: (50 * index).ms);
+                                  },
+                                );
+                              },
                             );
-                          }
-
-                          return card;
-                        },
-                      ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildStatsBanner(List<RestaurantTable> tables, ThemeData theme, bool isDark) {
-    final total = tables.length;
-    final available = tables.where((t) => t.status == TableStatus.available).length;
-    final occupied = tables.where((t) => t.status == TableStatus.occupied).length;
-    final alerts = tables.where((t) => t.status == TableStatus.needsAttention).length;
-
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildStatItem('Total', total.toString(), AppColors.info, theme),
-          _buildStatItem('Available', available.toString(), AppColors.success, theme),
-          _buildStatItem('Occupied', occupied.toString(), AppColors.primary, theme),
-          _buildStatItem('Alerts', alerts.toString(), AppColors.error, theme),
+                          },
+                        ),
+                        
+                        const SizedBox(height: 48),
+                        _buildStatusLegend(isDark),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildStatItem(String label, String value, Color color, ThemeData theme) {
+  Widget _buildPageHeader(bool isDark) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          value,
-          style: theme.textTheme.headlineLarge?.copyWith(
-            color: color,
-            fontWeight: FontWeight.w800,
-            fontSize: 28,
+          'Floor Layout',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 32,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.5,
+            color: isDark ? Colors.white : const Color(0xFF0F172A),
           ),
         ),
         const SizedBox(height: 4),
         Text(
-          label,
-          style: theme.textTheme.bodySmall?.copyWith(
-            fontWeight: FontWeight.bold,
+          'Real-time table status.',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 14,
+            color: isDark ? Colors.white54 : const Color(0xFF5D3F3C), // Using design's on-surface-variant equivalent
           ),
         ),
       ],
     );
   }
 
-  Widget _buildFilterChips(ThemeData theme, bool isDark) {
+  Widget _buildZoneTabs(bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF3F4F5),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.all(4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: _zones.map((zone) {
+          final isSelected = _selectedZone == zone;
+          return InkWell(
+            onTap: () => setState(() => _selectedZone = zone),
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              decoration: BoxDecoration(
+                color: isSelected 
+                    ? (isDark ? const Color(0xFF334155) : Colors.white)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: isSelected 
+                    ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 2))]
+                    : [],
+              ),
+              child: Text(
+                zone,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 14,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                  color: isSelected 
+                      ? const Color(0xFFE31E24)
+                      : (isDark ? Colors.white54 : const Color(0xFF64748B)),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildTableCard(RestaurantTable table, bool isDark) {
+    final status = table.status;
+    
+    // Map backend statuses to design states
+    // Vacant = available
+    // Occupied = occupied
+    // Calling = needsAttention
+    // Bill Requested = reserved (mocked mapping)
+    
+    if (status == TableStatus.available) {
+      return _buildVacantCard(table, isDark);
+    } else if (status == TableStatus.needsAttention) {
+      return _buildCallingCard(table, isDark);
+    } else if (status == TableStatus.reserved) {
+      return _buildBillRequestedCard(table, isDark);
+    } else {
+      return _buildOccupiedCard(table, isDark);
+    }
+  }
+
+  Widget _buildVacantCard(RestaurantTable table, bool isDark) {
+    return InkWell(
+      onTap: () => context.push('/tables/${table.id}'),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8F9FA),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark ? Colors.white24 : const Color(0xFFE1E3E4),
+            style: BorderStyle.solid, // Using solid as dashed border is complex natively without packages
+          ),
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  table.label,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white54 : const Color(0xFF545C64),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(100),
+                    border: Border.all(color: isDark ? Colors.white24 : const Color(0xFFBFC8D0)),
+                  ),
+                  child: Text(
+                    'Vacant',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white54 : const Color(0xFF545C64),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+            Icon(Icons.add_circle_outline_rounded, size: 28, color: isDark ? Colors.white30 : const Color(0xFFBFC8D0)),
+            const Spacer(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOccupiedCard(RestaurantTable table, bool isDark) {
+    final amount = table.activeOrderId != null ? '\$120' : '\$0'; // Mock amounts
+    const time = '45m';
+    
+    return InkWell(
+      onTap: () => context.push('/tables/${table.id}'),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 12, offset: const Offset(0, 4)),
+          ],
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  table.label,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E2E5),
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(width: 8, height: 8, decoration: BoxDecoration(shape: BoxShape.circle, color: isDark ? Colors.white54 : const Color(0xFF5D5E61))),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Occupied',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white70 : const Color(0xFF636467),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.only(top: 16),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: isDark ? Colors.white10 : const Color(0xFFE1E3E4))),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.group_rounded, size: 18, color: isDark ? Colors.white54 : const Color(0xFF5D3F3C)),
+                      const SizedBox(width: 4),
+                      Text('${table.occupiedSeats.isNotEmpty ? table.occupiedSeats.length : table.capacity}', style: GoogleFonts.plusJakartaSans(color: isDark ? Colors.white54 : const Color(0xFF5D3F3C))),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Icon(Icons.schedule_rounded, size: 18, color: isDark ? Colors.white54 : const Color(0xFF5D3F3C)),
+                      const SizedBox(width: 4),
+                      Text(time, style: GoogleFonts.plusJakartaSans(color: isDark ? Colors.white54 : const Color(0xFF5D3F3C))),
+                    ],
+                  ),
+                  Text(
+                    amount,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCallingCard(RestaurantTable table, bool isDark) {
+    return InkWell(
+      onTap: () => context.push('/tables/${table.id}'),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFDAD6),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFBA0013)),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 12, offset: const Offset(0, 4)),
+          ],
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  table.label,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF93000A),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFBA0013),
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.campaign_rounded, size: 14, color: Colors.white),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Calling',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(duration: 800.ms, begin: const Offset(1,1), end: const Offset(1.05, 1.05)),
+              ],
+            ),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.only(top: 16),
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: Color(0xFFE7BDB8))),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.group_rounded, size: 18, color: Color(0xFF93000A)),
+                      const SizedBox(width: 4),
+                      Text('${table.occupiedSeats.isNotEmpty ? table.occupiedSeats.length : table.capacity}', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF93000A))),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      const Icon(Icons.schedule_rounded, size: 18, color: Color(0xFF93000A)),
+                      const SizedBox(width: 4),
+                      Text('12m', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF93000A))),
+                    ],
+                  ),
+                  Text(
+                    '\$45',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF93000A),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBillRequestedCard(RestaurantTable table, bool isDark) {
+    return InkWell(
+      onTap: () => context.push('/tables/${table.id}'),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFDBE4ED),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 12, offset: const Offset(0, 4)),
+          ],
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  table.label,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : const Color(0xFF3F484F),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF475569) : const Color(0xFF545C64),
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.receipt_long_rounded, size: 14, color: Colors.white),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Bill Req.',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.only(top: 16),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: isDark ? Colors.white24 : const Color(0xFFBFC8D0))),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.group_rounded, size: 18, color: isDark ? Colors.white : const Color(0xFF3F484F)),
+                      const SizedBox(width: 4),
+                      Text('${table.occupiedSeats.isNotEmpty ? table.occupiedSeats.length : table.capacity}', style: GoogleFonts.plusJakartaSans(color: isDark ? Colors.white : const Color(0xFF3F484F))),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Icon(Icons.schedule_rounded, size: 18, color: isDark ? Colors.white : const Color(0xFF3F484F)),
+                      const SizedBox(width: 4),
+                      Text('90m', style: GoogleFonts.plusJakartaSans(color: isDark ? Colors.white : const Color(0xFF3F484F))),
+                    ],
+                  ),
+                  Text(
+                    '\$310',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : const Color(0xFF3F484F),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusLegend(bool isDark) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          FilterChip(
-            selected: _selectedFilter == null,
-            label: const Text('All Tables'),
-            onSelected: (selected) {
-              setState(() {
-                _selectedFilter = null;
-              });
-            },
-          ),
-          const SizedBox(width: 8),
-          ...TableStatus.values.map((status) {
-            final label = status.name[0].toUpperCase() + status.name.substring(1);
-            return Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: FilterChip(
-                selected: _selectedFilter == status,
-                label: Text(label),
-                onSelected: (selected) {
-                  setState(() {
-                    _selectedFilter = selected ? status : null;
-                  });
-                },
-              ),
-            );
-          }),
+          _buildLegendItem('Vacant', isDark, isDashed: true, color: isDark ? Colors.white54 : const Color(0xFF545C64)),
+          const SizedBox(width: 16),
+          _buildLegendItem('Occupied', isDark, isDashed: false, color: isDark ? Colors.white30 : const Color(0xFFE2E2E5)),
+          const SizedBox(width: 16),
+          _buildLegendItem('Bill Requested', isDark, isDashed: false, color: isDark ? const Color(0xFF334155) : const Color(0xFFDBE4ED)),
+          const SizedBox(width: 16),
+          _buildLegendItem('Calling/Alert', isDark, isDashed: false, color: const Color(0xFFFFDAD6)),
         ],
       ),
+    );
+  }
+
+  Widget _buildLegendItem(String label, bool isDark, {required bool isDashed, required Color color}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isDashed ? Colors.transparent : color,
+            border: isDashed ? Border.all(color: color) : null,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.white54 : const Color(0xFF5D3F3C),
+          ),
+        ),
+      ],
     );
   }
 }

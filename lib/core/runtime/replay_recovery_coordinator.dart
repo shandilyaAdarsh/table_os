@@ -6,6 +6,7 @@ import 'projection_rebuild_engine.dart';
 
 /// Handles sequence recovery when the transport reconnects after an outage.
 class ReplayRecoveryCoordinator {
+  // ignore: unused_field
   final DeterministicProjectionStore _store;
   final ProjectionRebuildEngine _rebuildEngine;
 

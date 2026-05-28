@@ -17,6 +17,12 @@
 //   - Recovery is epoch-safe — events from wrong epoch are discarded.
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
+import 'package:uuid/uuid.dart';
+import '../../../../core/network/dio_client.dart';
+import '../../../../core/network/secure_storage.dart';
+import '../../../../core/network/network_providers.dart';
 import 'entities/kitchen_ticket.dart';
 
 // ━━━━━━━━━━━━━━━━━━━━━━ RECOVERY RESULT ━━━━━━━━━━━━━━━━━━━━━━
@@ -86,6 +92,10 @@ class KitchenReplayEvent {
 // ━━━━━━━━━━━━━━━━━━━━━━ COORDINATOR ━━━━━━━━━━━━━━━━━━━━━━
 
 class TicketReplayRecoveryCoordinator {
+  final ProviderRef ref;
+
+  TicketReplayRecoveryCoordinator(this.ref);
+
   /// Checkpoint: last successfully recovered sequence per branch.
   final Map<String, int> _recoveryCheckpoints = {};
 
@@ -225,9 +235,28 @@ class TicketReplayRecoveryCoordinator {
   }) async {
     debugPrint(
         '[TicketReplayRecoveryCoordinator] Fetching snapshot: branch=$branchId');
-    // TODO: Replace with real API call
-    // GET /kitchen/snapshot?branchId=$branchId&epochId=$epochId
-    await Future.delayed(const Duration(milliseconds: 50));
+    final dio = ref.read(dioClientProvider);
+    const secureStorage = SecureLocalStorage();
+    final token = await secureStorage.read('runtime_token');
+    
+    try {
+      final response = await dio.get(
+        '/api/v1/kitchen',
+        queryParameters: {'branchId': branchId},
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final list = response.data['data']['queue'] as List;
+        return list.map((json) => json as Map<String, dynamic>).toList();
+      }
+    } catch (e) {
+      debugPrint('[TicketReplayRecoveryCoordinator] Fetch snapshot failed: $e');
+    }
     return [];
   }
 
@@ -239,9 +268,42 @@ class TicketReplayRecoveryCoordinator {
     debugPrint(
         '[TicketReplayRecoveryCoordinator] Fetching delta events: '
         'branch=$branchId fromSeq=$fromSequence');
-    // TODO: Replace with real API call
-    // GET /kitchen/events?branchId=$branchId&fromSequence=$fromSequence
-    await Future.delayed(const Duration(milliseconds: 50));
+    final dio = ref.read(dioClientProvider);
+    const secureStorage = SecureLocalStorage();
+    final token = await secureStorage.read('runtime_token');
+    
+    try {
+      final response = await dio.post(
+        '/api/v1/kitchen/reconcile',
+        data: {
+          'branchId': branchId,
+          'lastKnownSequence': fromSequence - 1,
+        },
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final recon = response.data['data']['reconciliation'];
+        final eventsList = recon['events'] as List? ?? [];
+        return eventsList.map((e) {
+          final jsonMap = e as Map<String, dynamic>;
+          final payload = jsonMap['payload'] as Map<String, dynamic>;
+          return KitchenReplayEvent(
+            idempotencyKey: payload['idempotencyKey'] as String? ?? const Uuid().v4(),
+            sequenceNumber: jsonMap['sequenceNumber'] as int,
+            epochId: payload['epochId'] as String? ?? epochId,
+            isItemUpdate: jsonMap['eventType'] == 'kitchen_item_update',
+            payload: payload,
+          );
+        }).toList();
+      }
+    } catch (e) {
+      debugPrint('[TicketReplayRecoveryCoordinator] Fetch delta events failed: $e');
+    }
     return [];
   }
 }

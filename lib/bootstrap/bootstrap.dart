@@ -56,6 +56,20 @@ Future<void> bootstrap({
       ),
     );
 
+    // Auto-login platform session if not already logged in
+    final client = Supabase.instance.client;
+    if (client.auth.currentSession == null) {
+      try {
+        await client.auth.signInWithPassword(
+          email: 'admin@tableos.in',
+          password: 'Admin@123456',
+        );
+        talker.info('[Supabase] Platform session established.');
+      } catch (e) {
+        talker.error('[Supabase] Failed to establish platform session: $e');
+      }
+    }
+
     // Hydrate base system preferences
     final sharedPreferences = await SharedPreferences.getInstance();
 

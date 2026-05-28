@@ -98,9 +98,9 @@ class RuntimeDiagnosticsCoordinator {
 
   RuntimeDiagnosticsCoordinator({
     required this._ref,
-    required TransportMetricsTracker metricsTracker,
+    required this._metricsTracker,
     this.refreshInterval = const Duration(seconds: 3),
-  }) : _metricsTracker = metricsTracker;
+  });
 
   // ━━━━━━━━━━━━━━━━━━━━━━ LIFECYCLE ━━━━━━━━━━━━━━━━━━━━━━
 

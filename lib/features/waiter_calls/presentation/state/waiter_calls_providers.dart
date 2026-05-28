@@ -5,13 +5,22 @@ import '../../../../core/network/network_providers.dart';
 import '../../domain/entities/waiter_call.dart';
 import '../../domain/repositories/waiter_calls_repository.dart';
 import '../../data/repositories/waiter_calls_repository_impl.dart';
+import '../../data/datasources/remote/waiter_calls_remote_datasource.dart';
+
+final waiterCallsRemoteDatasourceProvider = Provider<WaiterCallsRemoteDatasource>((ref) {
+  final dio = ref.watch(dioClientProvider);
+  return WaiterCallsRemoteDatasourceImpl(dio);
+});
 
 final waiterCallsRepositoryProvider = Provider<WaiterCallsRepository>((ref) {
   final network = ref.watch(networkInfoProvider);
   final offlineQueue = ref.watch(offlineQueueManagerProvider);
+  final remote = ref.watch(waiterCallsRemoteDatasourceProvider);
   return WaiterCallsRepositoryImpl(
     networkInfo: network,
     offlineQueue: offlineQueue,
+    remote: remote,
+    ref: ref,
   );
 });
 

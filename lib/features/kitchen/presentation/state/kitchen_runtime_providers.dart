@@ -35,7 +35,7 @@ final kitchenProjectionRebuildEngineProvider =
 /// Singleton replay recovery coordinator.
 final ticketReplayRecoveryCoordinatorProvider =
     Provider<TicketReplayRecoveryCoordinator>((ref) {
-  return TicketReplayRecoveryCoordinator();
+  return TicketReplayRecoveryCoordinator(ref);
 });
 
 /// Singleton KitchenRuntimeCoordinator — the ONLY gateway for kitchen events.

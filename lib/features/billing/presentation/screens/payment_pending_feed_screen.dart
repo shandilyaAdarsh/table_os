@@ -156,7 +156,7 @@ class _PaymentPendingFeedScreenState extends ConsumerState<PaymentPendingFeedScr
                           Expanded(
                             child: OutlinedButton(
                               style: OutlinedButton.styleFrom(
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                               ),
                               onPressed: () {
                                 HapticFeedback.lightImpact();
@@ -171,7 +171,7 @@ class _PaymentPendingFeedScreenState extends ConsumerState<PaymentPendingFeedScr
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
                                 foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                               ),
                               onPressed: () {
                                 HapticFeedback.lightImpact();

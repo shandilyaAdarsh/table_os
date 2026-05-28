@@ -1,6 +1,7 @@
 // lib/features/orders/presentation/screens/order_details_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/order.dart';
 import '../../domain/entities/order_item.dart';
@@ -90,20 +91,28 @@ class OrderDetailsScreen extends ConsumerWidget {
 
     final currentStageIndex = stages.indexOf(order.status);
 
-    return Card(
-      color: isDark ? AppColors.darkSurface : Colors.white,
-      shape: RoundedRectangleBorder(
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              offset: const Offset(0, 4),
+              blurRadius: 12,
+            ),
+        ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Order Flow Stage',
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 18),
             ),
             const SizedBox(height: 16),
             Row(
@@ -200,14 +209,22 @@ class OrderDetailsScreen extends ConsumerWidget {
     ThemeData theme,
     bool isDark,
   ) {
-    return Card(
-      color: isDark ? AppColors.darkSurface : Colors.white,
-      shape: RoundedRectangleBorder(
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              offset: const Offset(0, 4),
+              blurRadius: 12,
+            ),
+        ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(24.0),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -302,14 +319,22 @@ class OrderDetailsScreen extends ConsumerWidget {
 
     final sortedSeats = groupedItems.keys.toList()..sort();
 
-    return Card(
-      color: isDark ? AppColors.darkSurface : Colors.white,
-      shape: RoundedRectangleBorder(
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              offset: const Offset(0, 4),
+              blurRadius: 12,
+            ),
+        ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -318,11 +343,11 @@ class OrderDetailsScreen extends ConsumerWidget {
               children: [
                 Text(
                   'Order Items',
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 18),
                 ),
                 Text(
                   order.totalPrice.formatted,
-                  style: theme.textTheme.titleMedium?.copyWith(color: AppColors.primary, fontWeight: FontWeight.bold),
+                  style: GoogleFonts.plusJakartaSans(color: AppColors.primary, fontWeight: FontWeight.w800, fontSize: 18),
                 ),
               ],
             ),
@@ -481,20 +506,28 @@ class OrderDetailsScreen extends ConsumerWidget {
   }
 
   Widget _buildCancelLogsCard(Order order, ThemeData theme, bool isDark) {
-    return Card(
-      color: isDark ? AppColors.darkSurface : Colors.white,
-      shape: RoundedRectangleBorder(
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              offset: const Offset(0, 4),
+              blurRadius: 12,
+            ),
+        ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Cancellation Audit Logs',
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 18),
             ),
             const Divider(height: 24),
             if (order.cancelLogs.isEmpty)

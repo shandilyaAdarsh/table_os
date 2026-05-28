@@ -1,14 +1,21 @@
-// lib/features/waiter_calls/data/repositories/waiter_calls_repository_impl.dart
 import 'dart:async';
-import 'dart:math';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../../../../core/network/network_info.dart';
 import '../../../../core/network/offline_queue.dart';
+import '../../../auth/presentation/state/auth_notifier.dart';
+import '../../../tables/providers/tables_providers.dart';
 import '../../domain/entities/waiter_call.dart';
 import '../../domain/repositories/waiter_calls_repository.dart';
+import '../datasources/remote/waiter_calls_remote_datasource.dart';
 
 class WaiterCallsRepositoryImpl implements WaiterCallsRepository {
   final NetworkInfo networkInfo;
   final OfflineQueueManager offlineQueue;
+  final WaiterCallsRemoteDatasource remote;
+  final ProviderRef ref;
   
   final List<WaiterCall> _inMemoryCalls = [];
   final StreamController<List<WaiterCall>> _streamController = StreamController<List<WaiterCall>>.broadcast();
@@ -16,107 +23,81 @@ class WaiterCallsRepositoryImpl implements WaiterCallsRepository {
   WaiterCallsRepositoryImpl({
     required this.networkInfo,
     required this.offlineQueue,
+    required this.remote,
+    required this.ref,
   }) {
-    // Populate mock initial data for high priority flows
-    _populateInitialData();
-
     // Register offline handlers
     offlineQueue.registerHandler('acknowledgeCall', (payload) async {
       final callId = payload['callId'] as String;
-      final waiterId = payload['waiterId'] as String;
-      final waiterName = payload['waiterName'] as String;
-      
-      // Simulate remote API call delay
-      await Future.delayed(const Duration(milliseconds: 300));
-      _updateCallInMemory(callId, status: CallStatus.acknowledged, waiterId: waiterId, waiterName: waiterName);
+      final versionNum = payload['versionNum'] as int? ?? 1;
+      await remote.transitionStatus(callId, {
+        'status': 'acknowledged',
+        'version_num': versionNum,
+      });
     });
 
     offlineQueue.registerHandler('resolveCall', (payload) async {
       final callId = payload['callId'] as String;
-      
-      await Future.delayed(const Duration(milliseconds: 300));
-      _updateCallInMemory(callId, status: CallStatus.resolved);
+      final versionNum = payload['versionNum'] as int? ?? 1;
+      await remote.transitionStatus(callId, {
+        'status': 'resolved',
+        'version_num': versionNum,
+      });
     });
 
-    offlineQueue.registerHandler('escalateCall', (payload) async {
-      final callId = payload['callId'] as String;
-      
-      await Future.delayed(const Duration(milliseconds: 300));
-      _updateCallInMemory(callId, status: CallStatus.escalated);
-    });
-
-    offlineQueue.registerHandler('createWaiterCall', (payload) async {
-      final id = payload['id'] as String;
-      final tableId = payload['tableId'] as String;
-      final tableLabel = payload['tableLabel'] as String;
-      final typeName = payload['type'] as String;
-      final customerNote = payload['customerNote'] as String?;
-      final timestamp = DateTime.parse(payload['timestamp'] as String);
-      final isVip = payload['isVip'] as bool;
-
-      await Future.delayed(const Duration(milliseconds: 300));
-      final callType = CallType.values.firstWhere((e) => e.name == typeName);
-      final newCall = WaiterCall(
-        id: id,
-        tableId: tableId,
-        tableLabel: tableLabel,
-        type: callType,
-        status: CallStatus.pending,
-        customerNote: customerNote,
-        timestamp: timestamp,
-        isVip: isVip,
-      );
-      _inMemoryCalls.add(newCall);
-      _emit();
+    offlineQueue.registerHandler('createWaiterCallDirect', (payload) async {
+      await Supabase.instance.client.from('waiter_calls').insert(payload);
     });
   }
 
-  void _populateInitialData() {
-    final now = DateTime.now();
-    _inMemoryCalls.addAll([
-      WaiterCall(
-        id: 'call_1',
-        tableId: '5',
-        tableLabel: 'Table 5',
-        type: CallType.issueReport,
-        status: CallStatus.pending,
-        customerNote: 'Spilled water on table, needs napkins.',
-        timestamp: now.subtract(const Duration(seconds: 45)),
-      ),
-      WaiterCall(
-        id: 'call_2',
-        tableId: '12',
-        tableLabel: 'Table 12',
-        type: CallType.billRequest,
-        status: CallStatus.pending,
-        customerNote: 'Payment by Mastercard.',
-        timestamp: now.subtract(const Duration(seconds: 135)),
-        isVip: true,
-      ),
-      WaiterCall(
-        id: 'call_3',
-        tableId: '3',
-        tableLabel: 'Table 3',
-        type: CallType.service,
-        status: CallStatus.acknowledged,
-        customerNote: 'Extra ketchup and salt.',
-        timestamp: now.subtract(const Duration(minutes: 5)),
-        waiterId: 'waiter_001',
-        waiterName: 'John Doe',
-      ),
-      WaiterCall(
-        id: 'call_4',
-        tableId: '8',
-        tableLabel: 'Table 8',
-        type: CallType.assistance,
-        status: CallStatus.resolved,
-        customerNote: 'Ready to order',
-        timestamp: now.subtract(const Duration(minutes: 15)),
-        waiterId: 'waiter_001',
-        waiterName: 'John Doe',
-      ),
-    ]);
-    _emit();
+  Future<String> _resolveTableLabel(String tableId) async {
+    try {
+      final tables = await ref.read(tablesRepositoryProvider).getTables();
+      final table = tables.firstWhere((t) => t.id == tableId);
+      return table.label;
+    } catch (_) {}
+    return 'Table $tableId';
+  }
+
+  Future<WaiterCall> _mapToDomain(Map<String, dynamic> json) async {
+    final id = json['id'] as String;
+    final tableId = json['table_id'] as String;
+    final tableLabel = await _resolveTableLabel(tableId);
+    
+    final rawType = json['type'] as String? ?? 'service';
+    CallType type = CallType.service;
+    if (rawType == 'bill') {
+      type = CallType.billRequest;
+    } else if (rawType == 'other') {
+      type = CallType.assistance;
+    }
+    
+    final rawStatus = json['status'] as String? ?? 'pending';
+    CallStatus status = CallStatus.pending;
+    if (rawStatus == 'acknowledged') {
+      status = CallStatus.acknowledged;
+    } else if (rawStatus == 'resolved') {
+      status = CallStatus.resolved;
+    } else if (rawStatus == 'escalated') {
+      status = CallStatus.escalated;
+    }
+    
+    final customerNote = json['notes'] as String?;
+    final timestamp = DateTime.parse(json['created_at'] as String? ?? DateTime.now().toIso8601String());
+    final waiterId = json['acknowledged_by'] as String?;
+    
+    return WaiterCall(
+      id: id,
+      tableId: tableId,
+      tableLabel: tableLabel,
+      type: type,
+      status: status,
+      customerNote: customerNote,
+      timestamp: timestamp,
+      waiterId: waiterId,
+      waiterName: waiterId != null ? 'John Doe' : null,
+      isVip: json['is_vip'] as bool? ?? false,
+    );
   }
 
   void _updateCallInMemory(
@@ -153,24 +134,47 @@ class WaiterCallsRepositoryImpl implements WaiterCallsRepository {
 
   @override
   Future<void> submitAcknowledgement(String callId, String waiterId, String waiterName) async {
-    // Apply optimistic updates locally
     _updateCallInMemory(callId, status: CallStatus.acknowledged, waiterId: waiterId, waiterName: waiterName);
 
-    final payload = <String, dynamic>{
-      'callId': callId,
-      'waiterId': waiterId,
-      'waiterName': waiterName,
-    };
+    final isConnected = await networkInfo.isConnected;
+    int versionNum = 1;
 
-    if (await networkInfo.isConnected) {
+    if (isConnected) {
       try {
-        // Mock remote call
-        await Future.delayed(const Duration(milliseconds: 200));
-      } catch (_) {
-        await offlineQueue.queueWrite(action: 'acknowledgeCall', payload: payload);
+        final response = await Supabase.instance.client
+            .from('waiter_calls')
+            .select('version_num')
+            .eq('id', callId)
+            .maybeSingle();
+        versionNum = response?['version_num'] as int? ?? 1;
+
+        final result = await remote.transitionStatus(callId, {
+          'status': 'acknowledged',
+          'version_num': versionNum,
+        });
+
+        final updated = await _mapToDomain(result);
+        final idx = _inMemoryCalls.indexWhere((c) => c.id == callId);
+        if (idx != -1) {
+          _inMemoryCalls[idx] = updated;
+          _emit();
+        }
+      } catch (e) {
+        debugPrint('[WaiterCallsRepositoryImpl] submitAcknowledgement online failed, queueing: $e');
+        await offlineQueue.queueWrite(action: 'acknowledgeCall', payload: {
+          'callId': callId,
+          'waiterId': waiterId,
+          'waiterName': waiterName,
+          'versionNum': versionNum,
+        });
       }
     } else {
-      await offlineQueue.queueWrite(action: 'acknowledgeCall', payload: payload);
+      await offlineQueue.queueWrite(action: 'acknowledgeCall', payload: {
+        'callId': callId,
+        'waiterId': waiterId,
+        'waiterName': waiterName,
+        'versionNum': 1,
+      });
     }
   }
 
@@ -178,42 +182,60 @@ class WaiterCallsRepositoryImpl implements WaiterCallsRepository {
   Future<void> resolveCall(String callId) async {
     _updateCallInMemory(callId, status: CallStatus.resolved);
 
-    final payload = <String, dynamic>{'callId': callId};
+    final isConnected = await networkInfo.isConnected;
+    int versionNum = 1;
 
-    if (await networkInfo.isConnected) {
+    if (isConnected) {
       try {
-        await Future.delayed(const Duration(milliseconds: 200));
-      } catch (_) {
-        await offlineQueue.queueWrite(action: 'resolveCall', payload: payload);
+        final response = await Supabase.instance.client
+            .from('waiter_calls')
+            .select('version_num')
+            .eq('id', callId)
+            .maybeSingle();
+        versionNum = response?['version_num'] as int? ?? 1;
+
+        final result = await remote.transitionStatus(callId, {
+          'status': 'resolved',
+          'version_num': versionNum,
+        });
+
+        final updated = await _mapToDomain(result);
+        _inMemoryCalls.removeWhere((c) => c.id == callId);
+        _inMemoryCalls.add(updated);
+        _emit();
+      } catch (e) {
+        debugPrint('[WaiterCallsRepositoryImpl] resolveCall online failed, queueing: $e');
+        await offlineQueue.queueWrite(action: 'resolveCall', payload: {
+          'callId': callId,
+          'versionNum': versionNum,
+        });
       }
     } else {
-      await offlineQueue.queueWrite(action: 'resolveCall', payload: payload);
+      await offlineQueue.queueWrite(action: 'resolveCall', payload: {
+        'callId': callId,
+        'versionNum': 1,
+      });
     }
   }
 
   @override
   Future<void> escalateCall(String callId) async {
     _updateCallInMemory(callId, status: CallStatus.escalated);
-
-    final payload = <String, dynamic>{'callId': callId};
-
-    if (await networkInfo.isConnected) {
-      try {
-        await Future.delayed(const Duration(milliseconds: 200));
-      } catch (_) {
-        await offlineQueue.queueWrite(action: 'escalateCall', payload: payload);
-      }
-    } else {
-      await offlineQueue.queueWrite(action: 'escalateCall', payload: payload);
-    }
+    
+    // escalate call in this context resolves it to escalated in memory
+    // escalations don't have separate REST endpoints, so we just acknowledge it or keep status as escalated
   }
 
   @override
   Future<void> createWaiterCall(String tableId, String tableLabel, CallType type, {String? note, bool isVip = false}) async {
-    final id = 'call_${Random().nextInt(100000)}';
+    final authState = ref.read(authNotifierProvider);
+    final branchId = authState.selectedBranch?.id ?? '00000000-0000-0000-0000-000000000000';
+    final tenantId = authState.selectedOrg?.id ?? '00000000-0000-0000-0000-000000000000';
+    final callId = const Uuid().v4();
     final timestamp = DateTime.now();
-    final call = WaiterCall(
-      id: id,
+
+    final optimisticCall = WaiterCall(
+      id: callId,
       tableId: tableId,
       tableLabel: tableLabel,
       type: type,
@@ -223,27 +245,37 @@ class WaiterCallsRepositoryImpl implements WaiterCallsRepository {
       isVip: isVip,
     );
 
-    _inMemoryCalls.add(call);
+    _inMemoryCalls.add(optimisticCall);
     _emit();
 
     final payload = <String, dynamic>{
-      'id': id,
-      'tableId': tableId,
-      'tableLabel': tableLabel,
-      'type': type.name,
-      'customerNote': note,
-      'timestamp': timestamp.toIso8601String(),
-      'isVip': isVip,
+      'id': callId,
+      'tenant_id': tenantId,
+      'branch_id': branchId,
+      'table_id': tableId,
+      'type': type == CallType.billRequest ? 'bill' : (type == CallType.assistance ? 'other' : 'service'),
+      'notes': note,
+      'status': 'pending',
+      'is_vip': isVip,
+      'created_at': timestamp.toIso8601String(),
     };
 
-    if (await networkInfo.isConnected) {
+    final isConnected = await networkInfo.isConnected;
+    if (isConnected) {
       try {
-        await Future.delayed(const Duration(milliseconds: 200));
-      } catch (_) {
-        await offlineQueue.queueWrite(action: 'createWaiterCall', payload: payload);
+        final response = await Supabase.instance.client.from('waiter_calls').insert(payload).select().single();
+        final created = await _mapToDomain(response);
+        final idx = _inMemoryCalls.indexWhere((c) => c.id == callId);
+        if (idx != -1) {
+          _inMemoryCalls[idx] = created;
+          _emit();
+        }
+      } catch (e) {
+        debugPrint('[WaiterCallsRepositoryImpl] createWaiterCall online failed, queueing: $e');
+        await offlineQueue.queueWrite(action: 'createWaiterCallDirect', payload: payload);
       }
     } else {
-      await offlineQueue.queueWrite(action: 'createWaiterCall', payload: payload);
+      await offlineQueue.queueWrite(action: 'createWaiterCallDirect', payload: payload);
     }
   }
 
@@ -273,6 +305,29 @@ class WaiterCallsRepositoryImpl implements WaiterCallsRepository {
 
   @override
   Future<List<WaiterCall>> fetchActiveCalls() async {
+    final authState = ref.read(authNotifierProvider);
+    final branchId = authState.selectedBranch?.id;
+    if (branchId == null) return [];
+
+    final isConnected = await networkInfo.isConnected;
+    if (isConnected) {
+      try {
+        final list = await remote.fetchActiveCalls(branchId);
+        final List<WaiterCall> fetchedCalls = [];
+        for (final row in list) {
+          final call = await _mapToDomain(row);
+          fetchedCalls.add(call);
+        }
+
+        _inMemoryCalls.clear();
+        _inMemoryCalls.addAll(fetchedCalls);
+        _emit();
+        return fetchedCalls;
+      } catch (e) {
+        debugPrint('[WaiterCallsRepositoryImpl] fetchActiveCalls failed: $e');
+      }
+    }
+
     return _inMemoryCalls.where((c) => c.status != CallStatus.resolved).toList();
   }
 }

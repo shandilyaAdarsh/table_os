@@ -42,14 +42,14 @@ class ReplayRecoveryMonitor extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.history_rounded, color: replayColor, size: 20),
+              const Icon(Icons.history_rounded, color: replayColor, size: 20),
               const SizedBox(width: 8),
               Text(
                 'Replay Recovery Active',
                 style: AppTextStyles.h3.copyWith(color: replayColor),
               ),
               const Spacer(),
-              SizedBox(
+              const SizedBox(
                 width: 16,
                 height: 16,
                 child: CircularProgressIndicator(
@@ -66,7 +66,7 @@ class ReplayRecoveryMonitor extends StatelessWidget {
               value: progress,
               minHeight: 8,
               backgroundColor: borderColor,
-              valueColor: AlwaysStoppedAnimation<Color>(replayColor),
+              valueColor: const AlwaysStoppedAnimation<Color>(replayColor),
             ),
           ),
           const SizedBox(height: 8),

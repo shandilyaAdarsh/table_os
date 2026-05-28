@@ -32,10 +32,6 @@ import 'invalidation_coordinator.dart';
 import 'projection_rebuild_engine.dart';
 import '../network/realtime_sync_manager.dart';
 import '../../features/auth/presentation/state/auth_notifier.dart';
-import '../../features/manager/presentation/state/manager_providers.dart';
-import '../../features/reservations/presentation/state/reservations_notifier.dart';
-import '../../features/realtime/presentation/state/realtime_providers.dart';
-
 import '../../features/orders/providers/orders_providers.dart';
 import '../../features/tables/providers/tables_providers.dart';
 import '../../features/waiter_calls/presentation/state/waiter_calls_providers.dart';
@@ -54,10 +50,10 @@ class OperationalRuntimeBridge {
 
   OperationalRuntimeBridge({
     required this._orchestrator,
-    required RealtimeSyncManager syncManager,
+    required this._syncManager,
     required this._store,
     required this._ref,
-  }) : _syncManager = syncManager {
+  }) {
     _initialize();
   }
 
@@ -208,25 +204,7 @@ class OperationalRuntimeBridge {
       '[OperationalRuntimeBridge] Dispatching validated event: ${event.type}',
     );
 
-    final payload = event.payload;
-
     switch (event.type) {
-      // ── Reservations ──────────────────────────────────────────────────────
-      case RuntimeEventType.reservationUpdate:
-        await _ref
-            .read(reservationsRepositoryProvider)
-            .applyRemoteReservationUpdate(payload);
-        break;
-
-      case RuntimeEventType.reservationDelete:
-        final id = payload['id'] as String?;
-        if (id != null) {
-          await _ref
-              .read(reservationsRepositoryProvider)
-              .applyRemoteReservationDelete(id);
-        }
-        break;
-
       // ── Stream-based Domains ──────────────────────────────────────────────
       // They now strictly flow through the DeterministicProjectionStore.
       // Rebuild engine will pick up the invalidations and notify the UI.
@@ -236,8 +214,7 @@ class OperationalRuntimeBridge {
       case RuntimeEventType.tableDelete:
       case RuntimeEventType.waiterCall:
       case RuntimeEventType.waiterCallDelete:
-      case RuntimeEventType.reservationUpdate:
-      case RuntimeEventType.reservationDelete:
+
       case RuntimeEventType.waitlistUpdate:
       case RuntimeEventType.waitlistDelete:
       case RuntimeEventType.staffPresenceUpdate:
@@ -254,88 +231,6 @@ class OperationalRuntimeBridge {
     }
   }
 
-  // ━━━━━━━━━━━━━━━━━━━━━━ KDS DISPATCH ━━━━━━━━━━━━━━━━━━━━━━
-
-  /// Route a validated kitchen event through KitchenRuntimeCoordinator.
-  /// After coordinator accepts the event, publish updated projection to UI.
-  void _dispatchKitchenEvent(RuntimeEvent event, {required bool isItemUpdate}) {
-    final coordinator = _ref.read(kitchenRuntimeCoordinatorProvider);
-
-    final result = coordinator.applyEvent(
-      idempotencyKey: event.idempotencyKey,
-      sequenceNumber: event.sequenceNumber,
-      branchId: event.branchId,
-      epochId: event.epochId,
-      payload: event.payload,
-      isItemUpdate: isItemUpdate,
-    );
-
-    if (result.isAccepted) {
-      // Publish updated projection to reactive UI layer
-      final updatedQueue = coordinator.getOrderedQueue();
-      _ref
-          .read(kitchenTicketProjectionProvider.notifier)
-          .applyProjectionUpdate(updatedQueue);
-
-      debugPrint(
-        '[OperationalRuntimeBridge] KDS projection updated: '
-        '${updatedQueue.length} tickets',
-      );
-    } else {
-      debugPrint(
-        '[OperationalRuntimeBridge] KDS event rejected: '
-        '${result.outcome} reason=${result.reason}',
-      );
-    }
-  }
-
-  // ━━━━━━━━━━━━━━━━━━━━━━ PRESENCE DISPATCH ━━━━━━━━━━━━━━━━━━━━━━
-
-  /// Route a validated presence update through PresenceGovernanceRuntime.
-  void _dispatchPresenceUpdate(RuntimeEvent event) {
-    final governance = _ref.read(presenceGovernanceRuntimeProvider);
-
-    final result = governance.applyPresenceUpdate(
-      idempotencyKey: event.idempotencyKey,
-      branchId: event.branchId,
-      epochId: event.epochId,
-      payload: event.payload,
-    );
-
-    if (!result.isAccepted) {
-      debugPrint(
-        '[OperationalRuntimeBridge] Presence update rejected: '
-        '${result.outcome} reason=${result.reason}',
-      );
-    }
-    // Projection publication is handled by PresenceGovernanceRuntime
-    // via the onProjectionChanged callback registered in activateSession().
-  }
-
-  /// Route a validated presence delete through PresenceGovernanceRuntime.
-  void _dispatchPresenceDelete(RuntimeEvent event) {
-    final staffId = event.payload['staffId'] as String?;
-    if (staffId == null) {
-      debugPrint('[OperationalRuntimeBridge] Presence delete: missing staffId');
-      return;
-    }
-
-    final governance = _ref.read(presenceGovernanceRuntimeProvider);
-
-    final result = governance.applyPresenceDelete(
-      idempotencyKey: event.idempotencyKey,
-      branchId: event.branchId,
-      epochId: event.epochId,
-      staffId: staffId,
-    );
-
-    if (!result.isAccepted) {
-      debugPrint(
-        '[OperationalRuntimeBridge] Presence delete rejected: '
-        '${result.outcome} reason=${result.reason}',
-      );
-    }
-  }
 
   // ━━━━━━━━━━━━━━━━━━━━━━ EVENT TYPE MAPPING ━━━━━━━━━━━━━━━━━━━━━━
 

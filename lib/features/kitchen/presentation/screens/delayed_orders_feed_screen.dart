@@ -153,7 +153,7 @@ class DelayedOrdersFeedScreen extends ConsumerWidget {
                                   ),
                                   foregroundColor: AppColors.primary,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
+                                    borderRadius: BorderRadius.circular(16),
                                   ),
                                 ),
                                 onPressed: () {

@@ -31,10 +31,10 @@ class RealtimeEventRouter {
 
   RealtimeEventRouter({
     required this._epochManager,
-    required SequenceValidator sequenceValidator,
+    required this._sequenceValidator,
     required this._invalidationCoordinator,
     required this._branchIsolationResolver,
-  }) : _sequenceValidator = sequenceValidator;
+  });
 
   /// Register the projection rebuild callback.
   void registerRebuildCallback(ProjectionRebuildCallback callback) {

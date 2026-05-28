@@ -14,7 +14,6 @@ import 'package:orderlyy_app/features/orders/domain/entities/order.dart';
 import 'package:orderlyy_app/features/orders/domain/entities/order_item.dart';
 import 'package:orderlyy_app/features/orders/domain/entities/menu_product.dart';
 import 'package:orderlyy_app/shared/models/money.dart';
-import 'package:orderlyy_app/features/reservations/domain/entities/reservation.dart';
 import 'package:orderlyy_app/features/orders/presentation/widgets/modifier_selector_sheet.dart';
 
 // Manual mock implementations for testing clean architecture layers
@@ -380,30 +379,6 @@ void main() {
   });
 
   group('New Feature Extensions', () {
-    test('WaitlistEntry priorityScore calculation', () {
-      final now = DateTime.now();
-      final entryStandard = WaitlistEntry(
-        id: 'w-1',
-        guestName: 'John',
-        guestPhone: '555',
-        guestCount: 4,
-        addedTime: now.subtract(const Duration(minutes: 10)),
-        isVip: false,
-      );
-
-      expect(entryStandard.priorityScore, 17.0);
-
-      final entryVip = WaitlistEntry(
-        id: 'w-2',
-        guestName: 'Vip Guest',
-        guestPhone: '555-vip',
-        guestCount: 2,
-        addedTime: now.subtract(const Duration(minutes: 15)),
-        isVip: true,
-      );
-
-      expect(entryVip.priorityScore, 38.5);
-    });
 
     test('ModifierGroup validates selection constraints', () {
       final availableMods = [

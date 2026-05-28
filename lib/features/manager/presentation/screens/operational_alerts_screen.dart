@@ -567,7 +567,7 @@ class _OperationalAlertsScreenState extends ConsumerState<OperationalAlertsScree
                             backgroundColor: AppColors.success,
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(16),
                             ),
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             visualDensity: VisualDensity.compact,

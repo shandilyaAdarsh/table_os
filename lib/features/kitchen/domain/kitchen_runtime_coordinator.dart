@@ -85,8 +85,8 @@ class KitchenRuntimeCoordinator {
 
   KitchenRuntimeCoordinator({
     required this._rebuildEngine,
-    required TicketReplayRecoveryCoordinator replayCoordinator,
-  }) : _replayCoordinator = replayCoordinator;
+    required this._replayCoordinator,
+  });
 
   // ── Getters ───────────────────────────────────────────────────────────────
 

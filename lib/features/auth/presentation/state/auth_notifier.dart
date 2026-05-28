@@ -5,7 +5,6 @@ import '../../domain/entities/branch.dart';
 import '../../domain/entities/staff_member.dart';
 import 'auth_state.dart';
 
-import 'package:flutter/foundation.dart';
 import '../../providers/auth_repository_provider.dart';
 import '../../../../core/runtime/runtime.dart';
 import '../../../onboarding/presentation/state/onboarding_notifier.dart';
@@ -60,12 +59,12 @@ class AuthNotifier extends _$AuthNotifier {
 
     // Check pin credentials against authoritative repository
     final repo = ref.read(authRepositoryProvider);
-    final staff = await repo.loginWithPIN(pin);
+    final staff = await repo.loginWithPIN(pin, branchId: state.selectedBranch?.id);
 
     if (staff != null) {
       state = state.copyWith(loggedInStaff: staff, isLocked: false);
       // Hydrate onboarding state for router to determine correct flow
-      ref.read(onboardingNotifierProvider.notifier).hydrate();
+      await ref.read(onboardingNotifierProvider.notifier).hydrate();
       return true;
     } else {
       state = state.copyWith(

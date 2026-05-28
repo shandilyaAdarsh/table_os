@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/order.dart';
 import '../../providers/orders_providers.dart';
@@ -194,7 +195,10 @@ class _ActiveOrdersFeedScreenState extends ConsumerState<ActiveOrdersFeedScreen>
         children: [
           FilterChip(
             selected: _statusFilter == null,
-            label: const Text('All Active'),
+            label: Text('All Active', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100)),
+            selectedColor: AppColors.primary.withValues(alpha: 0.15),
+            checkmarkColor: AppColors.primary,
             onSelected: (selected) {
               setState(() {
                 _statusFilter = null;
@@ -208,7 +212,10 @@ class _ActiveOrdersFeedScreenState extends ConsumerState<ActiveOrdersFeedScreen>
               padding: const EdgeInsets.only(right: 8.0),
               child: FilterChip(
                 selected: _statusFilter == status,
-                label: Text(label),
+                label: Text(label, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100)),
+                selectedColor: AppColors.primary.withValues(alpha: 0.15),
+                checkmarkColor: AppColors.primary,
                 onSelected: (selected) {
                   setState(() {
                     _statusFilter = selected ? status : null;
@@ -227,30 +234,44 @@ class _ActiveOrdersFeedScreenState extends ConsumerState<ActiveOrdersFeedScreen>
     final slaColor = _getSlaColor(sla);
     final elapsedMinutes = DateTime.now().difference(order.createdAt).inMinutes;
 
-    Widget card = Card(
-      color: isDark ? AppColors.darkSurface : Colors.white,
-      shape: RoundedRectangleBorder(
+    Widget card = Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              offset: const Offset(0, 4),
+              blurRadius: 12,
+            ),
+        ],
       ),
-      margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () {
-          context.push('/orders/${order.id}/details');
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Table ${order.tableId}',
-                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-                  ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            context.push('/orders/${order.id}/details');
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Table ${order.tableId}',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
+                        color: isDark ? Colors.white : const Color(0xFF1A1C1E),
+                      ),
+                    ),
                   Row(
                     children: [
                       Container(
@@ -313,6 +334,7 @@ class _ActiveOrdersFeedScreenState extends ConsumerState<ActiveOrdersFeedScreen>
             ],
           ),
         ),
+      ),
       ),
     );
 

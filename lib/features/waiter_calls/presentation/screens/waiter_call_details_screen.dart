@@ -228,7 +228,7 @@ class _WaiterCallDetailsScreenState extends ConsumerState<WaiterCallDetailsScree
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
               onPressed: () {
                 HapticFeedback.mediumImpact();
@@ -242,7 +242,7 @@ class _WaiterCallDetailsScreenState extends ConsumerState<WaiterCallDetailsScree
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: AppColors.success.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
             ),
             child: Row(
               children: [
@@ -265,7 +265,7 @@ class _WaiterCallDetailsScreenState extends ConsumerState<WaiterCallDetailsScree
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.success,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
               onPressed: () {
                 HapticFeedback.lightImpact();
@@ -285,7 +285,7 @@ class _WaiterCallDetailsScreenState extends ConsumerState<WaiterCallDetailsScree
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: AppColors.error),
                 foregroundColor: AppColors.error,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
               onPressed: () {
                 HapticFeedback.mediumImpact();

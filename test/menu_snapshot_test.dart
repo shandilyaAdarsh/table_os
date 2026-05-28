@@ -58,6 +58,11 @@ class MockDioClient implements DioClient {
   }
 
   @override
+  Future<Response> patch(String path, {data, Map<String, dynamic>? queryParameters, Options? options, CancelToken? cancelToken}) {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<Response> delete(String path, {data, Map<String, dynamic>? queryParameters, Options? options, CancelToken? cancelToken}) {
     throw UnimplementedError();
   }

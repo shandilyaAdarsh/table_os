@@ -249,7 +249,7 @@ class _WaiterCallFeedScreenState extends ConsumerState<WaiterCallFeedScreen> {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         ),
         onPressed: () {
@@ -264,7 +264,7 @@ class _WaiterCallFeedScreenState extends ConsumerState<WaiterCallFeedScreen> {
         style: OutlinedButton.styleFrom(
           side: const BorderSide(color: AppColors.success),
           foregroundColor: AppColors.success,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         ),
         onPressed: () {

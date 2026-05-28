@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app/observers/routing_observer.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../core/theme/app_colors.dart';
 import '../features/tables/presentation/screens/table_grid_screen.dart';
 import '../features/tables/presentation/screens/table_detail_screen.dart';
@@ -12,13 +13,13 @@ import '../features/kitchen/presentation/screens/kitchen_kds_screen.dart';
 import '../features/auth/presentation/state/auth_notifier.dart';
 import '../features/auth/presentation/state/auth_state.dart';
 import '../features/auth/presentation/screens/splash_screen.dart';
+import '../features/auth/presentation/screens/welcome_screen.dart';
 import '../features/auth/presentation/screens/organization_selection_screen.dart';
 import '../features/auth/presentation/screens/branch_selection_screen.dart';
 import '../features/auth/presentation/screens/staff_login_screen.dart';
 import '../features/auth/presentation/screens/shift_start_screen.dart';
 import '../features/auth/presentation/screens/session_lock_screen.dart';
 import '../features/dashboard/presentation/screens/operational_dashboard_screen.dart';
-import '../features/reservations/presentation/screens/reservations_screen.dart';
 import '../features/orders/presentation/screens/active_orders_feed_screen.dart';
 import '../features/orders/presentation/screens/order_details_screen.dart';
 import '../features/orders/presentation/screens/item_level_kitchen_status_screen.dart';
@@ -39,8 +40,6 @@ import '../features/staff/presentation/screens/staff_presence_screen.dart';
 import '../features/realtime/presentation/screens/realtime_status_screen.dart';
 import '../features/realtime/presentation/screens/pending_sync_screen.dart';
 import '../features/realtime/presentation/screens/operational_recovery_screen.dart';
-import '../features/profile/presentation/screens/staff_profile_screen.dart';
-import '../features/profile/presentation/screens/device_settings_screen.dart';
 import '../features/profile/presentation/screens/runtime_diagnostics_screen.dart';
 import '../features/manager/presentation/screens/floor_analytics_screen.dart';
 import '../features/manager/presentation/screens/staff_performance_screen.dart';
@@ -95,6 +94,11 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       debugPrint('[ROUTER] redirect evaluation: location=$loc, isLocked=${authState.isLocked}, isShiftStarted=${authState.isShiftStarted}, org=${authState.selectedOrg?.name}, branch=${authState.selectedBranch?.name}');
 
+      // Handle the default platform route
+      if (loc == '/') {
+        return '/splash';
+      }
+
       // If we are on the splash screen, do NOT redirect. Let it perform its bootloader diagnostics.
       if (loc == '/splash') {
         return null;
@@ -129,8 +133,8 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Main authentication routing state machine
       if (authState.selectedOrg == null) {
-        if (loc != '/org-select') {
-          return '/org-select';
+        if (loc != '/welcome' && loc != '/org-select') {
+          return '/welcome';
         }
         return null;
       }
@@ -176,6 +180,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const SplashScreen(),
       ),
       GoRoute(
+        path: '/welcome',
+        name: 'welcome',
+        builder: (context, state) => const WelcomeScreen(),
+      ),
+      GoRoute(
         path: '/org-select',
         name: 'org-select',
         builder: (context, state) => const OrganizationSelectionScreen(),
@@ -209,11 +218,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/tables',
             name: 'tables',
             builder: (context, state) => const TableGridScreen(),
-          ),
-          GoRoute(
-            path: '/reservations',
-            name: 'reservations',
-            builder: (context, state) => const ReservationsScreen(),
           ),
           GoRoute(
             path: '/orders-feed',
@@ -325,8 +329,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/realtime/status', name: 'realtime-status', builder: (context, state) => const RealtimeStatusScreen()),
       GoRoute(path: '/realtime/sync-queue', name: 'sync-queue', builder: (context, state) => const PendingSyncScreen()),
       GoRoute(path: '/realtime/recovery', name: 'operational-recovery', builder: (context, state) => const OperationalRecoveryScreen()),
-      GoRoute(path: '/profile', name: 'staff-profile', builder: (context, state) => const StaffProfileScreen()),
-      GoRoute(path: '/settings', name: 'device-settings', builder: (context, state) => const DeviceSettingsScreen()),
       GoRoute(path: '/diagnostics', name: 'runtime-diagnostics', builder: (context, state) => const RuntimeDiagnosticsScreen()),
       GoRoute(path: '/manager/analytics', name: 'floor-analytics', builder: (context, state) => const FloorAnalyticsScreen()),
       GoRoute(path: '/manager/staff-performance', name: 'staff-performance', builder: (context, state) => const StaffPerformanceScreen()),
@@ -349,16 +351,14 @@ class NavigationShellLayout extends ConsumerWidget {
     final unreadNotifCount = ref.watch(unreadNotificationsCountProvider);
     final activeCallCount = ref.watch(activeWaiterCallsCountProvider);
     final realtimeState = ref.watch(realtimeStateProvider);
+    final authState = ref.watch(authNotifierProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     int selectedIndex = 0;
-    if (location.startsWith('/reservations')) {
+    if (location.startsWith('/orders-feed')) {
       selectedIndex = 1;
-    } else if (location.startsWith('/orders-feed')) {
-      selectedIndex = 2;
-    } else if (location.startsWith('/kds')) {
-      selectedIndex = 3;
     } else if (location.startsWith('/dashboard')) {
-      selectedIndex = 4;
+      selectedIndex = 2;
     }
 
     RealtimeState mapState(RealtimeConnectionState s) {
@@ -379,8 +379,8 @@ class NavigationShellLayout extends ConsumerWidget {
     return Scaffold(
       // Persistent top-bar with live notification bell
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(48),
-        child: _buildTopActionBar(context, unreadNotifCount, activeCallCount),
+        preferredSize: const Size.fromHeight(60),
+        child: _buildTopActionBar(context, unreadNotifCount, activeCallCount, authState.selectedBranch?.name ?? 'Main Kitchen', isDark),
       ),
       body: Stack(
         children: [
@@ -394,62 +394,80 @@ class NavigationShellLayout extends ConsumerWidget {
           ),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: selectedIndex,
-        indicatorColor: AppColors.primary.withValues(alpha: 0.15),
-        destinations: [
-          // Floor Map with live waiter-call badge
-          NavigationDestination(
-            icon: activeCallCount > 0
-                ? Badge(
-                    label: Text('$activeCallCount'),
-                    backgroundColor: AppColors.error,
-                    child: const Icon(Icons.table_restaurant_rounded),
-                  )
-                : const Icon(Icons.table_restaurant_rounded),
-            selectedIcon: const Icon(Icons.table_restaurant_rounded, color: AppColors.primary),
-            label: 'Floor Map',
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 12,
+              offset: const Offset(0, -4),
+            ),
+          ],
+          border: Border(
+            top: BorderSide(color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.book_online_rounded),
-            selectedIcon: Icon(Icons.book_online_rounded, color: AppColors.primary),
-            label: 'Reservations',
+        ),
+        child: NavigationBarTheme(
+          data: NavigationBarThemeData(
+            backgroundColor: Colors.transparent,
+            indicatorColor: const Color(0xFFE31E24).withValues(alpha: 0.1),
+            labelTextStyle: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return const TextStyle(color: Color(0xFFE31E24), fontWeight: FontWeight.bold, fontSize: 12);
+              }
+              return TextStyle(color: isDark ? Colors.white54 : const Color(0xFF64748B), fontWeight: FontWeight.w600, fontSize: 12);
+            }),
+            iconTheme: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return const IconThemeData(color: Color(0xFFE31E24));
+              }
+              return IconThemeData(color: isDark ? Colors.white54 : const Color(0xFF64748B));
+            }),
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.receipt_long_rounded),
-            selectedIcon: Icon(Icons.receipt_long_rounded, color: AppColors.primary),
-            label: 'Active Orders',
+          child: NavigationBar(
+            selectedIndex: selectedIndex,
+            elevation: 0,
+            destinations: [
+              // Floor Map with live waiter-call badge
+              NavigationDestination(
+                icon: activeCallCount > 0
+                    ? Badge(
+                        label: Text('$activeCallCount'),
+                        backgroundColor: AppColors.error,
+                        child: const Icon(Icons.table_restaurant_rounded),
+                      )
+                    : const Icon(Icons.table_restaurant_rounded),
+                selectedIcon: const Icon(Icons.table_restaurant_rounded),
+                label: 'Floor Map',
+              ),
+              const NavigationDestination(
+                icon: Icon(Icons.receipt_long_rounded),
+                selectedIcon: Icon(Icons.receipt_long_rounded),
+                label: 'Active Orders',
+              ),
+
+              const NavigationDestination(
+                icon: Icon(Icons.dashboard_rounded),
+                selectedIcon: Icon(Icons.dashboard_rounded),
+                label: 'Dashboard',
+              ),
+            ],
+            onDestinationSelected: (index) {
+              switch (index) {
+                case 0:
+                  context.go('/tables');
+                  break;
+                case 1:
+                  context.go('/orders-feed');
+                  break;
+                case 2:
+                  context.go('/dashboard');
+                  break;
+              }
+            },
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.restaurant_rounded),
-            selectedIcon: Icon(Icons.restaurant_rounded, color: AppColors.primary),
-            label: 'Kitchen KDS',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.dashboard_rounded),
-            selectedIcon: Icon(Icons.dashboard_rounded, color: AppColors.primary),
-            label: 'Dashboard',
-          ),
-        ],
-        onDestinationSelected: (index) {
-          switch (index) {
-            case 0:
-              context.go('/tables');
-              break;
-            case 1:
-              context.go('/reservations');
-              break;
-            case 2:
-              context.go('/orders-feed');
-              break;
-            case 3:
-              context.go('/kds');
-              break;
-            case 4:
-              context.go('/dashboard');
-              break;
-          }
-        },
+        ),
       ),
     );
   }
@@ -458,6 +476,8 @@ class NavigationShellLayout extends ConsumerWidget {
     BuildContext context,
     int unreadNotifCount,
     int activeCallCount,
+    String branchName,
+    bool isDark,
   ) {
     return Container(
       decoration: BoxDecoration(
@@ -465,50 +485,58 @@ class NavigationShellLayout extends ConsumerWidget {
             Theme.of(context).scaffoldBackgroundColor,
         border: Border(
           bottom: BorderSide(
-            color: Theme.of(context).brightness == Brightness.dark
-                ? AppColors.darkBorder
-                : AppColors.lightBorder,
+            color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
             width: 0.5,
           ),
         ),
       ),
       child: SafeArea(
         bottom: false,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            // Quick-Access Sheet – Waiter Calls, Kitchen, Billing shortcuts
-            IconButton(
-              icon: activeCallCount > 0
-                  ? Badge(
-                      label: Text('$activeCallCount'),
-                      backgroundColor: AppColors.error,
-                      child: const Icon(Icons.support_agent_rounded),
-                    )
-                  : const Icon(Icons.support_agent_rounded),
-              tooltip: 'Waiter Calls',
-              onPressed: () => context.push('/waiter-calls'),
-            ),
-            // More operational shortcuts via bottom sheet
-            IconButton(
-              icon: const Icon(Icons.grid_view_rounded),
-              tooltip: 'Quick Access',
-              onPressed: () => _showQuickAccessSheet(context),
-            ),
-            // Notification center with unread badge
-            IconButton(
-              icon: unreadNotifCount > 0
-                  ? Badge(
-                      label: Text('$unreadNotifCount'),
-                      backgroundColor: AppColors.error,
-                      child: const Icon(Icons.notifications_rounded),
-                    )
-                  : const Icon(Icons.notifications_outlined),
-              tooltip: 'Notifications',
-              onPressed: () => context.push('/notifications'),
-            ),
-            const SizedBox(width: 4),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Store Title
+              Row(
+                children: [
+                  Icon(Icons.storefront_rounded, color: isDark ? const Color(0xFFffb4ab) : const Color(0xFFE31E24)),
+                  const SizedBox(width: 8),
+                  Text(
+                    branchName,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? const Color(0xFFffb4ab) : const Color(0xFFE31E24),
+                    ),
+                  ),
+                ],
+              ),
+              // Action Icons
+              Row(
+                children: [
+                  // More operational shortcuts via bottom sheet
+                  IconButton(
+                    icon: const Icon(Icons.grid_view_rounded),
+                    tooltip: 'Quick Access',
+                    onPressed: () => _showQuickAccessSheet(context),
+                  ),
+                  // Notification center with unread badge
+                  IconButton(
+                    icon: unreadNotifCount > 0
+                        ? Badge(
+                            label: Text('$unreadNotifCount'),
+                            backgroundColor: AppColors.error,
+                            child: const Icon(Icons.notifications_rounded),
+                          )
+                        : const Icon(Icons.notifications_outlined),
+                    tooltip: 'Notifications',
+                    onPressed: () => context.push('/notifications'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/sync_state_chip.dart';
@@ -178,9 +179,15 @@ class _OrderEditorScreenState extends ConsumerState<OrderEditorScreen> {
                 child: TextField(
                   decoration: InputDecoration(
                     hintText: 'Search menu items...',
+                    hintStyle: GoogleFonts.plusJakartaSans(color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary),
                     prefixIcon: const Icon(Icons.search_rounded),
-                    border: OutlineInputBorder(
+                    enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: AppColors.primary, width: 2),
                     ),
                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
                   ),
@@ -259,13 +266,19 @@ class _OrderEditorScreenState extends ConsumerState<OrderEditorScreen> {
                               : null,
                           child: Stack(
                             children: [
-                              Card(
-                                color: isDark ? AppColors.darkSurface : Colors.white,
-                                shape: RoundedRectangleBorder(
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: isDark ? AppColors.darkSurface : Colors.white,
                                   borderRadius: BorderRadius.circular(16),
-                                  side: BorderSide(
-                                    color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
-                                  ),
+                                  border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
+                                  boxShadow: [
+                                    if (!isDark)
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.05),
+                                        offset: const Offset(0, 4),
+                                        blurRadius: 12,
+                                      ),
+                                  ],
                                 ),
                                 child: Opacity(
                                   opacity: isAvailable ? 1.0 : 0.45,
@@ -274,23 +287,24 @@ class _OrderEditorScreenState extends ConsumerState<OrderEditorScreen> {
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text(
-                                          product.name,
-                                          style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
+                                          Text(
+                                            product.name,
+                                            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 16),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         const Spacer(),
                                         Row(
                                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
-                                            Text(
-                                              product.price.formatted,
-                                              style: theme.textTheme.bodyMedium?.copyWith(
-                                                color: AppColors.primary,
-                                                fontWeight: FontWeight.bold,
+                                              Text(
+                                                product.price.formatted,
+                                                style: GoogleFonts.plusJakartaSans(
+                                                  color: AppColors.primary,
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 14,
+                                                ),
                                               ),
-                                            ),
                                             IconButton.filled(
                                               style: IconButton.styleFrom(
                                                 backgroundColor: AppColors.primary,
@@ -320,14 +334,14 @@ class _OrderEditorScreenState extends ConsumerState<OrderEditorScreen> {
                                           color: AppColors.error,
                                           borderRadius: BorderRadius.circular(8),
                                         ),
-                                        child: const Text(
-                                          'OUT OF STOCK',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w900,
-                                            letterSpacing: 0.5,
-                                          ),
+                                          child: Text(
+                                            'OUT OF STOCK',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              color: Colors.white,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 0.5,
+                                            ),
                                         ),
                                       ),
                                     ),
@@ -443,24 +457,39 @@ class _OrderEditorScreenState extends ConsumerState<OrderEditorScreen> {
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text(item.totalPrice.formatted, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  Text(item.totalPrice.formatted, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
                                   const SizedBox(width: 8),
-                                  IconButton(
-                                    icon: const Icon(Icons.remove_circle_outline_rounded, size: 20),
-                                    onPressed: () {
-                                      ref
-                                          .read(activeOrderNotifierProvider(widget.tableId).notifier)
-                                          .updateItemQuantity(item.id, item.quantity - 1);
-                                    },
-                                  ),
-                                  Text(item.quantity.toString(), style: theme.textTheme.bodyMedium),
-                                  IconButton(
-                                    icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
-                                    onPressed: () {
-                                      ref
-                                          .read(activeOrderNotifierProvider(widget.tableId).notifier)
-                                          .updateItemQuantity(item.id, item.quantity + 1);
-                                    },
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: isDark ? AppColors.darkBorder : Colors.grey[200],
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.remove_rounded, size: 16),
+                                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                          padding: EdgeInsets.zero,
+                                          onPressed: () {
+                                            ref
+                                                .read(activeOrderNotifierProvider(widget.tableId).notifier)
+                                                .updateItemQuantity(item.id, item.quantity - 1);
+                                          },
+                                        ),
+                                        Text(item.quantity.toString(), style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
+                                        IconButton(
+                                          icon: const Icon(Icons.add_rounded, size: 16),
+                                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                          padding: EdgeInsets.zero,
+                                          onPressed: () {
+                                            ref
+                                                .read(activeOrderNotifierProvider(widget.tableId).notifier)
+                                                .updateItemQuantity(item.id, item.quantity + 1);
+                                          },
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ],
                               ),
@@ -481,9 +510,10 @@ class _OrderEditorScreenState extends ConsumerState<OrderEditorScreen> {
                 const Text('Est. Subtotal', style: TextStyle(fontWeight: FontWeight.bold)),
                 Text(
                   order.totalPrice.formatted,
-                  style: theme.textTheme.titleLarge?.copyWith(
+                  style: GoogleFonts.plusJakartaSans(
                     color: AppColors.primary,
                     fontWeight: FontWeight.w800,
+                    fontSize: 24,
                   ),
                 ),
               ],
@@ -508,8 +538,9 @@ class _OrderEditorScreenState extends ConsumerState<OrderEditorScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 20),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 0,
                   ),
                   onPressed: order.items.isEmpty
                       ? null
@@ -525,7 +556,10 @@ class _OrderEditorScreenState extends ConsumerState<OrderEditorScreen> {
                              context.pop();
                            }
                          },
-                  child: const Text('Send to Kitchen', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: Text(
+                    'Send to Kitchen',
+                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 16),
+                  ),
                 ),
               ),
             ],

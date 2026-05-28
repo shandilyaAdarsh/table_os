@@ -8,8 +8,7 @@ import 'websocket_realtime_transport.dart';
 enum RepositoryMode { mock, live }
 
 final repositoryModeProvider = Provider<RepositoryMode>((ref) {
-  final env = AppConfig.instance.environment;
-  return env == Environment.prod ? RepositoryMode.live : RepositoryMode.mock;
+  return RepositoryMode.live;
 });
 
 final realtimeTransportProvider = Provider<RealtimeTransport>((ref) {

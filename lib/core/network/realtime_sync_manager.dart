@@ -1,20 +1,15 @@
 // lib/core/network/realtime_sync_manager.dart
 import 'dart:async';
 import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/runtime/realtime_transport_provider.dart';
 import '../../core/runtime/realtime_transport.dart';
 import '../../core/runtime/projection_recovery_coordinator.dart';
-import '../../features/orders/providers/orders_providers.dart';
-import '../../features/orders/data/dtos/order_dto.dart';
-import '../../features/orders/data/mappers/order_mapper.dart';
-import '../../features/tables/providers/tables_providers.dart';
-import '../../features/tables/data/dtos/table_dto.dart';
-import '../../features/tables/data/mappers/table_mapper.dart';
-import '../../features/waiter_calls/presentation/state/waiter_calls_providers.dart';
-import '../../features/waiter_calls/domain/entities/waiter_call.dart';
+import '../../core/network/secure_storage.dart';
+import '../../core/network/network_providers.dart';
 import '../../features/realtime/presentation/state/realtime_providers.dart';
 import '../../features/realtime/domain/entities/realtime_state_model.dart';
 
@@ -47,6 +42,8 @@ class RealtimeSyncManager {
   // ── Idempotency & Sequencing ──────────────────────────────────────────────
   final Set<String> _processedKeys = {};
   int _expectedSequenceNumber = 1;
+
+  bool get _isMock => ref.read(repositoryModeProvider) == RepositoryMode.mock;
 
   // ── Transport ────────────────────────────────────────────────────────────
   StreamSubscription<RealtimeTransportMessage>? _transportSubscription;
@@ -208,10 +205,41 @@ class RealtimeSyncManager {
         return;
       }
 
-      receiveRawPayload(data);
+      // ── Map backend EventEnvelope → SyncEvent shape ──────────────────────
+      // Backend sends: { event_id, event_sequence, event_type, payload, ... }
+      // RealtimeSyncManager expects: { idempotencyKey, sequenceNumber, type, payload }
+      final normalized = _normalizeEventEnvelope(data);
+      if (normalized != null) {
+        receiveRawPayload(normalized);
+      }
     } catch (e) {
       debugPrint('[SYNC] Failed decoding message: $e');
     }
+  }
+
+  /// Normalize backend EventEnvelope fields to the canonical SyncEvent shape.
+  /// Returns null if the message is not a recognized operational event.
+  Map<String, dynamic>? _normalizeEventEnvelope(Map<String, dynamic> data) {
+    // Already in canonical shape (legacy / test payloads)
+    if (data.containsKey('idempotencyKey')) return data;
+
+    // Backend EventEnvelope shape
+    final eventId = data['event_id'] as String?;
+    final eventSeq = data['event_sequence'] as int?;
+    final eventType = data['event_type'] as String?;
+    final payload = data['payload'];
+
+    if (eventId == null || eventSeq == null || eventType == null) {
+      debugPrint('[SYNC] Skipping non-operational envelope: $data');
+      return null;
+    }
+
+    return {
+      'idempotencyKey': eventId,
+      'sequenceNumber': eventSeq,
+      'type': eventType,
+      'payload': payload is Map<String, dynamic> ? payload : <String, dynamic>{},
+    };
   }
 
   void _onDisconnected() {
@@ -281,6 +309,8 @@ class RealtimeSyncManager {
   // ── Heartbeat ─────────────────────────────────────────────────────────────
 
   void _startHeartbeat() {
+    if (_isMock) return; // Do not enforce heartbeat in simulated environments
+    
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(_heartbeatInterval, (_) {
       _sendHeartbeat();
@@ -299,6 +329,8 @@ class RealtimeSyncManager {
   }
 
   void _startHeartbeatTimeout() {
+    if (_isMock) return;
+    
     _heartbeatTimeoutTimer?.cancel();
     _heartbeatTimeoutTimer = Timer(_heartbeatTimeout, () {
       final elapsed = _lastMessageAt != null
@@ -314,6 +346,7 @@ class RealtimeSyncManager {
   }
 
   void _resetHeartbeatTimeout() {
+    if (_isMock) return;
     _heartbeatTimeoutTimer?.cancel();
   }
 
@@ -369,7 +402,8 @@ class RealtimeSyncManager {
     // 1. Double-safeguard: Idempotency check via sequence number boundary
     if (event.sequenceNumber < _expectedSequenceNumber) {
       debugPrint(
-          '[SYNC] Idempotency/sequence screen: ${event.sequenceNumber} < $_expectedSequenceNumber. Ignoring.');
+        '[SYNC] Idempotency/sequence screen: ${event.sequenceNumber} < $_expectedSequenceNumber. Ignoring.',
+      );
       return;
     }
 
@@ -387,12 +421,15 @@ class RealtimeSyncManager {
       final gapStart = _expectedSequenceNumber;
       final gapEnd = event.sequenceNumber - 1;
       debugPrint(
-          '[SYNC] GAP DETECTED: expected $_expectedSequenceNumber, got ${event.sequenceNumber}. '
-          'Initiating delta sync replay from $gapStart to $gapEnd');
-      
+        '[SYNC] GAP DETECTED: expected $_expectedSequenceNumber, got ${event.sequenceNumber}. '
+        'Initiating delta sync replay from $gapStart to $gapEnd',
+      );
+
       // Auto self-healing on major gap/divergence detection
       try {
-        ref.read(projectionRecoveryCoordinatorProvider).executeRecovery(branchId: 'branch_default');
+        await ref
+            .read(projectionRecoveryCoordinatorProvider)
+            .executeRecovery(branchId: 'branch_default');
       } catch (e) {
         debugPrint('[SYNC] Recovery coordinator trigger failed: $e');
       }
@@ -404,7 +441,9 @@ class RealtimeSyncManager {
     }
 
     // 4. Yield to OperationalRuntimeBridge for validation (Epoch, Deduplication, Sequence, Branch)
-    debugPrint('[SYNC] Processing sync event payload: type=${event.type} seq=${event.sequenceNumber}');
+    debugPrint(
+      '[SYNC] Processing sync event payload: type=${event.type} seq=${event.sequenceNumber}',
+    );
   }
 
   Future<void> _fetchDeltaSync(int startSeq, int endSeq) async {
@@ -417,10 +456,41 @@ class RealtimeSyncManager {
     _updateState(RealtimeConnectionState.replaying);
     _simulateReplayProgress(eventCount);
 
-    // In production: call REST API endpoint for the missed sequence range.
-    // e.g. await supabaseClient.from('sync_log').select()
-    //        .gte('sequence_number', startSeq).lte('sequence_number', endSeq);
-    await Future.delayed(Duration(milliseconds: 300 * eventCount.clamp(1, 5)));
+    try {
+      // Read branch context from auth state
+      final dioClient = ref.read(dioClientProvider);
+      const secureStorage = SecureLocalStorage();
+      final token = await secureStorage.read('runtime_token');
+
+      // Fetch missed events from the runtime replay endpoint
+      final response = await dioClient.get(
+        '/api/v1/runtime/events/replay',
+        queryParameters: {
+          'from_seq': startSeq,
+          'to_seq': endSeq,
+        },
+        options: Options(
+          headers: {
+            if (token != null) 'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        final events = response.data['data'] as List? ?? [];
+        debugPrint('[SYNC] Delta sync fetched ${events.length} replay events from backend.');
+        for (final eventJson in events) {
+          if (eventJson is Map<String, dynamic>) {
+            final normalized = _normalizeEventEnvelope(eventJson);
+            if (normalized != null) {
+              receiveRawPayload(normalized);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[SYNC] Delta sync REST call failed: $e. Continuing without replay.');
+    }
 
     debugPrint(
       '[SYNC] Delta state recovery complete for [$startSeq..$endSeq].',

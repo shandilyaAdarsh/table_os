@@ -12,6 +12,7 @@
 //   - All presence projections are replay-safe and deterministically reconstructable.
 
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'entities/staff_presence.dart';
 import 'presence_heartbeat_manager.dart';
 import 'presence_invalidation_coordinator.dart';
@@ -70,8 +71,8 @@ class PresenceGovernanceRuntime {
 
   PresenceGovernanceRuntime({
     required this._heartbeatManager,
-    required PresenceInvalidationCoordinator invalidationCoordinator,
-  }) : _invalidationCoordinator = invalidationCoordinator;
+    required this._invalidationCoordinator,
+  });
 
   // ━━━━━━━━━━━━━━━━━━━━━━ SESSION LIFECYCLE ━━━━━━━━━━━━━━━━━━━━━━
 
@@ -351,9 +352,50 @@ class PresenceGovernanceRuntime {
     debugPrint(
       '[PresenceGovernanceRuntime] Fetching presence snapshot: branch=$branchId',
     );
-    // TODO: Replace with real API call
-    // GET /staff/presence/snapshot?branchId=$branchId
-    await Future.delayed(const Duration(milliseconds: 50));
+    try {
+      // Fetch staff with presence fields; last_heartbeat_at drives TTL validation.
+      final response = await Supabase.instance.client
+          .from('staff')
+          .select('id, name, role, status, section, last_heartbeat_at, active_table_count, sla_compliance_rate')
+          .eq('branch_id', branchId);
+
+      final list = response as List;
+      final List<StaffPresenceRecord> records = [];
+      for (final row in list) {
+        // Parse last_heartbeat_at — fall back to epoch if column is null/missing
+        // so HeartbeatManager will immediately flag these records as expired.
+        final heartbeatRaw = row['last_heartbeat_at'] as String?;
+        final lastHeartbeat = heartbeatRaw != null
+            ? DateTime.tryParse(heartbeatRaw) ?? DateTime.fromMillisecondsSinceEpoch(0)
+            : DateTime.fromMillisecondsSinceEpoch(0);
+
+        // Map DB status string to StaffPresenceStatus enum.
+        final statusStr = (row['status'] as String?)?.toLowerCase() ?? '';
+        final presenceStatus = switch (statusStr) {
+          'online' => StaffPresenceStatus.online,
+          'busy' => StaffPresenceStatus.busy,
+          'break' => StaffPresenceStatus.onBreak,
+          'offline' => StaffPresenceStatus.offline,
+          _ => StaffPresenceStatus.offline,
+        };
+
+        records.add(StaffPresenceRecord(
+          staffId: row['id'] as String,
+          name: row['name'] as String? ?? 'Unknown',
+          role: row['role'] as String? ?? 'Waiter',
+          status: presenceStatus,
+          sectionId: row['section'] as String?,
+          sectionLabel: row['section'] as String?,
+          activeTableCount: (row['active_table_count'] as int?) ?? 0,
+          slaComplianceRate: (row['sla_compliance_rate'] as num?)?.toDouble() ?? 1.0,
+          lastHeartbeat: lastHeartbeat,
+        ));
+      }
+      debugPrint('[PresenceGovernanceRuntime] Snapshot fetched: ${records.length} staff records');
+      return records;
+    } catch (e) {
+      debugPrint('[PresenceGovernanceRuntime] Fetch presence snapshot failed: $e');
+    }
     return [];
   }
 

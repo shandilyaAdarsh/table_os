@@ -6,7 +6,6 @@ import '../routing/app_router.dart';
 import '../core/theme/app_theme.dart';
 import '../core/network/realtime_sync_manager.dart';
 import '../core/runtime/runtime_lifecycle.dart';
-import '../features/profile/presentation/screens/device_settings_screen.dart';
 
 class OrderlyyApp extends ConsumerWidget {
   const OrderlyyApp({super.key});
@@ -20,21 +19,7 @@ class OrderlyyApp extends ConsumerWidget {
     ref.read(runtimeLifecycleManagerProvider);
 
     final router = ref.watch(routerProvider);
-    final settings = ref.watch(deviceSettingsProvider);
-    final selectedThemeMode = settings.themeMode;
-
-    ThemeMode themeMode;
-    switch (selectedThemeMode) {
-      case 'light':
-        themeMode = ThemeMode.light;
-        break;
-      case 'dark':
-        themeMode = ThemeMode.dark;
-        break;
-      case 'system':
-      default:
-        themeMode = ThemeMode.system;
-    }
+    const themeMode = ThemeMode.system;
 
     return MaterialApp.router(
       title: 'Orderlyy Restaurant Management',
@@ -69,7 +54,7 @@ class OrderlyyApp extends ConsumerWidget {
           data: mediaQuery.copyWith(
             // Ensure text scaling doesn't break the layout
             textScaler: TextScaler.linear(
-              mediaQuery.textScaleFactor.clamp(0.8, 1.2),
+              mediaQuery.textScaler.scale(1).clamp(0.8, 1.2),
             ),
           ),
           child: Container(

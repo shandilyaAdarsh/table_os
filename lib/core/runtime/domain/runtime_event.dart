@@ -107,20 +107,23 @@ class RuntimeEvent extends Equatable {
     String fallbackEpochId = '',
   }) {
     try {
-      final key     = json['idempotencyKey'] as String?;
-      final seq     = json['sequenceNumber'] as int?;
-      final typeStr = json['type'] as String?;
+      final key     = (json['idempotencyKey'] ?? json['event_id']) as String?;
+      final seq     = (json['sequenceNumber'] ?? json['event_sequence']) as int?;
+      final typeStr = (json['type'] ?? json['event_type']) as String?;
       final payload = json['payload'] as Map<String, dynamic>?;
 
       if (key == null || seq == null || typeStr == null || payload == null) {
         return null;
       }
 
+      final branch = (json['branchId'] ?? json['branch_id']) as String? ?? fallbackBranchId;
+      final epoch = (json['epochId'] ?? json['server_epoch']?.toString() ?? json['epoch_id']) as String? ?? fallbackEpochId;
+
       return RuntimeEvent(
         idempotencyKey: key,
         sequenceNumber: seq,
-        branchId: (json['branchId'] as String?) ?? fallbackBranchId,
-        epochId:  (json['epochId']  as String?) ?? fallbackEpochId,
+        branchId: branch,
+        epochId:  epoch,
         type:     _parseType(typeStr),
         payload:  payload,
         receivedAt: DateTime.now(),
