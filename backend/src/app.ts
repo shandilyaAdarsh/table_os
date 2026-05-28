@@ -44,7 +44,7 @@ export function createApp(): express.Application {
     cors({
       origin: (requestOrigin, callback) => {
         if (!requestOrigin) return callback(null, true);
-        if (env.NODE_ENV === 'development' && requestOrigin.startsWith('http://localhost:')) {
+        if (requestOrigin.startsWith('http://localhost:')) {
           return callback(null, true);
         }
         if (corsOrigins.includes(requestOrigin)) {
@@ -144,6 +144,7 @@ export function createApp(): express.Application {
 
   // ─── Admin API (requires auth & tenant context) ──────────────
   // The authoritative operational interface for the dashboard/admin panel.
+  app.use('/v1/admin', adminRouter);
   app.use('/api/v1/admin', adminRouter);
 
   // Future modules registered here:

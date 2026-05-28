@@ -4,8 +4,9 @@
 // Uses supabaseAdmin — bypasses RLS.
 // ============================================================
 
-import { supabaseAdmin } from '../../../config/supabase';
+import { supabaseAdmin, createUserClient } from '../../../config/supabase';
 import { logger } from '../../../shared/utils/logger';
+import type { Request } from 'express';
 import type { MenuCategory, MenuCategoryBranchVisibility } from '../menu.types';
 import type { CreateMenuCategoryDto, UpdateMenuCategoryDto, MenuCategoryListQuery } from '../menu.dtos';
 
@@ -161,20 +162,43 @@ export async function findVisibleCategoriesForBranch(
 export async function createCategory(
   tenantId: string,
   dto: CreateMenuCategoryDto,
-  createdBy: string
+  authContext: Request['context']
 ): Promise<MenuCategory> {
-  const { data, error } = await supabaseAdmin
+  const userClient = createUserClient(authContext.accessToken);
+
+  const payload = {
+    tenant_id:  tenantId,
+    parent_id:  dto.parent_id ?? null,
+    name:       dto.name,
+    slug:       dto.slug,
+    description: dto.description ?? null,
+    image_url:  dto.image_url ?? null,
+    sort_order: dto.sort_order ?? 0,
+    created_by: authContext.userId,
+  };
+
+  logger.info({
+    debug_context: {
+      step: 'BEFORE_INSERT',
+      table: 'menu_categories',
+      authenticated_user_id: authContext.userId,
+      tenant_id: authContext.tenantId,
+      branch_ids: authContext.branchIds,
+      role: authContext.role,
+      jwt_claims: {
+        sub: authContext.userId,
+        tenant_id: authContext.tenantId,
+        role: authContext.role,
+        branch_id: authContext.branchIds[0]
+      },
+      final_insert_payload: payload,
+      supabase_client_type: 'userClient (RLS active)'
+    }
+  }, 'MANDATORY DEBUGGING: Postgres insert context for menu_categories');
+
+  const { data, error } = await userClient
     .from('menu_categories')
-    .insert({
-      tenant_id:  tenantId,
-      parent_id:  dto.parent_id ?? null,
-      name:       dto.name,
-      slug:       dto.slug,
-      description: dto.description ?? null,
-      image_url:  dto.image_url ?? null,
-      sort_order: dto.sort_order ?? 0,
-      created_by: createdBy,
-    })
+    .insert(payload)
     .select()
     .single();
 

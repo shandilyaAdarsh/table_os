@@ -19,7 +19,7 @@ BEGIN
   SELECT EXISTS(SELECT 1 FROM public.menu_items WHERE tenant_id = p_tenant_id AND deleted_at IS NULL) INTO v_has_menu_items;
   SELECT EXISTS(SELECT 1 FROM public.tax_profiles WHERE tenant_id = p_tenant_id AND deleted_at IS NULL) INTO v_has_tax_profiles;
   SELECT EXISTS(SELECT 1 FROM public.tables WHERE tenant_id = p_tenant_id AND deleted_at IS NULL) INTO v_has_tables;
-  SELECT EXISTS(SELECT 1 FROM public.staff WHERE tenant_id = p_tenant_id AND is_active = true) INTO v_has_staff;
+  SELECT EXISTS(SELECT 1 FROM public.staff WHERE tenant_id = p_tenant_id AND status = 'active') INTO v_has_staff;
   SELECT EXISTS(SELECT 1 FROM public.kitchen_stations WHERE tenant_id = p_tenant_id AND deleted_at IS NULL) INTO v_has_kds_stations;
 
   -- Determine stage
