@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { supabase } from '../../../lib/supabase'
+import { fetchWithRuntime, submitMutation } from '../../../lib/apiClient'
 import { getTableNum } from '../utils/tableNum'
 
 const TENANT_ID = '11111111-1111-1111-1111-111111111111'
@@ -481,22 +481,19 @@ export default function CheckIn({ onComplete }) {
     if (digits.length < 10) return
     setCheckingPhone(true)
     try {
-      // 1. Try Supabase first
-      const { data } = await supabase
-        .from('guest_sessions')
-        .select('name, phone, visit_count')
-        .eq('tenant_id', TENANT_ID)
-        .eq('phone', phoneVal.trim())
-        .single()
-
-      if (data) {
-        console.log('[CheckIn] Returning guest found in Supabase:', data.name)
-        setReturningGuest(data)
-        setName(data.name)
-        setCheckingPhone(false)
-        return
+      // 1. Try unified backend API first
+      const res = await fetchWithRuntime(`/api/v1/customer/guest-sessions/lookup?phone=${encodeURIComponent(phoneVal.trim())}&tenant_id=${TENANT_ID}`)
+      if (res.ok) {
+        const { data } = await res.json()
+        if (data) {
+          console.log('[CheckIn] Returning guest found in backend:', data.name)
+          setReturningGuest(data)
+          setName(data.name)
+          setCheckingPhone(false)
+          return
+        }
       }
-    } catch { /* no Supabase record — try localStorage */ }
+    } catch { /* no backend record — try localStorage */ }
 
     // 2. Fallback: check localStorage guestProfile
     try {
@@ -535,32 +532,15 @@ export default function CheckIn({ onComplete }) {
     try {
       // Upsert guest session if phone provided
       if (phone.trim()) {
-        const { data: existing } = await supabase
-          .from('guest_sessions')
-          .select('id, visit_count')
-          .eq('tenant_id', TENANT_ID)
-          .eq('phone', phone.trim())
-          .single()
-
-        if (existing) {
-          await supabase
-            .from('guest_sessions')
-            .update({
-              name: finalName,
-              visit_count: (existing.visit_count || 1) + 1,
-              last_visit_at: new Date().toISOString(),
-            })
-            .eq('id', existing.id)
-        } else {
-          await supabase
-            .from('guest_sessions')
-            .insert({
-              tenant_id: TENANT_ID,
-              phone: phone.trim(),
-              name: finalName,
-              visit_count: 1,
-            })
-        }
+        await submitMutation('/api/v1/runtime/mutations', {
+          mutation_id: 'upsert_guest_session',
+          idempotency_key: crypto.randomUUID(),
+          payload: {
+            tenant_id: TENANT_ID,
+            phone: phone.trim(),
+            name: finalName
+          }
+        })
       }
     } catch (err) {
       console.warn('[CheckIn] guest_sessions upsert failed (non-fatal):', err.message)

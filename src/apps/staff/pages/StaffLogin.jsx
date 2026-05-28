@@ -12,7 +12,7 @@ export default function StaffLogin() {
 
   // If already logged in, skip login
   useEffect(() => {
-    if (staff_user) navigate('/staff/tables')
+    if (staff_user) navigate('/pos/tables')
   }, [staff_user, navigate])
 
   const handlePress = async (num) => {
@@ -38,7 +38,7 @@ export default function StaffLogin() {
 
         // Success
         login({ id: data.id, name: data.name, role: data.role })
-        navigate('/staff/tables')
+        navigate('/pos/tables')
         
       } catch (err) {
         console.error(err)

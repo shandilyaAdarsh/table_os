@@ -42,12 +42,13 @@ Deno.serve(async (req: Request) => {
   const { data: profile, error: profileError } = await adminClient
     .from("admin_profiles")
     .select(
-      "id, role, full_name, is_active, must_change_password, tenant_id, tenants(id, name, slug, plan, status, is_active, next_billing_date)",
+      "id, role, full_name, is_active, must_change_password, tenant_id, tenants(id, name, slug, status)",
     )
     .eq("id", user.id)
     .single();
 
   if (profileError || !profile) {
+    console.error("Profile error:", profileError);
     return json({ error: "PROFILE_NOT_FOUND", message: "Profile not found. Contact support." }, 404);
   }
 
@@ -60,7 +61,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: "TENANT_NOT_FOUND", message: "No restaurant linked to this account." }, 404);
   }
 
-  if (tenant.is_active === false) {
+  if (tenant.status === "suspended") {
     return json({ error: "TENANT_SUSPENDED", message: "This restaurant account has been suspended." }, 403);
   }
 
@@ -83,9 +84,9 @@ Deno.serve(async (req: Request) => {
       id: tenant.id,
       name: tenant.name,
       slug: tenant.slug,
-      plan: tenant.plan,
+      plan: "free",
       status: tenant.status,
-      next_billing_date: tenant.next_billing_date,
+      next_billing_date: null,
     },
     onboarding: {
       is_complete: onboardingComplete,

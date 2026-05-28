@@ -1,5 +1,6 @@
 import { useRuntimeIdentityStore } from '../store/runtimeIdentityStore';
 import { useConnectivityStore } from '../store/connectivityStore';
+import { runtime } from '../runtime/index';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -14,6 +15,13 @@ export async function fetchWithRuntime(endpoint, options = {}) {
   const token = localStorage.getItem('supabase.auth.token'); // Fallback placeholder
   
   const headers = new Headers(options.headers || {});
+  
+  // Strict Read-Only Enforcement
+  const method = (options.method || 'GET').toUpperCase();
+  if (method !== 'GET' && method !== 'HEAD') {
+    throw new Error(`[Architecture Violation] fetchWithRuntime MUST NOT be used for ${method}. Use MutationGateway for operational mutations.`);
+  }
+
   if (!headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
@@ -55,28 +63,12 @@ export async function fetchWithRuntime(endpoint, options = {}) {
 
 /**
  * Executes a deterministic, retry-safe mutation enforcing the MutationEnvelope contract.
- * Called exclusively by MutationCoordinator.
+ * Now acts as a thin proxy to the centralized MutationGateway.
  */
 export async function submitMutation(endpoint, mutation) {
   const identity = useRuntimeIdentityStore.getState();
+  const surfaceId = identity.terminalId || 'unknown_surface';
   
-  const envelope = {
-    mutation_id: mutation.mutation_id,
-    mutation_sequence: mutation.mutation_sequence,
-    runtime_version: 1,
-    session_id: identity.runtimeSessionId,
-    terminal_id: identity.terminalId,
-    branch_id: identity.branchId,
-    client_timestamp: new Date().toISOString(),
-    idempotency_key: mutation.idempotency_key,
-    expected_cart_revision: mutation.expected_cart_revision,
-    payload: mutation.payload,
-  };
-
-  const response = await fetchWithRuntime(endpoint, {
-    method: 'POST',
-    body: JSON.stringify(envelope),
-  });
-
-  return response;
+  // Delegate the operational mutation boundary to the formal runtime infrastructure
+  return await runtime.mutation.submitMutation(endpoint, mutation, surfaceId);
 }

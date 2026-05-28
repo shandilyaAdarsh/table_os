@@ -151,6 +151,15 @@ export async function loginWithEmail(
     // Lock has expired — will be cleared on successful login below
   }
 
+  // 4b. Sync rbac_role into Supabase app_metadata so the JWT carries it for RLS.
+  // The RLS helper is_tenant_menu_admin() reads app_metadata ->> 'rbac_role'.
+  await supabaseAdmin.auth.admin.updateUserById(authData.user.id, {
+    app_metadata: {
+      ...authData.user.app_metadata,
+      rbac_role: profile.role,
+    },
+  });
+
   // 5. Update login metadata (clears failed count and lock)
   await updateLoginSuccess(profile.id, ipAddress);
 

@@ -30,12 +30,23 @@ import {
   CheckIn
 } from './apps/customer/index'
 
-// Waiter / Staff
+// Waiter / Staff App (Placeholder for real staff app)
 import { 
   StaffLogin, 
   StaffTables, 
   StaffTableDetail 
 } from './apps/staff/index'
+
+// POS Runtime
+import {
+  POSTableOverview,
+  POSTableDetail
+} from './apps/pos/index'
+
+// Runtime Observability Panel — DEV / QA / INTERNAL_PILOT only
+// Stripped from production builds via import.meta.env.DEV guard at route level.
+import RuntimeObservabilityPanel from './runtime/validation/RuntimeObservabilityPanel'
+import RuntimeCertificationPanel from './runtime/validation/RuntimeCertificationPanel'
 
 
 
@@ -117,7 +128,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/kds" element={<KDSBoard />} />
           <Route path="/kds/settings" element={<KDSSettings />} />
 
-          {/* Waiter / Staff */}
+          {/* Staff Runtime */}
           <Route path="/staff/login" element={<StaffLogin />} />
           <Route path="/staff/tables" element={
             <ProtectedRoute allowedRoles={['waiter', 'manager', 'owner']} redirectTo="/staff/login">
@@ -129,6 +140,26 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <StaffTableDetail />
             </ProtectedRoute>
           } />
+
+          {/* POS Runtime */}
+          <Route path="/pos/tables" element={
+            <ProtectedRoute allowedRoles={['waiter', 'manager', 'owner']} redirectTo="/staff/login">
+              <POSTableOverview />
+            </ProtectedRoute>
+          } />
+          <Route path="/pos/table/:id" element={
+            <ProtectedRoute allowedRoles={['waiter', 'manager', 'owner']} redirectTo="/staff/login">
+              <POSTableDetail />
+            </ProtectedRoute>
+          } />
+
+          {/* Runtime Observability — DEV / QA / INTERNAL_PILOT only */}
+          {import.meta.env.DEV && (
+            <>
+              <Route path="/runtime/panel" element={<RuntimeObservabilityPanel />} />
+              <Route path="/runtime/certify" element={<RuntimeCertificationPanel />} />
+            </>
+          )}
 
 
 

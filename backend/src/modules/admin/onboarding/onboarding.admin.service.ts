@@ -11,10 +11,32 @@ export class AdminOnboardingService {
    * Fetches the aggregated onboarding status for a tenant using a single RPC call.
    */
   public async getOnboardingStatus(supabase: SupabaseClient, tenantId: string): Promise<any> {
-    const { data, error } = await supabase.rpc('get_onboarding_status', { p_tenant_id: tenantId });
-    if (error) {
-      throw new AppError(`Failed to fetch onboarding status: ${error.message}`, 500, 'INTERNAL_SERVER_ERROR');
+    try {
+      const { data, error } = await supabase.rpc('get_onboarding_status', { p_tenant_id: tenantId });
+      
+      if (error) {
+        console.error(`[OnboardingService] Failed to fetch onboarding status via RPC for tenant ${tenantId}:`, error);
+        return this.getFallbackStatus(tenantId);
+      }
+      
+      return data;
+    } catch (err) {
+      console.error(`[OnboardingService] Unhandled exception fetching onboarding status for tenant ${tenantId}:`, err);
+      return this.getFallbackStatus(tenantId);
     }
-    return data;
+  }
+
+  private getFallbackStatus(tenantId: string) {
+    return {
+      tenant_id: tenantId,
+      has_categories: false,
+      has_menu_items: false,
+      has_tax_profiles: false,
+      has_tables: false,
+      has_staff: false,
+      has_kds_stations: false,
+      setup_stage: 'EMPTY',
+      is_operational: false
+    };
   }
 }
