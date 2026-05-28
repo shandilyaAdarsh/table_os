@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import confetti from 'canvas-confetti'
-import { supabase } from '../../../lib/supabase'
+import { fetchWithRuntime } from '../../../lib/apiClient'
 import { motion } from 'framer-motion'
 
 export default function OrderConfirmed() {
@@ -23,14 +23,10 @@ export default function OrderConfirmed() {
 
     const fetchOrder = async () => {
       try {
-        const { data, error: fetchErr } = await supabase
-          .from('orders')
-          .select('*, order_items(*)')
-          .eq('id', resolvedOrderId)
-          .eq('tenant_id', '11111111-1111-1111-1111-111111111111')
-          .single()
-
-        if (fetchErr || !data) throw new Error('Not found')
+        const res = await fetchWithRuntime(`/api/v1/customer/orders/${resolvedOrderId}`)
+        if (!res.ok) throw new Error('Not found')
+        const { data } = await res.json()
+        if (!data) throw new Error('Not found')
         
         setOrder(data)
         
@@ -135,8 +131,8 @@ export default function OrderConfirmed() {
           const orderItems = order.order_items || []
           const subtotal = orderItems.reduce((sum, item) =>
             sum + ((item.unit_price || 0) * (item.qty || 0)), 0)
-          const gst = Math.round(subtotal * 0.05)
-          const total = subtotal + gst
+          const tax = order.tax_amount || 0
+          const total = order.total_amount || (subtotal + tax)
           return (
             <>
               {/* Item list */}

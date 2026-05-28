@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { supabase } from '../../../lib/supabase'
+import { fetchWithRuntime, submitMutation } from '../../../lib/apiClient'
 import { useStaffStore } from '../../../store/index'
+import { useRuntimeIdentityStore } from '../../../store/runtimeIdentityStore'
 
 export default function TableDetail() {
   const { tableId } = useParams()
@@ -13,86 +14,47 @@ export default function TableDetail() {
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
 
+  const { branchId, tenantId } = useRuntimeIdentityStore()
+
   useEffect(() => {
-    if (!staff_user) {
+    if (!staff_user || !branchId || !tenantId) {
       navigate('/staff')
       return
     }
 
     const fetchData = async () => {
-      const tenantId = '11111111-1111-1111-1111-111111111111'
-      
-      const [tRes, oRes, aRes] = await Promise.all([
-        supabase.from('restaurant_tables').select('*').eq('id', tableId).single(),
-        supabase.from('orders')
-          .select('*, order_items(*, menu_items(name, price))')
-          .eq('table_id', tableId)
-          .eq('tenant_id', tenantId)
-          .in('status', ['pending', 'cooking', 'ready'])
-          .order('created_at', { ascending: true }),
-        supabase.from('assistance_requests')
-          .select('*')
-          .eq('table_id', tableId)
-          .eq('tenant_id', tenantId)
-          .eq('status', 'pending')
-          .order('created_at', { ascending: true })
-      ])
+      try {
+        const [tRes, oRes, aRes] = await Promise.all([
+          fetchWithRuntime(`/api/v1/branches/${branchId}/tables/${tableId}`).then(r => r.json()),
+          fetchWithRuntime(`/api/v1/branches/${branchId}/tables/${tableId}/orders?status=active`).then(r => r.json()),
+          fetchWithRuntime(`/api/v1/branches/${branchId}/tables/${tableId}/requests?status=pending`).then(r => r.json())
+        ])
 
-      setTable(tRes.data)
-      setOrders(oRes.data || [])
-      setRequests(aRes.data || [])
-      setLoading(false)
+        setTable(tRes.data)
+        setOrders(oRes.data || [])
+        setRequests(aRes.data || [])
+      } catch (err) {
+        console.error('Failed to fetch table detail:', err)
+      } finally {
+        setLoading(false)
+      }
     }
 
     fetchData()
 
-    const channel = supabase.channel(`table_detail_${tableId}`)
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'orders', 
-        filter: 'table_id=eq.' + tableId 
-      }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-           supabase.from('orders')
-             .select('*, order_items(*, menu_items(name, price))')
-             .eq('id', payload.new.id)
-             .single()
-             .then(({ data }) => setOrders(prev => [...prev, data]))
-        } else if (payload.eventType === 'UPDATE') {
-          setOrders(prev => {
-            if (payload.new.status === 'served' || payload.new.status === 'cancelled' || payload.new.status === 'rejected') {
-              return prev.filter(o => o.id !== payload.new.id)
-            }
-            return prev.find(o => o.id === payload.new.id)
-              ? prev.map(o => o.id === payload.new.id ? { ...o, ...payload.new } : o)
-              : [...prev, payload.new]
-          })
-        }
-      })
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'assistance_requests', 
-        filter: 'table_id=eq.' + tableId 
-      }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          setRequests(prev => [...prev, payload.new])
-        } else if (payload.eventType === 'UPDATE') {
-          setRequests(prev => {
-            if (payload.new.status === 'resolved') return prev.filter(r => r.id !== payload.new.id)
-            return prev.map(r => r.id === payload.new.id ? payload.new : r)
-          })
-        }
-      })
-      .subscribe()
-
-    return () => supabase.removeChannel(channel)
-  }, [tableId, staff_user, navigate])
+    // Realtime transport is owned by the parent surface (TableOverview via runtime.bootstrap).
+    // In a fully integrated state, this component subscribes directly to the projection stores.
+  }, [tableId, staff_user, branchId, tenantId, navigate])
 
   const resolveRequest = async (requestId) => {
     try {
-      await supabase.from('assistance_requests').update({ status: 'resolved' }).eq('id', requestId)
+      await submitMutation('/api/v1/runtime/mutations', {
+        mutation_id: 'resolve_assistance_request',
+        idempotency_key: crypto.randomUUID(),
+        payload: { request_id: requestId }
+      })
+      // Optimistic update
+      setRequests(prev => prev.filter(r => r.id !== requestId))
     } catch (err) {
       console.error('Failed to resolve request', err)
     }
@@ -104,10 +66,11 @@ export default function TableDetail() {
       const newStatus = isAccepted ? 'pending' : 'accepted'
       const newDone = !isAccepted
       
-      await supabase
-        .from('order_items')
-        .update({ status: newStatus, done: newDone })
-        .eq('id', itemId)
+      await submitMutation('/api/v1/runtime/mutations', {
+        mutation_id: 'toggle_item_status',
+        idempotency_key: crypto.randomUUID(),
+        payload: { item_id: itemId, status: newStatus, done: newDone }
+      })
 
       setOrders(prev => prev.map(order => ({
         ...order,
@@ -122,14 +85,12 @@ export default function TableDetail() {
 
   const serveOrder = async (orderId) => {
     try {
-      // Mark unticked items as out_of_stock
-      await supabase
-        .from('order_items')
-        .update({ status: 'out_of_stock' })
-        .eq('order_id', orderId)
-        .eq('status', 'pending')
-
-      await supabase.from('orders').update({ status: 'served' }).eq('id', orderId)
+      await submitMutation('/api/v1/runtime/mutations', {
+        mutation_id: 'serve_order',
+        idempotency_key: crypto.randomUUID(),
+        payload: { order_id: orderId }
+      })
+      setOrders(prev => prev.filter(o => o.id !== orderId))
     } catch (err) {
       console.error('Failed to serve order', err)
     }
@@ -137,19 +98,12 @@ export default function TableDetail() {
 
   const handleCheckout = async () => {
     try {
-      // 1. Resolve all pending requests
-      if (requests.length > 0) {
-        await supabase.from('assistance_requests')
-          .update({ status: 'resolved' })
-          .in('id', requests.map(r => r.id))
-      }
-      // 2. Mark all orders as served
-      if (orders.length > 0) {
-        await supabase.from('orders')
-          .update({ status: 'served' })
-          .in('id', orders.map(o => o.id))
-      }
-      navigate('/staff/tables')
+      await submitMutation('/api/v1/runtime/mutations', {
+        mutation_id: 'checkout_table',
+        idempotency_key: crypto.randomUUID(),
+        payload: { table_id: tableId }
+      })
+      navigate('/pos/tables')
     } catch (err) {
       console.error('Checkout failed', err)
     }
@@ -157,7 +111,12 @@ export default function TableDetail() {
 
   const acknowledgeRequest = async (requestId) => {
     try {
-      await supabase.from('assistance_requests').update({ status: 'acknowledged' }).eq('id', requestId)
+      await submitMutation('/api/v1/runtime/mutations', {
+        mutation_id: 'acknowledge_assistance_request',
+        idempotency_key: crypto.randomUUID(),
+        payload: { request_id: requestId }
+      })
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'acknowledged' } : r))
     } catch (err) {
       console.error('Failed to acknowledge request', err)
     }
@@ -171,7 +130,7 @@ export default function TableDetail() {
       <header style={{ background: '#0D1117', padding: '16px 20px', borderBottom: '1px solid #30363D', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button 
-            onClick={() => navigate('/staff/tables')}
+            onClick={() => navigate('/pos/tables')}
             style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
           >
             <span className="material-symbols-outlined" style={{ fontSize: 24 }}>arrow_back</span>
@@ -290,7 +249,7 @@ export default function TableDetail() {
                             <p style={{ color: '#8B949E', fontSize: 12, margin: 0, fontStyle: 'italic' }}>no special note</p>
                           </div>
                         </div>
-                        <span style={{ color: '#8B949E', fontSize: 12 }}>₹{item.price}</span>
+                        <span style={{ color: '#8B949E', fontSize: 12 }}>₹{(item.price_in_cents / 100).toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
@@ -313,7 +272,7 @@ export default function TableDetail() {
 
       {/* BOTTOM NAV */}
       <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, height: 60, background: '#161B22', borderTop: '1px solid #30363D', display: 'flex', justifyContent: 'space-around', alignItems: 'center', zIndex: 100 }}>
-        <div onClick={() => navigate('/staff/tables')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, color: 'white', cursor: 'pointer' }}>
+        <div onClick={() => navigate('/pos/tables')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, color: 'white', cursor: 'pointer' }}>
           <span className="material-symbols-outlined" style={{ fontSize: 24 }}>grid_view</span>
           <span style={{ fontSize: 10, fontWeight: 600 }}>Floor</span>
         </div>

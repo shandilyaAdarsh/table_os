@@ -144,6 +144,22 @@ router.get('/:tableId/history', requireMinRole(ROLES.MANAGER), async (req: Reque
   } catch (err) { next(err); }
 });
 
+// GET /api/v1/admin/tables/:tableId/qr
+router.get('/:tableId/qr', requireMinRole(ROLES.MANAGER), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const token = await tableService.getQrToken(req.context.tenantId!, req.params.tableId as string);
+    res.status(200).json({ success: true, token });
+  } catch (err) { next(err); }
+});
+
+// POST /api/v1/admin/tables/:tableId/qr/rotate
+router.post('/:tableId/qr/rotate', requireMinRole(ROLES.MANAGER), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const token = await tableService.rotateQrToken(req.context.tenantId!, req.params.tableId as string, req.context.userId);
+    res.status(200).json({ success: true, token });
+  } catch (err) { next(err); }
+});
+
 // ─── Reservations ─────────────────────────────────────────────
 
 router.get('/:tableId/reservations', requireMinRole(ROLES.STAFF), async (req: Request, res: Response, next: NextFunction) => {

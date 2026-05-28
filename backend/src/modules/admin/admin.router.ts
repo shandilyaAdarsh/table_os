@@ -14,6 +14,7 @@ import { tablesRouter } from '../tables/tables.router';
 import { qrAdminRouter } from '../tables/qr/qr.admin.router';
 import { maintenanceRouter } from '../maintenance/maintenance.router';
 import { waiterCallRouter } from '../waiter-call/waiter-call.router';
+import { adminOnboardingRouter } from './onboarding/onboarding.admin.router';
 
 const router: Router = Router({ mergeParams: true });
 
@@ -30,6 +31,7 @@ router.use('/tables', tablesRouter);
 router.use('/qr', qrAdminRouter);
 router.use('/maintenance', maintenanceRouter);
 router.use('/waiter-calls', waiterCallRouter);
+router.use('/onboarding', adminOnboardingRouter);
 
 // Future Admin routers:
 // router.use('/staff', adminStaffRouter);

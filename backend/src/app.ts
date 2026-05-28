@@ -44,7 +44,7 @@ export function createApp(): express.Application {
     cors({
       origin: (requestOrigin, callback) => {
         if (!requestOrigin) return callback(null, true);
-        if (env.NODE_ENV === 'development' && requestOrigin.startsWith('http://localhost:')) {
+        if (requestOrigin.startsWith('http://localhost:')) {
           return callback(null, true);
         }
         if (corsOrigins.includes(requestOrigin)) {
@@ -117,7 +117,7 @@ export function createApp(): express.Application {
   app.use('/public', publicMenuRouter);
 
   // ─── Public QR Runtime API (no auth required, rate limited) ──────────
-  app.use('/api/v1/public/qr', publicQrRouter);
+  app.use('/api/v1/public/table', publicQrRouter);
 
   // ─── Public Cart API (requires QR session token) ────────────
   app.use('/api/v1/cart', cartRouter);
@@ -144,6 +144,7 @@ export function createApp(): express.Application {
 
   // ─── Admin API (requires auth & tenant context) ──────────────
   // The authoritative operational interface for the dashboard/admin panel.
+  app.use('/v1/admin', adminRouter);
   app.use('/api/v1/admin', adminRouter);
 
   // Future modules registered here:

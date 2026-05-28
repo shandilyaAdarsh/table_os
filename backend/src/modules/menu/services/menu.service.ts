@@ -56,6 +56,7 @@ import type {
   MenuCategory, MenuCategoryTree, MenuItem, EffectiveMenuItem,
   ModifierGroupWithOptions, ModifierOption, ModifierGroup
 } from '../menu.types';
+import type { Request } from 'express';
 import type {
   CreateMenuCategoryDto, UpdateMenuCategoryDto, SetCategoryBranchVisibilityDto, MenuCategoryListQuery,
   CreateMenuItemDto, UpdateMenuItemDto, MenuItemListQuery,
@@ -104,7 +105,7 @@ export async function getVisibleCategoriesForBranch(
 export async function createMenuCategory(
   tenantId: string,
   dto: CreateMenuCategoryDto,
-  createdBy: string
+  authContext: Request['context']
 ): Promise<MenuCategory> {
   // Guard: slug uniqueness
   const existing = await findCategoryBySlug(tenantId, dto.slug);
@@ -127,7 +128,7 @@ export async function createMenuCategory(
     if (depth > 3) throw new AppError('Maximum category depth of 3 exceeded', 400, 'VALIDATION_ERROR');
   }
 
-  return createCategory(tenantId, dto, createdBy);
+  return createCategory(tenantId, dto, authContext);
 }
 
 export async function updateMenuCategory(

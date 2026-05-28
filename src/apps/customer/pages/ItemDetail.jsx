@@ -19,19 +19,10 @@ export default function ItemDetail() {
     const fetchItem = async () => {
       setLoading(true)
       try {
-        const { data, error } = await supabase
-          .from('menu_items')
-          .select('*')
-          .eq('id', itemId)
-          .eq('tenant_id', '11111111-1111-1111-1111-111111111111')
-          .single()
-        
-        if (error) {
-          console.error('Error fetching item:', error)
-          setItem(null)
-        } else {
-          setItem(data)
-        }
+        const res = await fetchWithRuntime(`/api/v1/runtime/menu/${itemId}`)
+        if (!res.ok) throw new Error('Failed to fetch item')
+        const { data } = await res.json()
+        setItem(data)
       } catch (err) {
         console.error('Fetch catch:', err)
         setItem(null)

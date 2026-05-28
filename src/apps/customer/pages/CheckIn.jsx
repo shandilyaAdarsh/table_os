@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { supabase } from '../../../lib/supabase'
+import { fetchWithRuntime, submitMutation } from '../../../lib/apiClient'
 import { getTableNum } from '../utils/tableNum'
 
 const TENANT_ID = '11111111-1111-1111-1111-111111111111'
@@ -403,32 +403,15 @@ export default function CheckIn({ onComplete }) {
 
     try {
       if (phone.trim()) {
-        const { data: existing } = await supabase
-          .from('guest_sessions')
-          .select('id, visit_count')
-          .eq('tenant_id', TENANT_ID)
-          .eq('phone', phone.trim())
-          .single()
-
-        if (existing) {
-          await supabase
-            .from('guest_sessions')
-            .update({
-              name: finalName,
-              visit_count: (existing.visit_count || 1) + 1,
-              last_visit_at: new Date().toISOString(),
-            })
-            .eq('id', existing.id)
-        } else {
-          await supabase
-            .from('guest_sessions')
-            .insert({
-              tenant_id: TENANT_ID,
-              phone: phone.trim(),
-              name: finalName,
-              visit_count: 1,
-            })
-        }
+        await submitMutation('/api/v1/runtime/mutations', {
+          mutation_id: 'upsert_guest_session',
+          idempotency_key: crypto.randomUUID(),
+          payload: {
+            tenant_id: TENANT_ID,
+            phone: phone.trim(),
+            name: finalName
+          }
+        })
       }
     } catch (err) {
       console.warn('[CheckIn] guest_sessions upsert failed:', err.message)

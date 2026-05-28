@@ -172,6 +172,23 @@ export async function getTableHistory(tenantId: string, tableId: string) {
   return tableRepo.getTableStateHistory(tenantId, tableId);
 }
 
+export async function rotateQrToken(tenantId: string, tableId: string, actorId: string): Promise<string> {
+  const table = await tableRepo.findTableById(tenantId, tableId);
+  if (!table) throw new AppError('Table not found', 404, 'NOT_FOUND');
+  
+  const token = await tableRepo.rotateTableQrToken(tenantId, tableId);
+  
+  await tableRepo.appendTableStateHistory(tenantId, table.branch_id, tableId, actorId, 'Rotated QR Token');
+  return token;
+}
+
+export async function getQrToken(tenantId: string, tableId: string): Promise<string | null> {
+  const table = await tableRepo.findTableById(tenantId, tableId);
+  if (!table) throw new AppError('Table not found', 404, 'NOT_FOUND');
+  
+  return tableRepo.getActiveQrToken(tenantId, tableId);
+}
+
 // ─── Reservations ─────────────────────────────────────────────
 
 export async function createReservation(

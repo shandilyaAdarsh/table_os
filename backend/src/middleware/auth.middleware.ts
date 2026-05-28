@@ -25,6 +25,7 @@ declare global {
        * NEVER populate from req.body or req.query.
        */
       context: AuthContext & { full_name: string; must_change_password: boolean };
+      accessToken: string;
       device_fingerprint: string;
       ip_address: string;
     }
@@ -102,6 +103,7 @@ export async function authenticate(
     }
 
     req.context           = context;
+    req.accessToken       = token;
     req.device_fingerprint = deviceFingerprint;
     // req.ip is set by Express using trust proxy
     req.ip_address = req.ip ?? '';

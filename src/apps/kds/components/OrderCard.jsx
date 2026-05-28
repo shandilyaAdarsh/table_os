@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
-import { useOrderStore } from '../../../store/index.js';
 import { useKitchenMutations } from '../hooks/useKitchenMutations.js';
-import { useMutationCoordinator } from '../../../store/mutationCoordinator.js';
-import { useTransportStore, TransportState } from '../../../store/transportStore.js';
+import { submitMutation } from '../../../lib/apiClient.js';
+import { useRuntimeStore } from '../../../store/useRuntimeStore.js';
+import { useKdsIdentityStore } from '../../../store/kdsIdentityStore.js';
 
 // Re-export formatTime for any parent that needs it
 export const formatTime = (s) =>
@@ -89,16 +89,12 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
 
   const { markPreparing, markReady, bumpOrder, recallTicket } = useKitchenMutations();
 
-  // Legacy fallback for history or if not fully implemented in mutation coordinator
-  const rejectOrder = useOrderStore(s => s.rejectOrder);
+  // Operational Resilience Checks (Mocking for now since we removed mutation coordinator UI exposure)
+  // Real implementation would subscribe to MutationGateway events or use a runtime health store.
+  const isStuck = false;
 
-  // Operational Resilience Checks
-  const stuckMutations = useMutationCoordinator(s => s.getStuckMutations(10000));
-  const isStuck = stuckMutations.some(m => m.payload?.orderId === id);
-
-  const transportState = useTransportStore(s => s.state);
-  const isSyncing = useTransportStore(s => s.isSyncing);
-  const isTransportDegraded = transportState !== TransportState.CONNECTED || isSyncing;
+  const { isHealthy, isRecovering, isDegraded } = useRuntimeStore();
+  const isTransportDegraded = isDegraded || isRecovering || !isHealthy;
   const isLocked = isPendingOperationalConfirmation || isTransportDegraded;
 
   // Default: all items are selected (kitchen accepts the full order unless they deselect)
@@ -156,7 +152,17 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
       onConfirm: async () => {
         setIsActionLoading(true);
         try {
-          await rejectOrder(id);
+          const { runtimeSessionId, kitchenDeviceId } = useKdsIdentityStore.getState();
+          await submitMutation('/api/v1/mutations', {
+            mutation_id: `KITCHEN_REJECT_ORDER_${id}_${Date.now()}`,
+            idempotency_key: `KITCHEN_REJECT_ORDER_${id}`,
+            payload: {
+              type: 'KITCHEN_REJECT_ORDER',
+              orderId: id,
+              runtimeSessionId,
+              kitchenDeviceId
+            }
+          });
         } catch (err) {
           console.error('[KDS] Cancel error:', err);
         } finally {

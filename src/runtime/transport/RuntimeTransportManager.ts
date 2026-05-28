@@ -1,0 +1,200 @@
+import { RealtimeEventRouter } from '../realtime/RealtimeEventRouter';
+import { ReplayRecoveryEngine } from '../replay/ReplayRecoveryEngine';
+import { RuntimeObservabilityLayer } from '../observability/RuntimeObservabilityLayer';
+import { ProjectionCoordinator } from '../projection/ProjectionCoordinator';
+import { RealtimeTransportAdapter } from './TransportAdapter';
+import { useRuntimeStore } from '../../store/useRuntimeStore';
+
+export type RuntimeState = 
+  | 'BOOTSTRAPPING' 
+  | 'SYNCING' 
+  | 'LIVE' 
+  | 'DEGRADED' 
+  | 'RECONNECTING' 
+  | 'RECOVERING' 
+  | 'SUSPENDED' 
+  | 'FAILED';
+
+export class RuntimeTransportManager {
+  private currentState: RuntimeState = 'BOOTSTRAPPING';
+  private router: RealtimeEventRouter;
+  private replayEngine: ReplayRecoveryEngine;
+  private observability: RuntimeObservabilityLayer;
+  private projectionCoordinator: ProjectionCoordinator;
+
+  // Realtime Transport
+  private adapter: RealtimeTransportAdapter | null = null;
+  private channelTopic: string = '';
+
+  // Polling / Degraded Mode Fallbacks
+  private heartbeatInterval: any = null;
+  private pollingInterval: any = null;
+  private lastApiContact: number = Date.now();
+  private consecutiveFailures: number = 0;
+
+  constructor(
+    router: RealtimeEventRouter,
+    replayEngine: ReplayRecoveryEngine,
+    observability: RuntimeObservabilityLayer,
+    projectionCoordinator: ProjectionCoordinator
+  ) {
+    this.router = router;
+    this.replayEngine = replayEngine;
+    this.observability = observability;
+    this.projectionCoordinator = projectionCoordinator;
+  }
+
+  public initialize(adapter: RealtimeTransportAdapter, topic: string) {
+    this.adapter = adapter;
+    this.channelTopic = topic;
+    this.transitionTo('SYNCING');
+    this.connectWebsocket();
+    this.startHeartbeat();
+    this.observability.setSurface(topic);
+  }
+
+  public getState(): RuntimeState {
+    return this.currentState;
+  }
+
+  private transitionTo(newState: RuntimeState) {
+    if (this.currentState === newState) return;
+    console.info(`[RuntimeTransportManager] State Transition: ${this.currentState} -> ${newState}`);
+    this.observability.recordStateTransition(this.currentState, newState);
+    this.currentState = newState;
+
+    // Push into React store so UX can adapt (Readonly mode, banners, etc.)
+    useRuntimeStore.getState().setTransportState(newState);
+
+    // Handle side-effects of entering new state
+    if (newState === 'DEGRADED') {
+      this.startPollingFallback();
+    } else {
+      this.stopPollingFallback();
+    }
+  }
+
+  private connectWebsocket() {
+    if (!this.adapter) return;
+    
+    this.adapter.connect(
+      this.channelTopic,
+      (payload) => {
+        this.recordApiSuccess();
+        this.router.handleIncomingEvent(payload);
+      },
+      (status) => {
+        if (status === 'CONNECTED') {
+          this.handleConnected();
+        } else {
+          this.handleDisconnected();
+        }
+      }
+    );
+  }
+
+  private handleConnected() {
+    const latency = Date.now() - this.lastApiContact;
+    this.observability.recordTransportConnected(latency);
+    this.recordApiSuccess();
+    
+    if (this.currentState === 'RECONNECTING' || this.currentState === 'DEGRADED') {
+      this.observability.recordReconnectSucceeded(this.consecutiveFailures, latency);
+      this.transitionTo('RECOVERING');
+      this.replayEngine.handleReconnectRecovery(['orders', 'tables']).then(() => {
+        this.transitionTo('LIVE');
+      });
+    } else {
+      this.transitionTo('LIVE');
+    }
+  }
+
+  private handleDisconnected() {
+    if (this.currentState === 'SUSPENDED' || this.currentState === 'FAILED') return;
+    
+    this.observability.recordTransportDisconnected();
+    this.observability.recordReconnectStarted(this.consecutiveFailures + 1);
+    this.transitionTo('RECONNECTING');
+    
+    // Attempt reconnect after backoff or fall into degraded state
+    setTimeout(() => {
+      if (this.currentState === 'RECONNECTING') {
+        this.observability.recordReconnectFailed(this.consecutiveFailures, 'Reconnect timeout exceeded 5s');
+        this.transitionTo('DEGRADED');
+      }
+    }, 5000);
+  }
+
+  /**
+   * Called by MutationGateway or any fetch interceptor when an API request succeeds
+   */
+  public recordApiSuccess() {
+    this.lastApiContact = Date.now();
+    this.consecutiveFailures = 0;
+    
+    if (this.currentState === 'DEGRADED' && this.adapter?.connectionState === 'CONNECTED') {
+      // We are communicating but websocket might be stalling? Or just recovering from degraded
+      // If we're DEGRADED but we just had a successful fetch, we stay in DEGRADED 
+      // unless the websocket also fires a connected event.
+    }
+  }
+
+  /**
+   * Called by MutationGateway or any fetch interceptor when an API request fails
+   */
+  public recordApiFailure() {
+    this.consecutiveFailures++;
+    if (this.consecutiveFailures > 3 && this.currentState !== 'FAILED' && this.currentState !== 'SUSPENDED') {
+      this.transitionTo('DEGRADED');
+    }
+  }
+
+  private startHeartbeat() {
+    if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
+    this.heartbeatInterval = setInterval(() => {
+      const idleTime = Date.now() - this.lastApiContact;
+      // If no contact in 30s, assume disconnect/degraded
+      if (idleTime > 30000 && this.currentState === 'LIVE') {
+        console.warn(`[RuntimeTransportManager] Heartbeat stalled. Transitioning to DEGRADED.`);
+        this.transitionTo('DEGRADED');
+      }
+    }, 15000);
+  }
+
+  private startPollingFallback() {
+    if (this.pollingInterval) return;
+    console.info(`[RuntimeTransportManager] Initiating Polling Fallback Mode`);
+    this.observability.recordDegradedPollingEnabled();
+    
+    this.pollingInterval = setInterval(async () => {
+      try {
+        await this.projectionCoordinator.handleInvalidation('orders');
+        await this.projectionCoordinator.handleInvalidation('tables');
+        this.recordApiSuccess();
+      } catch (err) {
+        this.recordApiFailure();
+      }
+    }, 10000);
+  }
+
+  private stopPollingFallback() {
+    if (this.pollingInterval) {
+      console.info(`[RuntimeTransportManager] Terminating Polling Fallback Mode`);
+      this.observability.recordDegradedPollingDisabled();
+      clearInterval(this.pollingInterval);
+      this.pollingInterval = null;
+    }
+  }
+
+  public suspend() {
+    this.transitionTo('SUSPENDED');
+    this.stopPollingFallback();
+    if (this.adapter) {
+      this.adapter.disconnect();
+    }
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+  }
+}

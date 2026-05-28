@@ -1,16 +1,24 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../../lib/supabase'
 import { useStaffStore } from '../../../store/index'
+import { useRuntimeIdentityStore } from '../../../store/runtimeIdentityStore'
+import { useTableOccupancyProjection } from '../../../store/projections/tableOccupancyProjection'
+import { useActiveOrdersProjection } from '../../../store/projections/activeOrdersProjection'
+import { fetchWithRuntime } from '../../../lib/apiClient'
+import { runtime } from '../../../runtime'
+import { SupabaseTransportAdapter } from '../../../runtime/transport/SupabaseTransportAdapter'
+import { supabase } from '../../../lib/supabase'
 
 export default function TableOverview() {
   const { staff_user, logout } = useStaffStore()
   const navigate = useNavigate()
   
-  const [tables, setTables] = useState([])
-  const [activeOrders, setActiveOrders] = useState([])
+  const { branchId, tenantId } = useRuntimeIdentityStore()
+  const { tables, rebuild: rebuildTables, isRebuilding: loadingTables } = useTableOccupancyProjection()
+  const { orders: activeOrders, rebuild: rebuildOrders, isRebuilding: loadingOrders } = useActiveOrdersProjection()
+  
+  // Assistance requests will remain local state fetched via API client for now until a projection is added
   const [activeRequests, setActiveRequests] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loadingRequests, setLoadingRequests] = useState(true)
+
   const [elapsedMap, setElapsedMap] = useState({})
   const [filter, setFilter] = useState('All')
 
@@ -45,68 +53,42 @@ export default function TableOverview() {
     navigate('/staff')
   }
 
-  // 1. Initial Fetch
+  // 1. Initial Fetch & Subscribe via EventRouter
   useEffect(() => {
-    if (!staff_user) return
+    if (!staff_user || !branchId || !tenantId) return
 
-    const fetchData = async () => {
-      const tenantId = import.meta.env.VITE_TENANT_ID
-      
-      const [tRes, oRes, aRes] = await Promise.all([
-        supabase.from('restaurant_tables').select('*').eq('tenant_id', tenantId).order('table_num'),
-        supabase.from('orders').select('*').eq('tenant_id', tenantId).neq('status', 'served').neq('status', 'cancelled'),
-        supabase.from('assistance_requests').select('*').eq('tenant_id', tenantId).neq('status', 'resolved')
-      ])
+    const bootstrapRuntime = async () => {
+      // Trigger projection rebuilds
+      rebuildTables(branchId)
+      rebuildOrders(branchId)
 
-      setTables(tRes.data || [])
-      setActiveOrders(oRes.data || [])
-      setActiveRequests(aRes.data || [])
-      setLoading(false)
+      // Fetch requests manually since we don't have a projection for it yet
+      try {
+        const response = await fetchWithRuntime(`/api/v1/branches/${branchId}/assistance-requests`)
+        const data = await response.json()
+        setActiveRequests(data.data || [])
+      } catch (err) {
+        console.error('Failed to load requests:', err)
+      } finally {
+        setLoadingRequests(false)
+      }
+
+      // Start centralized realtime listening via formal runtime infrastructure
+      const topic = `tenant:${tenantId}:branch:${branchId}:operational`;
+      const adapter = new SupabaseTransportAdapter(supabase);
+      runtime.bootstrap('pos_table_overview', staff_user?.id || 'anonymous_session', adapter, topic);
     }
 
-    fetchData()
+    bootstrapRuntime()
 
-    // 2. Setup Realtime Subscriptions
-    const channel = supabase.channel('staff_dashboard')
-      // Tables
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, (payload) => {
-        if (payload.eventType === 'UPDATE') {
-          setTables(prev => prev.map(t => t.id === payload.new.id ? payload.new : t))
-        }
-      })
-      // Orders
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          setActiveOrders(prev => [...prev, payload.new])
-        } else if (payload.eventType === 'UPDATE') {
-          setActiveOrders(prev => {
-            if (payload.new.status === 'served' || payload.new.status === 'cancelled') {
-              return prev.filter(o => o.id !== payload.new.id) // Remove served
-            }
-            return prev.find(o => o.id === payload.new.id) 
-              ? prev.map(o => o.id === payload.new.id ? payload.new : o) 
-              : [...prev, payload.new]
-          })
-        }
-      })
-      // Requests
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'assistance_requests' }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          setActiveRequests(prev => [...prev, payload.new])
-          playAlertBeep()
-        } else if (payload.eventType === 'UPDATE') {
-           setActiveRequests(prev => {
-             if (payload.new.status === 'resolved') return prev.filter(r => r.id !== payload.new.id)
-             return prev.map(r => r.id === payload.new.id ? payload.new : r)
-           })
-        }
-      })
-      .subscribe()
+    return () => {
+      runtime.transport.suspend()
+    }
+  }, [staff_user, branchId, tenantId, rebuildTables, rebuildOrders])
 
-    return () => supabase.removeChannel(channel)
-  }, [staff_user])
+  const isLoading = loadingTables || loadingOrders || loadingRequests
 
-  if (!staff_user || loading) return <div style={{ background: '#0F172A', minHeight: '100vh' }} />
+  if (!staff_user || isLoading) return <div style={{ background: '#0F172A', minHeight: '100vh' }} />
 
   // Derived state map
   const getTableStatus = (tableId) => {

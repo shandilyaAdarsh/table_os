@@ -7,7 +7,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCartStore, useSessionStore } from '../../../store/index'
-import { supabase } from '../../../lib/supabase'
+import { submitMutation } from '../../../lib/apiClient'
 import { AnimatePresence, motion } from 'framer-motion'
 import { getTableNum } from '../utils/tableNum'
 
@@ -33,9 +33,6 @@ export default function CartDrawer({ open, onClose }) {
   const [noteFocused, setNoteFocused] = useState(false)
 
   const subtotal   = cartItems.reduce((a, i) => a + ((i.unit_price || i.price || 0) * i.qty), 0)
-  const cgst       = +(subtotal * 0.025).toFixed(2)
-  const sgst       = +(subtotal * 0.025).toFixed(2)
-  const grandTotal = subtotal + cgst + sgst
   const totalQty   = cartItems.reduce((a, i) => a + i.qty, 0)
 
   // Lock body scroll while open
@@ -83,12 +80,12 @@ export default function CartDrawer({ open, onClose }) {
       // Read guest session saved by CheckIn screen
       const guestSession = JSON.parse(localStorage.getItem('customerSession') || '{}')
 
-      const { data: order, error } = await supabase
-        .from('orders')
-        .insert({
+      const response = await submitMutation('/api/v1/runtime/mutations', {
+        mutation_id: 'create_order',
+        idempotency_key: crypto.randomUUID(),
+        payload: {
           tenant_id: TENANT_ID,
           table_num: resolvedTableNum,
-          status: 'pending',
           note: note || `Order by ${guestSession.name || 'Guest'} · Party of ${guestSession.guestCount || 1}`,
         })
         .select()
