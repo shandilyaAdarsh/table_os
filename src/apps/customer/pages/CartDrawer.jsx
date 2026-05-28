@@ -7,7 +7,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCartStore, useSessionStore } from '../../../store/index'
-import { supabase } from '../../../lib/supabase'
+import { submitMutation } from '../../../lib/apiClient'
 import { AnimatePresence, motion } from 'framer-motion'
 import { getTableNum } from '../utils/tableNum'
 
@@ -32,9 +32,6 @@ export default function CartDrawer({ open, onClose }) {
   const [note,      setNote]      = useState('')
 
   const subtotal   = cartItems.reduce((a, i) => a + ((i.unit_price || i.price || 0) * i.qty), 0)
-  const cgst       = +(subtotal * 0.025).toFixed(2)
-  const sgst       = +(subtotal * 0.025).toFixed(2)
-  const grandTotal = subtotal + cgst + sgst
   const totalQty   = cartItems.reduce((a, i) => a + i.qty, 0)
 
   // Lock body scroll while open
@@ -82,46 +79,27 @@ export default function CartDrawer({ open, onClose }) {
       // Read guest session saved by CheckIn screen
       const guestSession = JSON.parse(localStorage.getItem('customerSession') || '{}')
 
-      const { data: order, error } = await supabase
-        .from('orders')
-        .insert({
+      const response = await submitMutation('/api/v1/runtime/mutations', {
+        mutation_id: 'create_order',
+        idempotency_key: crypto.randomUUID(),
+        payload: {
           tenant_id: TENANT_ID,
           ...(TABLE_ID ? { table_id: TABLE_ID } : {}),
           table_session_id: useSessionStore.getState().session_id,
           table_num: resolvedTableNum,
-          status: 'pending',
           note: note || `Order by ${guestSession.name || 'Guest'} · Party of ${guestSession.guestCount || 1}`,
-          total_amount: Math.round(grandTotal),
-          is_new: true,
-          ends_at: new Date(Date.now() + 25 * 60000).toISOString(),
           guest_name: guestSession.name || 'Guest',
           guest_phone: guestSession.phone || null,
           guest_count: guestSession.guestCount || 1,
-        })
-        .select()
-        .single()
+          items: cartItems.map(item => ({
+            menu_item_id: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id) ? item.id : null,
+            name: item.name,
+            qty: item.qty,
+          }))
+        }
+      })
 
-      if (error) {
-        console.error('[CartDrawer] order insert error:', error)
-        throw error
-      }
-
-      const { error: itemsError } = await supabase.from('order_items').insert(
-        cartItems.map(item => ({
-          order_id:     order.id,
-          menu_item_id: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id) ? item.id : null,
-          name:         item.name,
-          qty:          item.qty,
-          unit_price:   item.unit_price || item.price || 0,
-        }))
-      )
-
-      if (itemsError) {
-        console.error('[CartDrawer] order_items insert error:', itemsError)
-        throw itemsError
-      }
-
-      const newOrderId = order.id
+      const newOrderId = response.order_id || response.data?.order_id || 'pending'
       clear()
       onClose()
       navigate(`/menu/confirmed/${newOrderId}`, { state: { orderId: newOrderId } })
@@ -243,13 +221,13 @@ export default function CartDrawer({ open, onClose }) {
                       <span style={{ color: '#1B2B4B', fontWeight: 600, fontSize: 13 }}>₹{subtotal}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                      <span style={{ color: '#6B7280', fontSize: 13 }}>Taxes (5%)</span>
-                      <span style={{ color: '#1B2B4B', fontWeight: 600, fontSize: 13 }}>₹{cgst + sgst}</span>
+                      <span style={{ color: '#6B7280', fontSize: 13 }}>Taxes</span>
+                      <span style={{ color: '#1B2B4B', fontWeight: 600, fontSize: 13 }}>Calculated at checkout</span>
                     </div>
                     <div style={{ height: 1, background: '#E5E7EB', marginBottom: 12 }} />
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#1B2B4B', fontWeight: 800, fontSize: 16 }}>To Pay</span>
-                      <span style={{ color: '#F97316', fontWeight: 800, fontSize: 18 }}>₹{Math.round(grandTotal)}</span>
+                      <span style={{ color: '#1B2B4B', fontWeight: 800, fontSize: 16 }}>Estimated Total</span>
+                      <span style={{ color: '#F97316', fontWeight: 800, fontSize: 18 }}>₹{subtotal}</span>
                     </div>
                   </div>
                 </>
@@ -274,7 +252,7 @@ export default function CartDrawer({ open, onClose }) {
                     <>
                       <span>Place Order</span>
                       <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.2)' }} />
-                      <span style={{ color: '#F97316' }}>₹{Math.round(grandTotal)}</span>
+                      <span style={{ color: '#F97316' }}>Submit</span>
                     </>
                   )}
                 </button>

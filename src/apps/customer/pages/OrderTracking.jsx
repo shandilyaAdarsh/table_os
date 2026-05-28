@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { supabase } from '../../../lib/supabase'
+import { fetchWithRuntime, submitMutation } from '../../../lib/apiClient'
+import { realtimeEventRouter } from '../../../lib/RealtimeEventRouter'
 import { motion } from 'framer-motion'
 import { playBeep } from '../../../utils/beep'
 import { BottomNav } from '../components/BottomNav'
@@ -38,64 +39,32 @@ export default function OrderTracking() {
     if (!resolvedOrderId) return
 
     const fetchOrder = async () => {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          order_items (
-            *,
-            menu_items (
-              name,
-              image_url,
-              is_veg
-            )
-          )
-        `)
-        .eq('id', resolvedOrderId)
-        .single()
-        
-      if (!error && data) {
-        setOrder(data)
-        setOrderStatus(data.status || 'pending')
+      try {
+        const res = await fetchWithRuntime(`/api/v1/customer/orders/${resolvedOrderId}`)
+        if (res.ok) {
+          const { data } = await res.json()
+          if (data) {
+            setOrder(data)
+            setOrderStatus(data.status || 'pending')
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching tracking data:', err)
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     }
     
     fetchOrder()
 
-    const fetchOrderItems = async () => {
-      const { data } = await supabase
-        .from('order_items')
-        .select('*')
-        .eq('order_id', resolvedOrderId)
-      if (data) setOrder(prev => prev ? { ...prev, order_items: data } : prev)
-    }
+    // Realtime Events are handled globally by RealtimeEventRouter.
+    const BRANCH_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+    realtimeEventRouter.start('11111111-1111-1111-1111-111111111111', BRANCH_ID)
 
-    const channel = supabase
-      .channel(`track-order-${resolvedOrderId}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'orders',
-        filter: `id=eq.${resolvedOrderId}`
-      }, (payload) => {
-        setOrderStatus(payload.new.status)
-        setOrder(prev => ({ ...prev, ...payload.new }))
-        playBeep()
-      })
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'order_items',
-        filter: `order_id=eq.${resolvedOrderId}`
-      }, () => {
-        fetchOrderItems()
-      })
-      .subscribe()
+    // Fallback polling atomic rebuild strategy
+    const fallbackPoll = setInterval(fetchOrder, 10000)
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    return () => clearInterval(fallbackPoll)
   }, [resolvedOrderId])
 
   // Unlock audio on first tap (iOS requirement)
@@ -163,8 +132,8 @@ export default function OrderTracking() {
   // Bill totals
   const subtotal = orderItemsList.reduce((sum, item) =>
     sum + ((item.unit_price || 0) * (item.qty || 0)), 0)
-  const gst = Math.round(subtotal * 0.05)
-  const total = subtotal + gst
+  const tax = order?.tax_amount || 0
+  const total = order?.total_amount || (subtotal + tax)
 
   // Item status helpers (Issue 9)
   const getItemStatus = (item) => {
@@ -214,16 +183,16 @@ export default function OrderTracking() {
         handler: async (response) => {
           const paymentId = response.razorpay_payment_id
 
-          await supabase
-            .from('orders')
-            .update({ status: 'paid' })
-            .eq('id', resolvedOrderId)
-
-          await supabase
-            .from('restaurant_tables')
-            .update({ status: 'paid' })
-            .eq('table_num', order?.table_num || getTableNum())
-            .eq('tenant_id', '11111111-1111-1111-1111-111111111111')
+          await submitMutation('/api/v1/runtime/mutations', {
+            mutation_id: 'process_payment',
+            idempotency_key: crypto.randomUUID(),
+            payload: {
+              order_id: resolvedOrderId,
+              table_num: order?.table_num || getTableNum(),
+              tenant_id: '11111111-1111-1111-1111-111111111111',
+              payment_id: paymentId
+            }
+          })
 
           setPaymentDone(true)
           setPaymentLoading(false)
@@ -268,7 +237,7 @@ export default function OrderTracking() {
       ),
       '-----------------------------------',
       `Subtotal:              \u20b9${subtotal}`,
-      `GST (5%):              \u20b9${gst}`,
+      `Taxes:                 \u20b9${tax}`,
       `TOTAL:                 \u20b9${total}`,
       '===================================',
       '     Thank you for dining with us!',
@@ -463,8 +432,8 @@ export default function OrderTracking() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-              <span style={{ fontSize: '13px', color: '#6B7280' }}>GST (5%)</span>
-              <span style={{ fontSize: '13px', color: '#6B7280' }}>₹{gst}</span>
+              <span style={{ fontSize: '13px', color: '#6B7280' }}>Taxes</span>
+              <span style={{ fontSize: '13px', color: '#6B7280' }}>₹{tax}</span>
             </div>
 
             <div style={{

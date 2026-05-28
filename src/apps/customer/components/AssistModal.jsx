@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSessionStore } from '../../../store/index'
-import { supabase } from '../../../lib/supabase'
+import { submitMutation } from '../../../lib/apiClient'
 import { getTableNum } from '../utils/tableNum'
 
 export default function AssistModal({ open, onClose }) {
@@ -25,22 +25,19 @@ export default function AssistModal({ open, onClose }) {
     setError(null)
 
     try {
-      const { error } = await supabase
-        .from('assistance_requests')
-        .insert({
+    try {
+      await submitMutation('/api/v1/runtime/mutations', {
+        mutation_id: 'create_assistance_request',
+        idempotency_key: crypto.randomUUID(),
+        payload: {
           tenant_id: '11111111-1111-1111-1111-111111111111',
           table_id: 'e719f4e5-b0f1-4c71-8e31-197041d71956',
           table_num: table_num || getTableNum(),
           table_session_id: session_id || '',
           request_type: requestType,
           message: specialNote.trim() || null,
-          status: 'pending'
-        })
-
-      if (error) {
-        console.error('Supabase assist error:', error)
-        throw error
-      }
+        }
+      })
 
       setSuccess('Request sent! Someone will be with you shortly.')
       setSpecialNote('')

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../../lib/supabase'
+import { fetchWithRuntime } from '../../../lib/apiClient'
+import { realtimeEventRouter } from '../../../lib/RealtimeEventRouter'
 import { BottomNav } from '../components/BottomNav'
 
 const TENANT_ID = '11111111-1111-1111-1111-111111111111'
@@ -25,69 +26,44 @@ export default function OrdersPage() {
     }
 
     const fetchOrders = async () => {
-      // Build a query scoped to THIS customer's session.
-      // Priority 1: filter by guest_phone (most accurate — unique per person)
-      // Priority 2: filter by guest_name + table_num + session start time (name-only check-in)
-      let query = supabase
-        .from('orders')
-        .select(`*, order_items(
-          id, name, qty, unit_price,
-          is_rejected, status
-        )`)
-        .eq('tenant_id', TENANT_ID)
-        .order('created_at', { ascending: false })
-        .limit(20)
+      try {
+        const queryParams = new URLSearchParams({
+          tenant_id: TENANT_ID,
+          table_num: tableNum,
+        });
+        if (session.phone) queryParams.append('guest_phone', session.phone);
+        else if (session.name) queryParams.append('guest_name', session.name);
+        if (!session.phone && session.checkedInAt) queryParams.append('since', session.checkedInAt);
 
-      if (session.phone) {
-        // Filter by phone — every order placed from this phone number at this table
-        query = query.eq('guest_phone', session.phone).eq('table_num', tableNum)
-      } else {
-        // No phone — filter by name + table + only orders placed AFTER this check-in
-        query = query
-          .eq('guest_name', session.name)
-          .eq('table_num', tableNum)
-        // If we have a checkedInAt timestamp, only show orders from this session onward
-        if (session.checkedInAt) {
-          query = query.gte('created_at', session.checkedInAt)
+        const res = await fetchWithRuntime(`/api/v1/customer/orders?${queryParams.toString()}`);
+        if (res.ok) {
+          const { data } = await res.json();
+          if (data) setOrders(data);
         }
+      } catch (err) {
+        console.error('Error fetching orders:', err);
+      } finally {
+        setLoading(false);
       }
-
-      const { data, error } = await query
-      if (!error && data) {
-        setOrders(data)
-      }
-      setLoading(false)
     }
 
     fetchOrders()
 
-    // Realtime — only listen for orders matching this guest
-    const filterStr = session.phone
-      ? `guest_phone=eq.${session.phone}`
-      : `table_num=eq.${tableNum}`
+    // Realtime Events are handled globally by RealtimeEventRouter.
+    // Ensure the router is started (using a generic or hardcoded branch ID for customer demo)
+    const BRANCH_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+    realtimeEventRouter.start(TENANT_ID, BRANCH_ID)
 
-    const channel = supabase.channel(`customer_orders_${session.sessionId || tableNum}`)
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'orders',
-        filter: filterStr
-      }, (payload) => {
-        // Extra guard: ensure the incoming order belongs to this guest
-        const isMyOrder = session.phone
-          ? payload.new?.guest_phone === session.phone
-          : payload.new?.guest_name === session.name
+    // A real implementation would subscribe to projectionCoordinator's store
+    // For this migration, we'll assume fetchOrders is re-triggered on relevant events, 
+    // or we poll periodically as a fallback, or projection updates a global customer store.
+    // Here we set an interval as a fallback atomic rebuild
+    const fallbackPoll = setInterval(fetchOrders, 10000)
 
-        if (!isMyOrder) return
-
-        if (payload.eventType === 'INSERT') {
-          supabase.from('orders').select('*, order_items(*)').eq('id', payload.new.id).single()
-            .then(({ data }) => { if (data) setOrders(prev => [data, ...prev]) })
-        } else if (payload.eventType === 'UPDATE') {
-          setOrders(prev => prev.map(o => o.id === payload.new.id ? { ...o, ...payload.new } : o))
-        }
-      })
-      .subscribe()
-
-    return () => supabase.removeChannel(channel)
+    return () => {
+      clearInterval(fallbackPoll)
+      // We don't stop the router if other components need it, but for demo we can.
+    }
   }, [tableNum, session.phone, session.name, session.sessionId])
 
   if (!session.name) {
@@ -144,8 +120,8 @@ function OrderCard({ order }) {
     const session = JSON.parse(localStorage.getItem('customerSession') || '{}')
     const subtotal = (order.order_items || [])
       .reduce((sum, i) => sum + ((i.unit_price || 0) * (i.qty || 0)), 0)
-    const gst = Math.round(subtotal * 0.05)
-    const total = subtotal + gst
+    const tax = order.tax_amount || 0
+    const total = order.total_amount || (subtotal + tax)
 
     const lines = [
       '===================================',
@@ -165,7 +141,7 @@ function OrderCard({ order }) {
       ),
       '-----------------------------------',
       `Subtotal  :             \u20b9${subtotal}`,
-      `GST (5%)  :             \u20b9${gst}`,
+      `Taxes     :             \u20b9${tax}`,
       `TOTAL     :             \u20b9${total}`,
       '===================================',
       '   Thank you for dining with us!',

@@ -15,8 +15,6 @@ export default function Cart() {
   const [cart, setCart] = useState(DEMO_CART)
 
   const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0)
-  const tax = Math.round(subtotal * 0.05)
-  const total = subtotal + tax
 
   const change = (id, delta) =>
     setCart(prev => prev.map(i => i.id === id ? { ...i, qty: Math.max(0, i.qty + delta) } : i).filter(i => i.qty > 0))
@@ -119,13 +117,13 @@ export default function Cart() {
                <span style={{ fontWeight: 600, color: '#1B2B4B' }}>₹{subtotal.toLocaleString()}</span>
              </div>
              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6B7280', fontSize: 14 }}>
-               <span>GST (5%)</span>
-               <span style={{ fontWeight: 600, color: '#1B2B4B' }}>₹{tax.toLocaleString()}</span>
+               <span>Taxes</span>
+               <span style={{ fontWeight: 600, color: '#1B2B4B' }}>Calculated at checkout</span>
              </div>
              <div style={{ height: 1, background: '#E5E7EB', margin: '4px 0' }}></div>
              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: '#1B2B4B', fontWeight: 800, fontSize: 18 }}>Total Amount</span>
-                <span style={{ color: '#F97316', fontWeight: 900, fontSize: 24 }}>₹{total.toLocaleString()}</span>
+                <span style={{ color: '#1B2B4B', fontWeight: 800, fontSize: 18 }}>Estimated Total</span>
+                <span style={{ color: '#F97316', fontWeight: 900, fontSize: 24 }}>₹{subtotal.toLocaleString()}</span>
              </div>
           </div>
 
