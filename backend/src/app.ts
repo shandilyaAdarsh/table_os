@@ -117,7 +117,7 @@ export function createApp(): express.Application {
   app.use('/public', publicMenuRouter);
 
   // ─── Public QR Runtime API (no auth required, rate limited) ──────────
-  app.use('/api/v1/public/qr', publicQrRouter);
+  app.use('/api/v1/public/table', publicQrRouter);
 
   // ─── Public Cart API (requires QR session token) ────────────
   app.use('/api/v1/cart', cartRouter);

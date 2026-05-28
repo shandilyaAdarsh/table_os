@@ -285,3 +285,54 @@ export async function updateReservationStatus(
   if (error) throw new Error(`[TableRepo] updateReservationStatus: ${error.message}`);
   return data;
 }
+
+// ─── Table QR Tokens ──────────────────────────────────────────
+
+export async function rotateTableQrToken(
+  tenantId: string,
+  tableId: string,
+): Promise<string> {
+  // 1. Invalidate old active tokens for this table
+  await supabaseAdmin
+    .from('table_qr_tokens')
+    .update({ is_active: false, revoked_at: new Date().toISOString() })
+    .eq('tenant_id', tenantId)
+    .eq('table_id', tableId)
+    .eq('is_active', true);
+    
+  // 2. Generate a new crypto token (48 hex chars)
+  const crypto = require('crypto');
+  const newToken = crypto.randomBytes(24).toString('hex');
+
+  // 3. Insert new token
+  const { data, error } = await supabaseAdmin
+    .from('table_qr_tokens')
+    .insert({
+      tenant_id: tenantId,
+      table_id: tableId,
+      public_token: newToken,
+      is_active: true,
+    })
+    .select('public_token')
+    .single();
+
+  if (error) throw new Error(`[TableRepo] rotateTableQrToken: ${error.message}`);
+  return data.public_token;
+}
+
+export async function getActiveQrToken(
+  tenantId: string,
+  tableId: string,
+): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('table_qr_tokens')
+    .select('public_token')
+    .eq('tenant_id', tenantId)
+    .eq('table_id', tableId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (error) throw new Error(`[TableRepo] getActiveQrToken: ${error.message}`);
+  return data?.public_token ?? null;
+}
+

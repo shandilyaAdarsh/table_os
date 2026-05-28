@@ -7,6 +7,22 @@ export class GuestSessionRepository {
   static async createSession(
     dto: CreateGuestSessionDto & { expires_at: string }
   ): Promise<GuestSession> {
+    // 1. Create customer identity first
+    const { error: identityError } = await supabaseAdmin
+      .from('customer_identities')
+      .insert({
+        id: dto.customer_identity_id,
+        tenant_id: dto.tenant_id,
+      })
+      .select('id')
+      .single();
+
+    if (identityError) {
+      logger.error({ err: identityError, dto }, 'Failed to create customer identity in repo');
+      throw new Error(`[GuestSessionRepo] createCustomerIdentity failed: ${identityError.message}`);
+    }
+
+    // 2. Create the session
     const { data, error } = await supabaseAdmin
       .from('guest_sessions')
       .insert({
@@ -14,6 +30,8 @@ export class GuestSessionRepository {
         branch_id: dto.branch_id,
         table_id: dto.table_id,
         device_fingerprints: [dto.device_fingerprint],
+        snapshot_id: dto.snapshot_id ?? null,
+        customer_identity_id: dto.customer_identity_id,
         status: 'ACTIVE',
         expires_at: dto.expires_at,
         last_active_at: new Date().toISOString(),
@@ -91,13 +109,14 @@ export class GuestSessionRepository {
   static async updateSessionStatus(
     tenantId: string,
     sessionId: string,
-    status: 'ACTIVE' | 'EXPIRED' | 'COMPLETED' | 'ABANDONED'
+    status: 'ACTIVE' | 'EXPIRED' | 'COMPLETED' | 'ABANDONED' | 'CLOSED'
   ): Promise<GuestSession> {
     const { data, error } = await supabaseAdmin
       .from('guest_sessions')
       .update({
         status,
         last_active_at: new Date().toISOString(),
+        ...(status === 'CLOSED' ? { closed_at: new Date().toISOString() } : {}),
       })
       .eq('tenant_id', tenantId)
       .eq('id', sessionId)
