@@ -6,7 +6,7 @@ export function CartBar({ visible = true, onOpen }) {
   const navigate   = useNavigate()
   const cartItems  = useCartStore(s => s.items)
   const totalQty   = cartItems.reduce((a, i) => a + i.qty, 0)
-  const totalPrice = cartItems.reduce((a, i) => a + i.price * i.qty, 0)
+  const totalPrice = cartItems.reduce((a, i) => a + (i.unit_price || i.price || 0) * i.qty, 0)
 
   if (totalQty === 0) return null
 
@@ -30,15 +30,15 @@ export function CartBar({ visible = true, onOpen }) {
         id="cart-fab-btn"
         style={{
           width: '100%',
-          backgroundColor: '#1B2B4B',
+          background: 'linear-gradient(135deg, #FF4D4D 0%, #E11D48 100%)',
           border: 'none',
           borderRadius: 16,
           padding: '12px 20px',
           cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          boxShadow: '0 8px 30px rgba(0,0,0,0.2)',
+          boxShadow: '0 8px 30px rgba(239, 68, 68, 0.4)',
           transition: 'transform 0.15s',
-          fontFamily: 'Inter, sans-serif',
+          fontFamily: 'Epilogue, sans-serif',
         }}
         onMouseDown={e => e.currentTarget.style.transform = 'scale(0.97)'}
         onMouseUp={e   => e.currentTarget.style.transform = 'scale(1)'}
@@ -57,8 +57,8 @@ export function CartBar({ visible = true, onOpen }) {
         </div>
 
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: '#F97316' }}>₹{totalPrice.toLocaleString('en-IN')}</div>
-          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Explore more</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: '#FFFFFF' }}>₹{totalPrice.toLocaleString('en-IN')}</div>
+          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Explore more</div>
         </div>
       </button>
     </div>

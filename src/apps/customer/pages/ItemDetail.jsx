@@ -1,23 +1,18 @@
-/**
- * ItemDetail.jsx — Item detail / modifier bottom sheet
- * Ported from qr-restaurant-demo/src/components/ModifierModal.tsx
- * Opens as a full bottom sheet from the item tap in MenuHome
- */
-
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../../../lib/supabase'
-import { useMenuStore, useCartStore } from '../../../store/index'
+import { useCartStore } from '../../../store/index'
 import { motion } from 'framer-motion'
 
 export default function ItemDetail() {
-  const { itemId } = useParams()
+  const { id: itemId } = useParams()
   const navigate = useNavigate()
   const [item, setItem] = useState(null)
   const [loading, setLoading] = useState(true)
 
   const [selected, setSelected] = useState({})  // { [groupId]: { id, name, priceDelta } }
   const [note,     setNote]     = useState('')
+  const [noteFocused, setNoteFocused] = useState(false)
 
   useEffect(() => {
     if (!itemId) return
@@ -47,31 +42,24 @@ export default function ItemDetail() {
     fetchItem()
   }, [itemId])
 
-  // Scroll top on mount & lock body scroll
   useEffect(() => {
     window.scrollTo(0, 0)
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
   }, [])
 
-  if (loading) return <div>Loading...</div>
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100dvh', background: '#F8FAFC' }}>
+      <div style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid #D91A2A', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }} />
+    </div>
+  )
+
   if (!item) return (
-    <div style={{ 
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      minHeight: '100dvh', gap: '16px'
-    }}>
-      <p style={{ color: '#6B7280', fontSize: '16px' }}>
-        Item not found
-      </p>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100dvh', gap: 16, background: '#F8FAFC' }}>
+      <p style={{ color: '#64748B', fontSize: 16 }}>Item not found</p>
       <button 
         onClick={() => navigate('/menu/browse')}
-        style={{
-          background: '#1B2B4B', color: 'white',
-          border: 'none', padding: '12px 24px',
-          borderRadius: '12px', cursor: 'pointer',
-          fontSize: '15px', fontWeight: '600'
-        }}
+        style={{ background: 'linear-gradient(135deg, #FF4D4D 0%, #D91A2A 100%)', color: 'white', border: 'none', padding: '12px 24px', borderRadius: 24, cursor: 'pointer', fontSize: 15, fontWeight: 700 }}
       >
         Back to Menu
       </button>
@@ -106,126 +94,173 @@ export default function ItemDetail() {
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: '100%', opacity: 0 }}
       transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-      style={{ maxWidth: 430, margin: '0 auto', minHeight: '100vh', background: '#FFFFFF', fontFamily: 'Inter, sans-serif', overflowX: 'hidden', paddingBottom: 120 }}
+      style={{ maxWidth: 430, margin: '0 auto', minHeight: '100vh', background: '#F8FAFC', overflowX: 'hidden', paddingBottom: 140, boxSizing: 'border-box' }}
     >
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
-      {/* Header Container */}
-      <div style={{ position: 'relative', padding: '16px' }}>
-        <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', borderRadius: 16, overflow: 'hidden', background: '#F3F4F6', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
-          <img
-            src={item.image_url || `https://placehold.co/430x430?text=${encodeURIComponent(item.name[0])}`}
-            alt={item.name}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-          {/* Back button */}
-          <button
-            onClick={() => navigate(-1)}
-            style={{ position: 'absolute', top: 16, left: 16, width: 40, height: 40, background: '#FFFFFF', border: 'none', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10 }}
-            aria-label="Go back"
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#1B2B4B' }}>arrow_back</span>
-          </button>
+      {/* Top Banner / Image Wrapper */}
+      <div style={{ position: 'relative', width: '100%', height: 260, background: '#F1F5F9' }}>
+        <img
+          src={item.image_url || `https://placehold.co/430x260?text=${encodeURIComponent(item.name)}`}
+          alt={item.name}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+        
+        {/* Close round icon top left */}
+        <motion.button
+          onClick={() => navigate(-1)}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          style={{ position: 'absolute', top: 16, left: 16, width: 36, height: 36, background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', border: 'none', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', zIndex: 10 }}
+          aria-label="Close"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#0F172A', fontWeight: 900 }}>close</span>
+        </motion.button>
 
-          {item.is_veg !== undefined && (
-            <div style={{ position: 'absolute', bottom: 16, left: 16, background: '#FFFFFF', borderRadius: 6, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-              <div style={{ width: 10, height: 10, borderRadius: 2, border: item.is_veg ? '2px solid #22C55E' : '2px solid #EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <div style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: item.is_veg ? '#22C55E' : '#EF4444' }} />
-              </div>
-              <span style={{ fontSize: 10, fontWeight: 800, color: '#1B2B4B', textTransform: 'uppercase' }}>{item.is_veg ? 'Veg' : 'Non-Veg'}</span>
-            </div>
-          )}
-        </div>
+        {/* Popular Tag top right */}
+        {item.is_popular !== false && (
+          <motion.div 
+            style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', borderRadius: 20, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 4, boxShadow: '0 4px 12px rgba(0,0,0,0.06)', zIndex: 10 }}
+          >
+            <span style={{ fontSize: 12, color: '#D91A2A' }}>❤</span>
+            <span style={{ fontSize: 11, fontWeight: 800, color: '#D91A2A', textTransform: 'uppercase' }}>Popular</span>
+          </motion.div>
+        )}
       </div>
 
-      {/* Content */}
-      <div style={{ padding: '0 20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-          <h1 style={{ fontWeight: 800, fontSize: 24, color: '#1B2B4B', margin: 0, lineHeight: 1.2, flex: 1 }}>{item.name}</h1>
-          <span style={{ fontSize: 22, fontWeight: 800, color: '#F97316' }}>₹{item.price}</span>
+      {/* Item info block */}
+      <div style={{ background: '#FFFFFF', borderBottom: '1px solid #F1F5F9', padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: 10, marginTop: -20, borderRadius: '24px 24px 0 0', position: 'relative', zIndex: 5, boxShadow: '0 -6px 20px rgba(0,0,0,0.015)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <h1 style={{ fontWeight: 800, fontSize: 24, color: '#0F172A', margin: 0, fontFamily: 'Outfit, sans-serif', letterSpacing: '-0.01em' }}>{item.name}</h1>
+          <span style={{ fontSize: 22, fontWeight: 800, color: '#D91A2A', fontFamily: 'Outfit, sans-serif' }}>₹{item.price.toFixed(2)}</span>
         </div>
 
         {item.description && (
-          <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.6, margin: '12px 0 24px' }}>{item.description}</p>
+          <p style={{ fontSize: 14, color: '#64748B', lineHeight: 1.6, margin: 0, fontWeight: 500 }}>{item.description}</p>
         )}
+      </div>
 
-        <div style={{ height: '1px', background: '#F3F4F6', margin: '24px 0' }} />
-
-        {/* Modifier groups */}
+      {/* Modifiers List */}
+      <div style={{ padding: '20px 20px 0' }}>
         {modifierGroups.map(group => (
-          <div key={group.id} style={{ marginBottom: 32 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#1B2B4B', margin: 0 }}>{group.name}</h3>
-              {group.required && (
-                <span style={{ fontSize: 10, fontWeight: 800, color: '#F97316', background: 'rgba(249,115,22,0.1)', padding: '2px 8px', borderRadius: 4 }}>REQUIRED</span>
+          <div key={group.id} style={{ marginBottom: 28 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', fontFamily: 'Outfit, sans-serif' }}>{group.name}</h3>
+              {group.required ? (
+                <span style={{ fontSize: 10, fontWeight: 800, color: '#D91A2A', background: '#FEF2F2', padding: '3px 8px', borderRadius: 6, border: '1px solid #FEE2E2' }}>Required (Choose 1)</span>
+              ) : (
+                <span style={{ fontSize: 10, fontWeight: 800, color: '#64748B', background: '#F1F5F9', padding: '3px 8px', borderRadius: 6 }}>Optional</span>
               )}
             </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {group.options.map(opt => {
                 const isSelected = selected[group.id]?.id === opt.id
                 return (
-                  <button
+                  <motion.button
                     key={opt.id}
                     onClick={() => handleSelect(group.id, opt)}
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.99 }}
                     style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '16px', borderRadius: 12, cursor: 'pointer', border: '1.5px solid',
-                      backgroundColor: isSelected ? 'rgba(27,43,75,0.03)' : '#FFFFFF',
-                      borderColor: isSelected ? '#1B2B4B' : '#F3F4F6',
-                      transition: 'all 0.2s',
+                      padding: '14px 16px', borderRadius: 16, cursor: 'pointer', border: '1.5px solid',
+                      backgroundColor: isSelected ? '#FEF2F2' : '#FFFFFF',
+                      borderColor: isSelected ? '#D91A2A' : '#E2E8F0',
+                      boxShadow: isSelected ? '0 4px 12px rgba(217, 26, 42, 0.04)' : 'none',
+                      transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
                     }}
                   >
-                    <span style={{ fontSize: 15, fontWeight: isSelected ? 700 : 500, color: isSelected ? '#1B2B4B' : '#4B5563' }}>{opt.name}</span>
+                    <span style={{ fontSize: 14, fontWeight: isSelected ? 800 : 600, color: isSelected ? '#D91A2A' : '#0F172A', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}>{opt.name}</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      {opt.priceDelta > 0 && <span style={{ fontSize: 13, color: '#6B7280' }}>+₹{opt.priceDelta}</span>}
-                      <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${isSelected ? '#1B2B4B' : '#D1D5DB'}`, background: isSelected ? '#1B2B4B' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {isSelected && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#FFFFFF' }} />}
+                      {opt.priceDelta > 0 && <span style={{ fontSize: 13, color: '#64748B', fontWeight: 600 }}>+₹{opt.priceDelta.toFixed(2)}</span>}
+                      
+                      {/* Red circle check indicator */}
+                      <div style={{ 
+                        width: 20, height: 20, borderRadius: '50%', 
+                        border: `2px solid ${isSelected ? '#D91A2A' : '#D1D5DB'}`, 
+                        background: isSelected ? 'linear-gradient(135deg, #FF4D4D 0%, #D91A2A 100%)' : 'transparent', 
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: isSelected ? '0 2px 8px rgba(217, 26, 42, 0.3)' : 'none',
+                        transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+                      }}>
+                        {isSelected && <span style={{ color: '#FFFFFF', fontSize: 11, fontWeight: 900 }}>✓</span>}
                       </div>
                     </div>
-                  </button>
+                  </motion.button>
                 )
               })}
             </div>
           </div>
         ))}
 
-        {/* Special requests */}
-        <div style={{ marginBottom: 32 }}>
-          <label style={{ fontSize: 13, fontWeight: 800, color: '#1B2B4B', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 12 }}>Special Requests</label>
+        {/* Special Instructions */}
+        <div style={{ marginBottom: 40 }}>
+          <label style={{ fontSize: 14, fontWeight: 800, color: '#0F172A', fontFamily: 'Outfit, sans-serif', display: 'block', marginBottom: 10 }}>Special Instructions</label>
           <textarea
             value={note}
             onChange={e => setNote(e.target.value)}
+            onFocus={() => setNoteFocused(true)}
+            onBlur={() => setNoteFocused(false)}
             rows={3}
-            placeholder="e.g. Extra spicy, no onions..."
-            style={{ width: '100%', background: '#F9FAFB', border: '1.5px solid #F3F4F6', borderRadius: 12, padding: '14px', fontSize: 15, color: '#1B2B4B', resize: 'none', outline: 'none', boxSizing: 'border-box' }}
+            placeholder="Add-on requests, allergy notes, etc."
+            style={{ 
+              width: '100%', 
+              background: noteFocused ? '#FFFFFF' : '#FFFFFF', 
+              border: noteFocused ? '1.5px solid #D91A2A' : '1px solid #E2E8F0', 
+              borderRadius: 16, 
+              padding: '14px', 
+              fontSize: 14, 
+              color: '#0F172A', 
+              resize: 'none', 
+              outline: 'none', 
+              boxSizing: 'border-box', 
+              fontFamily: 'Inter, sans-serif',
+              transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+              boxShadow: noteFocused ? '0 0 0 4px rgba(217, 26, 42, 0.06), 0 4px 12px rgba(15, 23, 42, 0.02)' : 'none'
+            }}
           />
         </div>
       </div>
 
-      {/* Sticky Add to Cart */}
-      <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: 430, padding: '16px 20px 24px', background: 'white', borderTop: '1px solid #F3F4F6', zIndex: 30, boxShadow: '0 -4px 20px rgba(0,0,0,0.05)' }}>
-        <button
+      {/* Sticky Bottom Actions Bar */}
+      <div style={{ 
+        position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', 
+        width: '100%', maxWidth: 430, 
+        padding: '16px 20px calc(16px + env(safe-area-inset-bottom))', 
+        background: 'rgba(255, 255, 255, 0.85)',
+        backdropFilter: 'blur(16px) saturate(120%)',
+        WebkitBackdropFilter: 'blur(16px) saturate(120%)',
+        borderTop: '1px solid rgba(241, 245, 249, 0.8)', 
+        zIndex: 30, 
+        boxShadow: '0 -10px 30px rgba(15, 23, 42, 0.04)', 
+        boxSizing: 'border-box' 
+      }}>
+        <motion.button
           id="add-to-cart-btn"
           onClick={handleAddToCart}
           disabled={!canAdd || !item.is_available}
+          whileHover={canAdd && item.is_available ? { scale: 1.02, boxShadow: '0 12px 30px rgba(217, 26, 42, 0.32)' } : {}}
+          whileTap={canAdd && item.is_available ? { scale: 0.98 } : {}}
           style={{
-            width: '100%', height: 56, background: canAdd && item.is_available ? '#1B2B4B' : '#E5E7EB',
-            color: 'white', border: 'none', borderRadius: 14, fontSize: 16, fontWeight: 700,
+            width: '100%', height: 52, background: canAdd && item.is_available ? 'linear-gradient(135deg, #FF4D4D 0%, #D91A2A 100%)' : '#CBD5E1',
+            color: 'white', border: 'none', borderRadius: 24, fontSize: 15, fontWeight: 700,
             cursor: canAdd && item.is_available ? 'pointer' : 'not-allowed',
-            transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12
+            transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+            boxShadow: canAdd && item.is_available ? '0 8px 24px rgba(217, 26, 42, 0.2)' : 'none'
           }}
         >
           {item.is_available
             ? (
               <>
                 <span>Add to Cart</span>
-                <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.2)' }} />
-                <span style={{ color: '#F97316' }}>₹{finalPrice}</span>
+                <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.3)' }} />
+                <span>₹{finalPrice.toFixed(2)}</span>
               </>
             )
             : 'Currently Unavailable'
           }
-        </button>
+        </motion.button>
       </div>
     </motion.div>
   )

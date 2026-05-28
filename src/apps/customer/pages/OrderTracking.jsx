@@ -1,18 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../../../lib/supabase'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { playBeep } from '../../../utils/beep'
 import { BottomNav } from '../components/BottomNav'
 import { getTableNum } from '../utils/tableNum'
 
-const STATUS_MAP = {
-  pending:  { step: 1 },
-  cooking:  { step: 2 },
-  ready:    { step: 3 },
-  served:   { step: 4 },
-  rejected: { step: 1 }
-}
 
 const STEPS = [
   { step: 1, title: 'Order Received', subtitle: 'Kitchen has your order', icon: '📋' },
@@ -35,7 +28,11 @@ export default function OrderTracking() {
   const [paymentDone, setPaymentDone] = useState(false)
 
   useEffect(() => {
-    if (!resolvedOrderId) return
+    if (!resolvedOrderId) {
+      setLoading(false)
+      navigate('/menu/browse')
+      return
+    }
 
     const fetchOrder = async () => {
       const { data, error } = await supabase
@@ -124,7 +121,7 @@ export default function OrderTracking() {
   // No auto-redirect on served — show Thank You screen instead
   // Stop on rejected — no redirect
 
-  if (!order) {
+  if (loading) {
     return (
       <div style={{
         display: 'flex',
@@ -133,19 +130,28 @@ export default function OrderTracking() {
         minHeight: '100dvh',
         flexDirection: 'column',
         gap: '16px',
-        background: '#F8F8F8',
+        background: '#F8FAFC',
         fontFamily: 'Inter, sans-serif'
       }}>
         <div style={{
-          width: '40px', height: '40px',
-          border: '3px solid #F97316',
+          width: '32px', height: '32px',
+          border: '3px solid #D91A2A',
           borderTop: '3px solid transparent',
           borderRadius: '50%',
           animation: 'spin 0.8s linear infinite'
         }} />
-        <p style={{ color: '#6B7280', fontSize: '14px', fontWeight: 500 }}>
+        <p style={{ color: '#64748B', fontSize: '14px', fontWeight: 600 }}>
           Loading your order...
         </p>
+      </div>
+    );
+  }
+
+  if (!order) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100dvh', gap: 16, background: '#F8FAFC', fontFamily: 'Inter, sans-serif', padding: 24, textAlign: 'center' }}>
+        <p style={{ color: '#64748B', fontSize: 16, fontWeight: 600 }}>Order not found.</p>
+        <button onClick={() => navigate('/menu/browse')} style={{ background: 'linear-gradient(135deg, #FF4D4D 0%, #D91A2A 100%)', color: 'white', border: 'none', padding: '12px 28px', borderRadius: 24, fontWeight: 700, cursor: 'pointer', fontSize: 15 }}>Back to Menu</button>
       </div>
     );
   }
@@ -177,7 +183,7 @@ export default function OrderTracking() {
   const statusConfig = {
     rejected: { text: '✕ Not Prepared', color: '#EF4444', bg: '#FEF2F2' },
     done:     { text: '✓ Ready',        color: '#16A34A', bg: '#F0FDF4' },
-    cooking:  { text: '🍳 Preparing',   color: '#1A365D', bg: '#EFF6FF' },
+    cooking:  { text: '🍳 Preparing',   color: '#0F2045', bg: '#EFF6FF' },
     pending:  { text: '⏳ Waiting',     color: '#D97706', bg: '#FFFBEB' },
   }
 
@@ -233,7 +239,7 @@ export default function OrderTracking() {
           contact: '9999999999'
         },
         theme: {
-          color: '#D69E2E'
+          color: '#D91A2A'
         },
         modal: {
           ondismiss: () => {
@@ -284,35 +290,53 @@ export default function OrderTracking() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F8F8F8', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', position: 'relative', margin: '0 auto', maxWidth: '430px' }}>
+    <div style={{ minHeight: '100vh', background: '#F8FAFC', display: 'flex', flexDirection: 'column', fontFamily: 'Inter, sans-serif', position: 'relative', margin: '0 auto', maxWidth: '430px' }}>
       
       {/* 1. HEADER ROW */}
-      <header style={{ position: 'sticky', top: 0, background: 'white', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 20, width: '100%', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-        <button onClick={() => navigate('/menu/browse')} style={{ width: 40, height: 40, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span className="material-symbols-outlined" style={{ color: '#1B2B4B' }}>arrow_back</span>
-        </button>
+      <header style={{ 
+        position: 'sticky', top: 0, 
+        background: 'linear-gradient(135deg, #FF4D4D 0%, #D91A2A 100%)', 
+        backdropFilter: 'blur(16px)', 
+        WebkitBackdropFilter: 'blur(16px)', 
+        padding: '16px', 
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
+        zIndex: 20, width: '100%', 
+        boxShadow: '0 4px 24px rgba(217, 26, 42, 0.15)', 
+        borderBottom: '1px solid rgba(255,255,255,0.15)' 
+      }}>
+        <motion.button 
+          whileTap={{ scale: 0.9 }}
+          onClick={() => navigate('/menu/browse')} 
+          style={{ width: 40, height: 40, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <span className="material-symbols-outlined" style={{ color: '#FFFFFF', fontWeight: 900 }}>arrow_back</span>
+        </motion.button>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <h1 style={{ fontSize: 16, fontWeight: 700, color: '#1B2B4B', margin: 0 }}>Order #{(order?.id || '').substring(0, 8).toUpperCase()}</h1>
-          <span style={{ fontSize: 12, color: '#6B7280' }}>Table {order?.table_num}</span>
+          <h1 style={{ fontSize: 18, fontWeight: 800, color: '#FFFFFF', margin: 0, fontFamily: 'Outfit, sans-serif', letterSpacing: '-0.01em' }}>Order #{(order?.id || '').substring(0, 8).toUpperCase()}</h1>
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.95)', fontWeight: 800 }}>Table {order?.table_num}</span>
         </div>
-        <button onClick={() => navigate('/menu/browse')} style={{ width: 40, height: 40, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span className="material-symbols-outlined" style={{ color: '#1B2B4B' }}>shopping_cart</span>
-        </button>
+        <motion.button 
+          whileTap={{ scale: 0.9 }}
+          onClick={() => navigate('/menu/browse')} 
+          style={{ width: 40, height: 40, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <span className="material-symbols-outlined" style={{ color: '#FFFFFF', fontWeight: 900 }}>shopping_cart</span>
+        </motion.button>
       </header>
 
-      <main style={{ flex: 1, paddingBottom: 96 }}>
+      <main style={{ flex: 1, paddingBottom: 110 }}>
         
         {/* 2. STATUS BAR */}
         <div style={{
           background: orderStatus === 'rejected' ? '#FEF2F2' : '#F0FDF4',
-          border: orderStatus === 'rejected' ? '1px solid #FECACA' : '1px solid #BBF7D0',
-          borderRadius: 12, margin: 16, padding: '10px 16px',
+          border: orderStatus === 'rejected' ? '1.5px solid #FECACA' : '1.5px solid #BBF7D0',
+          borderRadius: 16, margin: 16, padding: '12px 16px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+          boxShadow: '0 4px 12px rgba(15, 23, 42, 0.015)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 10, height: 10, background: orderStatus === 'rejected' ? '#EF4444' : orderStatus === 'ready' ? '#22C55E' : '#F97316', borderRadius: '50%' }} />
-            <span style={{ fontSize: 14, fontWeight: 600, color: orderStatus === 'rejected' ? '#DC2626' : '#16A34A' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 10, height: 10, background: orderStatus === 'rejected' ? '#EF4444' : orderStatus === 'ready' ? '#22C55E' : '#F97316', borderRadius: '50%', animation: 'pulse 1.5s infinite' }} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: orderStatus === 'rejected' ? '#DC2626' : '#16A34A' }}>
               {orderStatus === 'rejected' ? '✕ Order was rejected by kitchen'
                : orderStatus === 'served'  ? 'Enjoy your meal!'
                : orderStatus === 'paid'    ? 'Payment received ✅ Thank you!'
@@ -323,25 +347,25 @@ export default function OrderTracking() {
             </span>
           </div>
           {orderStatus !== 'rejected' && orderStatus !== 'served' && (
-            <div style={{ background: '#DCFCE7', borderRadius: 999, padding: '2px 10px', color: '#16A34A', fontSize: 12, fontWeight: 500 }}>
-              {orderStatus === 'ready' ? 'Ready to serve! ✅'
-               : orderStatus === 'cooking' && etaMinutes > 1 ? `~${etaMinutes} min remaining`
+            <div style={{ background: '#DCFCE7', borderRadius: 999, padding: '3px 10px', color: '#16A34A', fontSize: 11, fontWeight: 700 }}>
+              {orderStatus === 'ready' ? 'Ready! ✅'
+               : orderStatus === 'cooking' && etaMinutes > 1 ? `~${etaMinutes} mins`
                : orderStatus === 'cooking' ? 'Almost ready! 🍳'
-               : 'Waiting for kitchen...'}
+               : 'Waiting...'}
             </div>
           )}
         </div>
 
         {/* 3. RESTAURANT BANNER */}
-        <div style={{ position: 'relative', height: 100, margin: '0 16px 16px', borderRadius: 16, overflow: 'hidden', background: 'linear-gradient(135deg, #111D35, #1B2B4B)' }}>
+        <div style={{ position: 'relative', height: 100, margin: '0 16px 16px', borderRadius: 20, overflow: 'hidden', background: 'linear-gradient(135deg, #FF4D4D 0%, #D91A2A 100%)', boxShadow: '0 8px 24px rgba(217, 26, 42, 0.16)' }}>
           <div style={{ position: 'absolute', bottom: 16, left: 16 }}>
-            <h2 style={{ color: 'white', fontSize: 18, fontWeight: 700, margin: 0 }}>The Grand Spice</h2>
-            <p style={{ color: 'white', fontSize: 12, opacity: 0.6, margin: '4px 0 0' }}>Estimated arrival: 5-7 mins</p>
+            <h2 style={{ color: 'white', fontSize: 20, fontWeight: 900, margin: 0, fontFamily: 'Outfit, sans-serif', letterSpacing: '0.02em' }}>GUSTO</h2>
+            <p style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12, margin: '4px 0 0', fontWeight: 700 }}>Estimated arrival: 5-7 mins</p>
           </div>
         </div>
 
         {/* 4. VERTICAL STEPPER */}
-        <div style={{ background: 'white', borderRadius: 16, margin: '0 16px 16px', padding: 16, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+        <div style={{ background: 'white', border: '1px solid #F1F5F9', borderRadius: 20, margin: '0 16px 16px', padding: 20, boxShadow: '0 8px 24px rgba(15,23,42,0.015)' }}>
           <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
             {STEPS?.map((s, idx) => {
               const isPast = s.step < currentStep
@@ -353,38 +377,51 @@ export default function OrderTracking() {
                 <div key={idx} style={{ display: 'flex', gap: 16 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     {/* Circle Icon */}
-                    <div style={{ zIndex: 10, background: 'white' }}>
+                    <div style={{ zIndex: 10, background: 'white', padding: '2px 0' }}>
                       {isPast ? (
-                        <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#22C55E', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
-                          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>check</span>
+                        <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#10B981', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', boxShadow: '0 2px 6px rgba(16, 185, 129, 0.2)' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 15, fontWeight: 900 }}>check</span>
                         </div>
                       ) : isCurrent ? (
-                        <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid #F97316', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <div className="current-step" style={{ width: 12, height: 12, background: '#F97316', borderRadius: '50%' }} />
-                        </div>
+                        <motion.div 
+                          animate={{ scale: [0.95, 1.05, 0.95] }}
+                          transition={{ duration: 2, repeat: Infinity }}
+                          style={{ 
+                            width: 24, height: 24, borderRadius: '50%', 
+                            border: '2px solid #D91A2A', 
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            boxShadow: '0 0 0 4px rgba(217, 26, 42, 0.15)'
+                          }}
+                        >
+                          <div style={{ width: 10, height: 10, background: '#D91A2A', borderRadius: '50%' }} />
+                        </motion.div>
                       ) : (
-                        <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid #E5E7EB' }} />
+                        <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid #E2E8F0' }} />
                       )}
                     </div>
                     {/* Line */}
                     {!isLast && (
-                      <div style={{ width: 2, flex: 1, background: isPast ? '#22C55E' : '#E5E7EB' }} />
+                      <div style={{ width: 2, flex: 1, minHeight: 36, background: isPast ? '#10B981' : '#E2E8F0', transition: 'background-color 0.5s' }} />
                     )}
                   </div>
 
                   <div style={{ paddingBottom: 24, paddingTop: 4, flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <h3 style={{ fontSize: 15, margin: 0, color: isFuture ? '#6B7280' : '#111827', fontWeight: isFuture ? 400 : 600 }}>
+                      <h3 style={{ fontSize: 14, margin: 0, color: isFuture ? '#94A3B8' : '#0F172A', fontWeight: isFuture ? 600 : 800, fontFamily: 'Outfit, sans-serif' }}>
                         {s.title}
                       </h3>
                       {isCurrent && (
-                        <span style={{ background: '#FFF4ED', color: '#F97316', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999 }}>
+                        <motion.span 
+                          animate={{ opacity: [0.7, 1, 0.7] }}
+                          transition={{ duration: 1.5, repeat: Infinity }}
+                          style={{ background: '#FEF2F2', color: '#D91A2A', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999 }}
+                        >
                           IN PROGRESS
-                        </span>
+                        </motion.span>
                       )}
                     </div>
-                    <p style={{ fontSize: 12, color: '#6B7280', margin: '2px 0 0' }}>
-                      {isPast ? 'Completed' : isCurrent ? 'Just now' : 'Waiting...'}
+                    <p style={{ fontSize: 12, color: '#64748B', margin: '4px 0 0', fontWeight: 500 }}>
+                      {isPast ? 'Completed' : isCurrent ? 'Active now' : 'Waiting...'}
                     </p>
                   </div>
                 </div>
@@ -394,8 +431,8 @@ export default function OrderTracking() {
         </div>
 
         {/* 5. YOUR ITEMS CARD */}
-        <div style={{ background: 'white', borderRadius: 16, margin: '0 16px 16px', padding: 16, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: '#111827', margin: '0 0 16px' }}>Your Items</h3>
+        <div style={{ background: 'white', border: '1px solid #F1F5F9', borderRadius: 20, margin: '0 16px 16px', padding: 20, boxShadow: '0 8px 24px rgba(15,23,42,0.015)' }}>
+          <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0F172A', margin: '0 0 16px', fontFamily: 'Outfit, sans-serif' }}>Your Items</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {order?.order_items?.map(item => {
               const itemSt = getItemStatus(item)
@@ -406,22 +443,23 @@ export default function OrderTracking() {
                     <img 
                       src={item?.menu_items?.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&q=80'} 
                       alt={item?.name}
-                      style={{ width: 48, height: 48, borderRadius: 10, objectFit: 'cover' }}
+                      style={{ width: 48, height: 48, borderRadius: 10, objectFit: 'cover', background: '#F1F5F9' }}
                       onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&q=80' }}
                     />
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <span style={{
-                        fontSize: 14, fontWeight: 600,
+                        fontSize: 14, fontWeight: 700,
                         textDecoration: item?.is_rejected ? 'line-through' : 'none',
-                        color: item?.is_rejected ? '#9CA3AF' : '#111827'
+                        color: item?.is_rejected ? '#94A3B8' : '#0F172A'
                       }}>{item?.name}</span>
-                      <span style={{ fontSize: 12, color: '#6B7280' }}>Qty: {item?.qty}</span>
+                      <span style={{ fontSize: 12, color: '#64748B', fontWeight: 500, marginTop: 2 }}>Qty: {item?.qty}</span>
                     </div>
                   </div>
                   <span style={{
-                    fontSize: '11px', fontWeight: '600',
+                    fontSize: '11px', fontWeight: '800',
                     color: cfg.color, background: cfg.bg,
-                    padding: '3px 8px', borderRadius: '20px'
+                    padding: '4px 10px', borderRadius: '20px',
+                    border: `1px solid rgba(0,0,0,0.015)`
                   }}>{cfg.text}</span>
                 </div>
               )
@@ -433,89 +471,95 @@ export default function OrderTracking() {
         {(orderStatus === 'pending' || orderStatus === 'cooking' || orderStatus === 'ready') && (
           <div style={{
             background: 'white',
-            borderRadius: '16px',
-            border: '0.5px solid #E5E7EB',
-            padding: '16px',
-            margin: '0 16px 16px'
+            border: '1px solid #F1F5F9',
+            borderRadius: '20px',
+            padding: '20px',
+            margin: '0 16px 16px',
+            boxShadow: '0 8px 24px rgba(15,23,42,0.015)'
           }}>
-            <p style={{ fontSize: '14px', fontWeight: '600', color: '#111827', marginBottom: '12px' }}>
+            <p style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', marginBottom: '14px', fontFamily: 'Outfit, sans-serif' }}>
               Bill Summary
             </p>
 
             {/* Item breakdown */}
             {orderItemsList.filter(item => !item.is_rejected).map(item => (
-              <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <span style={{ fontSize: '13px', color: '#374151', maxWidth: '65%' }}>
+              <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px', color: '#64748B', maxWidth: '65%', fontWeight: 500 }}>
                   {item.name}
-                  <span style={{ color: '#9CA3AF', marginLeft: '4px' }}>×{item.qty}</span>
+                  <span style={{ color: '#94A3B8', marginLeft: '6px', fontWeight: 600 }}>×{item.qty}</span>
                 </span>
-                <span style={{ fontSize: '13px', color: '#374151', fontWeight: '500' }}>
-                  ₹{(item.unit_price || 0) * (item.qty || 0)}
+                <span style={{ fontSize: '13px', color: '#0F172A', fontWeight: 700 }}>
+                  ₹{((item.unit_price || 0) * (item.qty || 0)).toFixed(2)}
                 </span>
               </div>
             ))}
 
-            <div style={{ height: '1px', background: '#F3F4F6', margin: '8px 0 10px' }} />
+            <div style={{ height: '1px', background: '#F1F5F9', margin: '10px 0' }} />
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-              <span style={{ fontSize: '13px', color: '#6B7280' }}>Subtotal</span>
-              <span style={{ fontSize: '13px', color: '#6B7280' }}>₹{subtotal}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500 }}>Subtotal</span>
+              <span style={{ fontSize: '13px', color: '#0F172A', fontWeight: 700 }}>₹{subtotal.toFixed(2)}</span>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-              <span style={{ fontSize: '13px', color: '#6B7280' }}>GST (5%)</span>
-              <span style={{ fontSize: '13px', color: '#6B7280' }}>₹{gst}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500 }}>GST (5%)</span>
+              <span style={{ fontSize: '13px', color: '#0F172A', fontWeight: 700 }}>₹{gst.toFixed(2)}</span>
             </div>
 
             <div style={{
               display: 'flex', justifyContent: 'space-between',
-              borderTop: '0.5px solid #E5E7EB',
-              paddingTop: '10px', marginBottom: '16px'
+              borderTop: '1px dashed #E2E8F0',
+              paddingTop: '12px', marginBottom: '18px'
             }}>
-              <span style={{ fontSize: '15px', fontWeight: '600', color: '#111827' }}>Total</span>
-              <span style={{ fontSize: '15px', fontWeight: '600', color: '#111827' }}>₹{total}</span>
+              <span style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', fontFamily: 'Outfit, sans-serif' }}>Total</span>
+              <span style={{ fontSize: '16px', fontWeight: '800', color: '#D91A2A' }}>₹{total.toFixed(2)}</span>
             </div>
 
             {/* Pay button — shows when not yet paid */}
             {!paymentDone && (
-              <button
+              <motion.button
                 onClick={handlePayment}
                 disabled={paymentLoading}
+                whileHover={{ scale: 1.02, boxShadow: '0 12px 30px rgba(217, 26, 42, 0.32)' }}
+                whileTap={{ scale: 0.98 }}
                 style={{
                   width: '100%',
-                  background: paymentLoading ? '#9CA3AF' : '#D69E2E',
+                  background: paymentLoading ? '#CBD5E1' : 'linear-gradient(135deg, #FF4D4D 0%, #D91A2A 100%)',
                   border: 'none',
-                  borderRadius: '14px',
+                  borderRadius: '24px',
                   padding: '15px',
                   color: 'white',
                   fontSize: '15px',
-                  fontWeight: '600',
+                  fontWeight: '700',
                   cursor: paymentLoading ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '8px',
-                  marginBottom: '10px'
+                  marginBottom: '10px',
+                  boxShadow: paymentLoading ? 'none' : '0 8px 24px rgba(217, 26, 42, 0.2)',
+                  transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
                 }}
               >
                 {paymentLoading ? 'Opening payment...' : `Pay ₹${total} Online`}
-              </button>
+              </motion.button>
             )}
 
             {/* Payment success state */}
             {paymentDone && (
               <div style={{
                 background: '#F0FDF4',
-                border: '1px solid #86EFAC',
-                borderRadius: '12px',
-                padding: '12px 16px',
+                border: '1.5px solid #86EFAC',
+                borderRadius: '16px',
+                padding: '14px 16px',
                 textAlign: 'center',
-                marginBottom: '10px'
+                marginBottom: '10px',
+                boxShadow: '0 4px 12px rgba(22, 163, 74, 0.05)'
               }}>
-                <p style={{ fontSize: '15px', fontWeight: '600', color: '#16A34A', margin: 0 }}>
+                <p style={{ fontSize: '15px', fontWeight: '800', color: '#16A34A', margin: 0 }}>
                   ✅ Payment Successful!
                 </p>
-                <p style={{ fontSize: '12px', color: '#4B5563', marginTop: '4px' }}>
+                <p style={{ fontSize: '12px', color: '#4B5563', marginTop: '4px', fontWeight: 500 }}>
                   Thank you for dining with us 🙏
                 </p>
               </div>
@@ -523,40 +567,46 @@ export default function OrderTracking() {
 
             {/* Download invoice — only after payment */}
             {paymentDone && (
-              <button
+              <motion.button
                 onClick={handleDownloadInvoice}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 style={{
                   width: '100%',
                   background: 'white',
-                  border: '1.5px solid #1A365D',
-                  borderRadius: '14px',
+                  border: '1.5px solid #D91A2A',
+                  borderRadius: '24px',
                   padding: '13px',
-                  color: '#1A365D',
+                  color: '#D91A2A',
                   fontSize: '14px',
-                  fontWeight: '600',
+                  fontWeight: '800',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '8px'
+                  gap: '8px',
+                  boxShadow: '0 4px 12px rgba(217, 26, 42, 0.03)',
+                  transition: 'all 0.2s'
                 }}
               >
                 ⬇ Download Invoice
-              </button>
+              </motion.button>
             )}
           </div>
         )}
 
         {/* 7. ADD MORE ITEMS BUTTON */}
         <div style={{ padding: '0 16px', marginBottom: 8 }}>
-          <button 
+          <motion.button 
             onClick={() => navigate('/menu/browse')}
-            style={{ width: '100%', border: '1.5px solid #1B2B4B', background: 'white', color: '#1B2B4B', height: 48, borderRadius: 12, fontWeight: 600, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            style={{ width: '100%', border: '1.5px solid #D91A2A', background: 'white', color: '#D91A2A', height: 48, borderRadius: 24, fontWeight: 800, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', boxShadow: '0 4px 12px rgba(217, 26, 42, 0.03)', transition: 'all 0.2s' }}
           >
-            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>add</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 20, fontWeight: 900 }}>add</span>
             Add more items
-          </button>
-          <p style={{ fontSize: 12, color: '#6B7280', textAlign: 'center', marginTop: 12 }}>
+          </motion.button>
+          <p style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', marginTop: 14, fontWeight: 500 }}>
             A server will bring your order to Table {order?.table_num}
           </p>
         </div>
@@ -580,60 +630,72 @@ export default function OrderTracking() {
           maxWidth: '430px',
           margin: '0 auto',
         }}>
-          <div style={{
-            width: '80px', height: '80px',
-            background: '#F0FDF4',
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '36px',
-            marginBottom: '20px'
-          }}>✅</div>
+          <motion.div 
+            animate={{ scale: [0.92, 1.08, 0.92] }}
+            transition={{ duration: 3, repeat: Infinity }}
+            style={{
+              width: '80px', height: '80px',
+              background: '#F0FDF4',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '36px',
+              marginBottom: '24px',
+              boxShadow: '0 8px 24px rgba(22, 163, 74, 0.15)'
+            }}
+          >✅</motion.div>
 
-          <h2 style={{ fontSize: '24px', fontWeight: '700', color: '#111827', margin: '0 0 8px' }}>
+          <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#0F172A', margin: '0 0 10px', fontFamily: 'Outfit, sans-serif' }}>
             Thank you for dining with us!
           </h2>
 
-          <p style={{ fontSize: '14px', color: '#6B7280', margin: '0 0 32px', lineHeight: 1.6 }}>
+          <p style={{ fontSize: '14px', color: '#64748B', margin: '0 0 32px', lineHeight: 1.6, fontWeight: 500 }}>
             We hope you enjoyed your meal.<br/>
             Come back and visit us again soon 🙏
           </p>
 
-          <button
+          <motion.button
             onClick={() => navigate('/menu/browse')}
+            whileHover={{ scale: 1.02, boxShadow: '0 12px 30px rgba(217, 26, 42, 0.32)' }}
+            whileTap={{ scale: 0.98 }}
             style={{
               width: '100%',
-              background: '#1A365D',
+              background: 'linear-gradient(135deg, #FF4D4D 0%, #D91A2A 100%)',
               color: 'white',
               border: 'none',
-              borderRadius: '14px',
+              borderRadius: '24px',
               padding: '15px',
               fontSize: '15px',
-              fontWeight: '600',
+              fontWeight: '800',
               cursor: 'pointer',
-              marginBottom: '12px'
+              marginBottom: '12px',
+              boxShadow: '0 8px 24px rgba(217, 26, 42, 0.2)'
             }}
           >
             Back to Menu
-          </button>
+          </motion.button>
 
-          <button
+          <motion.button
             onClick={() => navigate('/menu/orders')}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             style={{
               width: '100%',
               background: 'white',
-              color: '#1A365D',
-              border: '1.5px solid #1A365D',
-              borderRadius: '14px',
+              color: '#D91A2A',
+              border: '1.5px solid #D91A2A',
+              borderRadius: '24px',
               padding: '14px',
               fontSize: '15px',
-              fontWeight: '600',
-              cursor: 'pointer'
+              fontWeight: '800',
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(217, 26, 42, 0.03)',
+              transition: 'all 0.2s'
             }}
           >
             View Order History
-          </button>
+          </motion.button>
         </div>
       )}
     </div>

@@ -10,38 +10,6 @@ export function useAvailabilityPolling({ tenantSlug, tenantId, branchId, interva
   const isMounted = useRef(true);
 
   useEffect(() => {
-    isMounted.current = true;
-    
-    // Safety check - we need these to poll
-    if ((!tenantSlug && !tenantId) || !branchId) return;
-
-    const poll = async () => {
-      try {
-        const data = await AvailabilityRepository.fetchAvailabilityOverlay({ tenantSlug, tenantId, branchId });
-        if (isMounted.current) {
-          setOverlayData(data);
-        }
-      } catch (err) {
-        if (isMounted.current) {
-          console.error('[Availability Polling] Failed to fetch:', err);
-          setStale(err.message);
-        }
-      } finally {
-        if (isMounted.current) {
-          // Schedule the next poll ONLY after this one completes (prevents overlapping)
-          timeoutRef.current = setTimeout(poll, intervalMs);
-        }
-      }
-    };
-
-    // Kick off initial fetch immediately
-    poll();
-
-    return () => {
-      isMounted.current = false;
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
+    // Disabled polling temporarily for debugging lag issues
   }, [tenantSlug, branchId, intervalMs, setOverlayData, setStale]);
 }

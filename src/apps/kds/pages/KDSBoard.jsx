@@ -102,16 +102,38 @@ const KDSBoard = () => {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [tenantId, activeTab]);
 
-  /* ── Live clock ─────────────────────────────────── */
+  /* ── Live clock & Shift Timer ───────────────────── */
+  const [shiftElapsed, setShiftElapsed] = useState(0);
+
   useEffect(() => {
-    const tick = () =>
+    // Sync shift timer across multiple tabs for the same station
+    const storageKey = `kds_shift_start_${stationId || 'default'}`;
+    let shiftStartTime = parseInt(localStorage.getItem(storageKey), 10);
+    
+    // Reset if missing, invalid, or older than 18 hours (new shift)
+    if (!shiftStartTime || isNaN(shiftStartTime) || (Date.now() - shiftStartTime > 18 * 3600 * 1000)) {
+      shiftStartTime = Date.now();
+      localStorage.setItem(storageKey, shiftStartTime.toString());
+    }
+
+    const tick = () => {
       setCurrentTime(new Date().toLocaleTimeString('en-GB', {
         hour: '2-digit', minute: '2-digit', second: '2-digit',
       }));
+      setShiftElapsed(Math.floor((Date.now() - shiftStartTime) / 1000));
+    };
     tick();
     const iv = setInterval(tick, 1000);
     return () => clearInterval(iv);
-  }, []);
+  }, [stationId]);
+
+  const formatShiftTime = (s) => {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
+    return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  };
 
   /* ── New-order audio alert ──────────────────────── */
   const playOrderSound = () => {
@@ -143,7 +165,7 @@ const KDSBoard = () => {
 
   /* ── Column definitions ─────────────────────────── */
   const columns = [
-    { status: 'pending', title: 'PENDING ORDERS',    count: pendingCount, badgeBg: '#8D4B00', emptyIcon: 'hourglass_empty' },
+    { status: 'pending', title: 'PENDING ORDERS',    count: pendingCount, badgeBg: '#E31E24', emptyIcon: 'hourglass_empty' },
     { status: 'cooking', title: 'CURRENTLY COOKING', count: cookingCount, badgeBg: '#2D5FA3', emptyIcon: 'whatshot'        },
     { status: 'ready',   title: 'READY TO SERVE',    count: readyCount,   badgeBg: '#006948', emptyIcon: 'check_circle'    },
   ];
@@ -169,20 +191,20 @@ const KDSBoard = () => {
         height: '100vh', width: '100vw',
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
-        gap: '16px', background: '#F2F4F6',
-        fontFamily: '"Inter", sans-serif',
+        gap: '16px', background: '#F1F3F5',
+        fontFamily: '"Plus Jakarta Sans", sans-serif',
       }}>
         <div style={{
           width: '56px', height: '56px',
-          background: 'linear-gradient(15deg, #8D4B00, #B15F00)',
+          background: 'linear-gradient(15deg, #E31E24, #C41B20)',
           borderRadius: '16px',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           marginBottom: '8px',
         }}>
           <span style={{ fontSize: '22px', fontWeight: 900, color: '#FFF' }}>T</span>
         </div>
-        <Loader2 size={28} style={{ color: '#8D4B00', animation: 'spin 1s linear infinite' }} />
-        <span style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#887364' }}>
+        <Loader2 size={28} style={{ color: '#E31E24', animation: 'spin 1s linear infinite' }} />
+        <span style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#6C757D' }}>
           Syncing Terminal…
         </span>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -192,7 +214,7 @@ const KDSBoard = () => {
 
   /* ═══════════════════════════════════════════════ */
   return (
-    <div style={{ minHeight: '100vh', background: '#F7F9FB', fontFamily: '"Inter", sans-serif', color: '#191C1E', userSelect: 'none', overflow: 'hidden' }}>
+    <div style={{ minHeight: '100vh', background: '#F8F9FA', fontFamily: '"Plus Jakarta Sans", sans-serif', color: '#1A1C1E', userSelect: 'none', overflow: 'hidden' }}>
 
       {/* ━━━ MULTI-TAB LEADERSHIP OVERLAY ━━━ */}
       {!isLeader && (
@@ -202,19 +224,19 @@ const KDSBoard = () => {
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           backdropFilter: 'blur(8px)',
         }}>
-          <span className="material-symbols-outlined" style={{ fontSize: '48px', color: '#8D4B00', marginBottom: '16px' }}>lock</span>
-          <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#191C1E', marginBottom: '8px' }}>Station in Use</h2>
-          <p style={{ fontSize: '14px', color: '#554336', marginBottom: '8px', textAlign: 'center', maxWidth: '400px', lineHeight: 1.5 }}>
+          <span className="material-symbols-outlined" style={{ fontSize: '48px', color: '#E31E24', marginBottom: '16px' }}>lock</span>
+          <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#1A1C1E', marginBottom: '8px' }}>Station in Use</h2>
+          <p style={{ fontSize: '14px', color: '#6C757D', marginBottom: '8px', textAlign: 'center', maxWidth: '400px', lineHeight: 1.5 }}>
             Another KDS screen is actively managing this station. Only one active screen is permitted per station to prevent conflicting operations.
           </p>
           {/* Leader heartbeat age indicator */}
           {leaderHeartbeatAge > 0 && (
-            <p style={{ fontSize: '11px', color: '#887364', marginBottom: '20px', fontFamily: 'monospace' }}>
+            <p style={{ fontSize: '11px', color: '#6C757D', marginBottom: '20px', fontFamily: 'monospace' }}>
               Leader last seen: {(leaderHeartbeatAge / 1000).toFixed(1)}s ago
               {leaderHeartbeatAge > 6000 && ' ⚠️ Stale — recovering...'}
             </p>
           )}
-          <div style={{ padding: '12px 24px', background: '#FFF4EC', color: '#8D4B00', borderRadius: '8px', fontWeight: 900, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '16px' }}>
+          <div style={{ padding: '12px 24px', background: '#FFF0F0', color: '#E31E24', borderRadius: '8px', fontWeight: 900, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '16px' }}>
             Standby Viewer Mode Active
           </div>
           {/* Dev-only controls */}
@@ -259,21 +281,34 @@ const KDSBoard = () => {
       }}>
         {/* Left: logo + status pills */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '28px' }}>
-          <h1 style={{ fontSize: '22px', fontWeight: 900, letterSpacing: '-0.04em', color: '#8D4B00', lineHeight: 1 }}>
+          <h1 style={{ fontSize: '22px', fontWeight: 900, letterSpacing: '-0.04em', color: '#E31E24', lineHeight: 1 }}>
             TableOS
           </h1>
           <div style={{
             display: 'flex', alignItems: 'center', gap: '10px',
             padding: '6px 14px',
-            background: '#FFF4EC', color: '#8D4B00',
+            background: '#FFF0F0', color: '#E31E24',
             borderRadius: '12px',
-            border: '1px solid #F5D19A',
+            border: '1px solid #FECACA',
             boxShadow: '0 1px 2px rgba(141,75,0,0.05)'
           }}>
             <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>analytics</span>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <span style={{ fontSize: '9px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.8, lineHeight: 1 }}>Orders Today</span>
               <span style={{ fontSize: '16px', fontWeight: 900, lineHeight: 1.1 }}>{metrics.totalOrdersToday || 0}</span>
+            </div>
+          </div>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '10px',
+            padding: '6px 14px',
+            background: '#F8F9FA', color: '#1A1C1E',
+            borderRadius: '12px',
+            border: '1px solid #E6E8EA',
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '18px', color: '#6C757D' }}>timer</span>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '9px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.8, lineHeight: 1, color: '#6C757D' }}>Shift Timer</span>
+              <span style={{ fontSize: '16px', fontWeight: 900, lineHeight: 1.1 }}>{formatShiftTime(shiftElapsed)}</span>
             </div>
           </div>
         </div>
@@ -283,19 +318,19 @@ const KDSBoard = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
               padding: '2px 8px',
-              background: realtimeStatus === 'connected' ? '#E8F6F1' : '#FFF4EC',
-              color: realtimeStatus === 'connected' ? '#006948' : '#8D4B00',
-              border: `1px solid ${realtimeStatus === 'connected' ? '#B2DFCC' : '#F5D19A'}`,
+              background: realtimeStatus === 'connected' ? '#E8F6F1' : '#FFF0F0',
+              color: realtimeStatus === 'connected' ? '#006948' : '#E31E24',
+              border: `1px solid ${realtimeStatus === 'connected' ? '#B2DFCC' : '#FECACA'}`,
               borderRadius: '4px',
               fontSize: '10px', fontWeight: 900, letterSpacing: '0.2em', textTransform: 'uppercase',
             }}>
               {realtimeStatus === 'connecting' ? '⟳ SYNC' : 'LIVE'}
             </div>
             <span style={{
-              fontFamily: '"Inter", monospace',
+              fontFamily: '"Plus Jakarta Sans", monospace',
               fontVariantNumeric: 'tabular-nums',
               fontSize: '22px', fontWeight: 700,
-              letterSpacing: '-0.02em', color: '#191C1E',
+              letterSpacing: '-0.02em', color: '#1A1C1E',
             }}>
               {currentTime}
             </span>
@@ -307,7 +342,7 @@ const KDSBoard = () => {
               className="material-symbols-outlined"
               title={isMuted ? 'Unmute' : 'Mute alerts'}
               onClick={() => setIsMuted(m => !m)}
-              style={{ fontSize: '22px', color: isMuted ? '#BA1A1A' : '#887364', cursor: 'pointer' }}
+              style={{ fontSize: '22px', color: isMuted ? '#BA1A1A' : '#6C757D', cursor: 'pointer' }}
             >
               {isMuted ? 'notifications_off' : 'notifications'}
             </span>
@@ -327,7 +362,7 @@ const KDSBoard = () => {
                   fetchHistory(historyFilter).then(() => setRealtimeStatus('connected'));
                 }
               }}
-              style={{ fontSize: '22px', color: '#887364', cursor: 'pointer' }}
+              style={{ fontSize: '22px', color: '#6C757D', cursor: 'pointer' }}
             >
               refresh
             </span>
@@ -340,12 +375,12 @@ const KDSBoard = () => {
       <aside style={{
         position: 'fixed', left: 0, top: '64px',
         width: '232px', height: 'calc(100vh - 64px)',
-        background: '#F2F4F6',
+        background: '#F1F3F5',
         display: 'flex', flexDirection: 'column',
         padding: '24px 16px', gap: '4px',
       }}>
         <div style={{ padding: '0 8px', marginBottom: '28px' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#8D4B00', lineHeight: 1, letterSpacing: '-0.02em' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#E31E24', lineHeight: 1, letterSpacing: '-0.02em' }}>
             Main Kitchen
           </h2>
           {/* Station/Role info removed as requested */}
@@ -366,7 +401,7 @@ const KDSBoard = () => {
                   display: 'flex', alignItems: 'center', gap: '12px',
                   padding: '10px 12px',
                   background:   active ? '#FFFFFF' : 'transparent',
-                  color:        active ? '#8D4B00' : '#554336',
+                  color:        active ? '#E31E24' : '#6C757D',
                   borderRadius: '8px',
                   fontWeight:   active ? 700 : 500,
                   fontSize:     '14px',
@@ -387,7 +422,7 @@ const KDSBoard = () => {
       </aside>
 
       {/* ━━━ MAIN BOARD ━━━ */}
-      <main style={{ marginLeft: '232px', paddingTop: '64px', height: '100vh', display: 'flex', flexDirection: 'column', background: '#F7F9FB' }}>
+      <main style={{ marginLeft: '232px', paddingTop: '64px', height: '100vh', display: 'flex', flexDirection: 'column', background: '#F8F9FA' }}>
         {activeTab === 'Live Orders' ? (
           <div style={{
             flex: 1,
@@ -399,7 +434,7 @@ const KDSBoard = () => {
             {columns.map(({ status, title, count, badgeBg, emptyIcon }, colIdx) => {
               const colOrders = liveOrders.filter(o => o.status === status);
               const isActive  = mobileCol === status;
-              const colBg = colIdx === 1 ? '#F2F4F6' : '#F7F9FB';
+              const colBg = colIdx === 1 ? '#F1F3F5' : '#F8F9FA';
 
               return (
                 <section
@@ -425,7 +460,7 @@ const KDSBoard = () => {
                     <h3 style={{
                       fontSize: '10px', fontWeight: 900,
                       textTransform: 'uppercase', letterSpacing: '0.2em',
-                      color: '#554336',
+                      color: '#6C757D',
                     }}>{title}</h3>
                     <span style={{
                       background: badgeBg, color: '#FFFFFF',
@@ -443,12 +478,12 @@ const KDSBoard = () => {
                       <div style={{
                         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                         height: '180px',
-                        border: '2px dashed #DBC2B0', borderRadius: '12px', opacity: 0.5,
+                        border: '2px dashed #FECACA', borderRadius: '12px', opacity: 0.5,
                       }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: '32px', color: '#887364', marginBottom: '8px' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: '32px', color: '#6C757D', marginBottom: '8px' }}>
                           {emptyIcon}
                         </span>
-                        <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#887364', textAlign: 'center' }}>
+                        <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#6C757D', textAlign: 'center' }}>
                           No active<br />{title.toLowerCase()}
                         </span>
                       </div>
@@ -470,12 +505,12 @@ const KDSBoard = () => {
               background: '#FFFFFF',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-                <h3 style={{ fontSize: '12px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#554336' }}>
+                <h3 style={{ fontSize: '12px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#6C757D' }}>
                   Order History
                 </h3>
                 {/* Search / Filter */}
                 <div style={{ position: 'relative' }}>
-                  <span className="material-symbols-outlined" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '18px', color: '#887364' }}>
+                  <span className="material-symbols-outlined" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '18px', color: '#6C757D' }}>
                     search
                   </span>
                   <input
@@ -488,7 +523,7 @@ const KDSBoard = () => {
                       borderRadius: '8px',
                       border: '1px solid #E6E8EA',
                       fontSize: '13px',
-                      background: '#F7F9FB',
+                      background: '#F8F9FA',
                       width: '200px',
                     }}
                   />
@@ -500,7 +535,7 @@ const KDSBoard = () => {
                 {/* Date Filters */}
                 <div style={{ 
                   display: 'flex', 
-                  background: '#F2F4F6', 
+                  background: '#F1F3F5', 
                   padding: '4px', 
                   borderRadius: '10px',
                   gap: '2px'
@@ -522,7 +557,7 @@ const KDSBoard = () => {
                         letterSpacing: '0.05em',
                         cursor: 'pointer',
                         background: historyFilter === f ? '#FFFFFF' : 'transparent',
-                        color: historyFilter === f ? '#8D4B00' : '#887364',
+                        color: historyFilter === f ? '#E31E24' : '#6C757D',
                         boxShadow: historyFilter === f ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
                         transition: 'all 0.2s ease'
                       }}
@@ -533,7 +568,7 @@ const KDSBoard = () => {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#887364', textTransform: 'uppercase' }}>Sort:</span>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#6C757D', textTransform: 'uppercase' }}>Sort:</span>
                   <select
                     value={historySort}
                     onChange={(e) => setHistorySort(e.target.value)}
@@ -543,7 +578,7 @@ const KDSBoard = () => {
                       border: '1px solid #E6E8EA',
                       fontSize: '13px',
                       fontWeight: 600,
-                      color: '#554336',
+                      color: '#6C757D',
                       background: '#FFFFFF'
                     }}
                   >
@@ -576,7 +611,7 @@ const KDSBoard = () => {
 
                 if (filtered.length === 0) {
                   return (
-                    <div style={{ textAlign: 'center', padding: '64px', color: '#887364' }}>
+                    <div style={{ textAlign: 'center', padding: '64px', color: '#6C757D' }}>
                       <span className="material-symbols-outlined" style={{ fontSize: '48px', opacity: 0.3, marginBottom: '16px' }}>
                         inventory_2
                       </span>
@@ -604,11 +639,11 @@ const KDSBoard = () => {
                 return Object.entries(groups).map(([date, orders]) => (
                   <div key={date} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <h4 style={{ fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#887364', whiteSpace: 'nowrap' }}>
+                      <h4 style={{ fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#6C757D', whiteSpace: 'nowrap' }}>
                         {date}
                       </h4>
                       <div style={{ height: '1px', flex: 1, background: '#E6E8EA' }} />
-                      <span style={{ fontSize: '10px', fontWeight: 700, color: '#887364', background: '#F2F4F6', padding: '2px 8px', borderRadius: '9999px' }}>
+                      <span style={{ fontSize: '10px', fontWeight: 700, color: '#6C757D', background: '#F1F3F5', padding: '2px 8px', borderRadius: '9999px' }}>
                         {orders.length} Orders
                       </span>
                     </div>
@@ -651,8 +686,8 @@ const KDSBoard = () => {
             <div key={status} onClick={() => setMobileCol(status)} style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center',
               padding: '8px 20px',
-              background: active ? '#FFF4EC' : 'transparent',
-              color: active ? '#8D4B00' : '#887364',
+              background: active ? '#FFF0F0' : 'transparent',
+              color: active ? '#E31E24' : '#6C757D',
               borderRadius: '10px', cursor: 'pointer',
             }}>
               <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>{icons[status]}</span>

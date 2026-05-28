@@ -8,16 +8,15 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../../lib/supabase'
-import { useMenuStore, useCartStore } from '../../../store/index'
+import { useCartStore } from '../../../store/index'
 import { useAvailabilityStore } from '../../../store/availabilityStore'
 import { useAvailabilityPolling } from '../../../hooks/useAvailabilityPolling'
-import { CategoryBubbles } from '../components/CategoryBubbles'
 import { CartBar } from '../components/CartBar'
 import { BottomNav } from '../components/BottomNav'
-import { SkeletonCard } from '../components/SkeletonCard'
 import CartDrawer from './CartDrawer'
 import { motion } from 'framer-motion'
 import { getTableNum } from '../utils/tableNum'
+import { menuItems as mockMenuItems } from '../../../mock/data'
 
 const TENANT_ID  = '11111111-1111-1111-1111-111111111111'
 const STICKY_TRIGGER = 280
@@ -103,14 +102,11 @@ function spawnFlyToCart(startX, startY) {
 
   requestAnimationFrame(tick)
 }
-
-// Legacy Particle component kept for compatibility — renders nothing (spawnFlyToCart handles it)
-function Particle() { return null }
-
 // ── Inline +/stepper for each card ───────────────────────────────────────────
 function AddButton({ item, onAdd, onCustomize, onAnimate }) {
   const cartItems = useCartStore(s => s.items)
   const [popping, setPopping] = useState(false)
+  const [hovered, setHovered] = useState(false)
 
   const inCart = cartItems.find(i => i.id === item.id)
   const qty    = inCart?.qty || 0
@@ -133,96 +129,153 @@ function AddButton({ item, onAdd, onCustomize, onAnimate }) {
     useCartStore.getState().addItem({ ...item, qty: 1 })
   }
 
-  const btnBase = {
-    background: '#1B2B4B', color: 'white',
-    minWidth: 32, minHeight: 32, borderRadius: 8, cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 20, border: 'none', transition: 'transform 0.1s',
-    transform: popping ? 'scale(0.85)' : 'scale(1)',
-  }
-
   if (!item.is_available) {
     return (
-      <div style={{ minWidth: 32, minHeight: 32, borderRadius: 8, background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ color: '#D1D5DB', fontSize: 18 }}>+</span>
+      <div style={{ padding: '8px 16px', borderRadius: 20, background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ color: '#94A3B8', fontSize: 11, fontWeight: 800, textTransform: 'uppercase' }}>Out of Stock</span>
       </div>
     )
   }
 
   if (qty === 0) {
-    return <button onClick={handleAdd} style={btnBase} aria-label={`Add ${item.name}`}>+</button>
+    return (
+      <motion.button 
+        onClick={handleAdd} 
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        whileTap={{ scale: 0.94 }}
+        whileHover={{ scale: 1.04 }}
+        style={{
+          padding: '10px 24px', borderRadius: 24,
+          background: hovered ? 'linear-gradient(135deg, #FF4D4D 0%, #D91A2A 100%)' : '#FFFFFF', 
+          color: hovered ? '#FFFFFF' : '#D91A2A',
+          border: hovered ? '1.5px solid transparent' : '1.5px solid #D91A2A', cursor: 'pointer',
+          fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6,
+          boxShadow: hovered ? '0 8px 20px rgba(217, 26, 42, 0.22)' : '0 2px 8px rgba(217, 26, 42, 0.04)',
+          transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+        }}
+        aria-label={`Add ${item.name}`}
+      >
+        <span style={{ fontSize: 16, fontWeight: 900 }}>+</span> Add to Cart
+      </motion.button>
+    )
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#F3F4F6', padding: '4px', borderRadius: 10 }}>
-      <button onClick={decrement} style={{ border: 'none', background: 'transparent', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1B2B4B', cursor: 'pointer', fontSize: 18 }}>−</button>
-      <span style={{ fontSize: 13, fontWeight: 700, color: '#111827', minWidth: 12, textAlign: 'center' }}>{qty}</span>
-      <button onClick={increment} style={{ border: 'none', background: 'transparent', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1B2B4B', cursor: 'pointer', fontSize: 18 }}>+</button>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#FEF2F2', padding: '6px 8px', borderRadius: 24, border: '1.5px solid #FEE2E2', boxShadow: '0 2px 8px rgba(217,26,42,0.03)' }}>
+      <motion.button whileTap={{ scale: 0.85 }} onClick={decrement} style={{ width: 28, height: 28, borderRadius: '50%', border: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0F172A', background: 'white', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+        <span className="material-symbols-outlined" style={{ fontSize: 14, fontWeight: 900 }}>remove</span>
+      </motion.button>
+      <span style={{ fontSize: 14, fontWeight: 800, color: '#D91A2A', minWidth: 20, textAlign: 'center' }}>{qty}</span>
+      <motion.button whileTap={{ scale: 0.85 }} onClick={increment} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'linear-gradient(135deg, #FF4D4D 0%, #D91A2A 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', cursor: 'pointer', boxShadow: '0 3px 10px rgba(217,26,42,0.22)' }}>
+        <span className="material-symbols-outlined" style={{ fontSize: 14, fontWeight: 900 }}>add</span>
+      </motion.button>
     </div>
   )
 }
 
-// ── Issue 7: MenuItemCard with flying dot animation ───────────────────────────
+// ── MenuItemCard with flying dot animation ───────────────────────────
 function MenuItemCard({ item, idx, navigate, handleItemAdd }) {
   const getAvailability = useAvailabilityStore(s => s.getAvailability)
   const availability = getAvailability(item.id)
   const visibility = availability.visibility_state
+  const [hovered, setHovered] = useState(false)
 
   if (visibility === 'HIDDEN') return null;
 
   const mergedItem = { ...item, is_available: availability.is_available }
 
-  const handleAdd = (e) => {
-    e.stopPropagation()
-    spawnFlyToCart(e.clientX, e.clientY)
-    setTimeout(() => handleItemAdd(mergedItem), 100)
-  }
-
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(idx, 8) * 0.05 }}
+      whileHover={mergedItem.is_available ? { y: -5 } : {}}
+      onMouseEnter={() => mergedItem.is_available && setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       onClick={() => navigate(`/menu/item/${mergedItem.id}`)}
       style={{
-        display: 'flex', background: 'white', borderRadius: 16, padding: 14, gap: 12,
-        boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #F3F4F6',
-        opacity: mergedItem.is_available ? 1 : 0.6, position: 'relative', cursor: 'pointer',
+        display: 'flex', 
+        flexDirection: 'column',
+        background: '#FFFFFF',
+        borderRadius: '24px',
+        boxShadow: hovered ? '0 16px 40px rgba(15, 23, 42, 0.08)' : '0 8px 30px rgba(0,0,0,0.015)',
+        border: hovered ? '1px solid rgba(217, 26, 42, 0.15)' : '1px solid #F1F5F9',
+        cursor: 'pointer', 
+        position: 'relative', 
+        overflow: 'hidden',
+        opacity: mergedItem.is_available ? 1 : 0.65,
+        transition: 'all 0.35s cubic-bezier(0.16, 1, 0.3, 1)'
       }}
     >
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-          <div style={{ width: 12, height: 12, borderRadius: 2, border: mergedItem.is_veg ? '2px solid #22C55E' : '2px solid #EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: mergedItem.is_veg ? '#22C55E' : '#EF4444' }} />
-          </div>
-          <span style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{mergedItem.name}</span>
-        </div>
-        {mergedItem.description && (
-          <p style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.4, margin: '0 0 10px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-            {mergedItem.description}
-          </p>
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
-          <span style={{ fontSize: 17, fontWeight: 800, color: '#F97316' }}>₹{mergedItem.price}</span>
-          <AddButton item={mergedItem} onAdd={handleItemAdd} onAnimate={(e) => spawnFlyToCart(e.clientX, e.clientY)} />
-        </div>
-      </div>
-
-      <div style={{ position: 'relative', width: 90, height: 90, borderRadius: 12, overflow: 'hidden', flexShrink: 0, backgroundColor: '#F3F4F6' }}>
+      {/* Top Image Container */}
+      <div style={{ position: 'relative', width: '100%', height: 200, background: '#F1F5F9', overflow: 'hidden' }}>
         <img
-          src={mergedItem.image_url || `https://placehold.co/90x90?text=${encodeURIComponent(mergedItem.name[0])}`}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          src={mergedItem.image_url || `https://placehold.co/400x200?text=${encodeURIComponent(mergedItem.name)}`}
+          style={{ 
+            width: '100%', 
+            height: '100%', 
+            objectFit: 'cover',
+            transform: hovered ? 'scale(1.05)' : 'scale(1)',
+            transition: 'transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}
           alt={mergedItem.name}
         />
+        {/* Popular Tag Overlay */}
+        {mergedItem.is_popular !== false && (
+          <div style={{ 
+            position: 'absolute', top: 12, right: 12, 
+            background: 'linear-gradient(135deg, #FF4D4D 0%, #D91A2A 100%)', 
+            color: '#FFFFFF',
+            fontSize: 10,
+            fontWeight: 800,
+            padding: '4px 10px',
+            borderRadius: 12,
+            boxShadow: '0 4px 10px rgba(217, 26, 42, 0.22)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em'
+          }}>
+            Popular
+          </div>
+        )}
         {!mergedItem.is_available && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ color: 'white', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', textAlign: 'center', padding: '0 4px' }}>
-              {visibility === 'SOLD_OUT' ? 'Sold Out' : 
-               visibility === 'PAUSED' ? 'Paused' :
-               visibility === 'SCHEDULE_RESTRICTED' ? 'Available Later' : 'Unavailable'}
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ color: '#0F172A', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+              Unavailable
             </span>
           </div>
         )}
+      </div>
+
+      {/* Details Container */}
+      <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <span style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', fontFamily: 'Outfit, sans-serif' }}>{mergedItem.name}</span>
+          <span style={{ fontSize: 16, fontWeight: 800, color: '#D91A2A', fontFamily: 'Outfit, sans-serif' }}>₹ {mergedItem.price.toFixed(2)}</span>
+        </div>
+
+        {mergedItem.description && (
+          <p style={{ fontSize: 13, color: '#64748B', lineHeight: 1.4, margin: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            {mergedItem.description}
+          </p>
+        )}
+
+        {/* Tags Row */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+          {mergedItem.is_veg ? (
+            <span style={{ fontSize: 10, fontWeight: 800, color: '#059669', background: '#ECFDF5', padding: '4px 8px', borderRadius: 8, border: '1px solid #A7F3D0' }}>Veg</span>
+          ) : (
+            <span style={{ fontSize: 10, fontWeight: 800, color: '#D91A2A', background: '#FEF2F2', padding: '4px 8px', borderRadius: 8, border: '1px solid #FEE2E2' }}>Non-Veg</span>
+          )}
+          {mergedItem.attributes?.map(attr => (
+            <span key={attr} style={{ fontSize: 10, fontWeight: 800, color: '#64748B', background: '#F1F5F9', padding: '4px 8px', borderRadius: 8 }}>{attr}</span>
+          ))}
+        </div>
+
+        {/* Add to Cart button */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12, borderTop: '1px solid #F1F5F9', paddingTop: 12 }}>
+          <AddButton item={mergedItem} onAdd={handleItemAdd} onAnimate={(e) => spawnFlyToCart(e.clientX, e.clientY)} />
+        </div>
       </div>
     </motion.div>
   )
@@ -244,12 +297,11 @@ export default function MenuHome() {
 
   const [items,           setItems]           = useState(null)  // null = loading, [] = loaded
   const [itemsLoading,    setItemsLoading]    = useState(true)
-
   const [searchQuery,     setSearchQuery]     = useState('')
-  const [vegOnly,       setVegOnly]         = useState(false)
+  const [vegOnly,         setVegOnly]         = useState(false)
+  const [searchFocused,   setSearchFocused]   = useState(false)
   const [activeCategory,  setActiveCategory]  = useState('all')
   const [isRecording,     setIsRecording]     = useState(false)
-  const [particles,       setParticles]       = useState([])
   const [scrollY,         setScrollY]         = useState(0)
   const [lastScrollY,     setLastScrollY]     = useState(0)
   const [stickyVisible,   setStickyVisible]   = useState(false)
@@ -270,17 +322,26 @@ export default function MenuHome() {
   useEffect(() => {
     const fetchItems = async () => {
       setItemsLoading(true)
-      const { data, error } = await supabase
-        .from('menu_items')
-        .select('*')
-        .eq('tenant_id', TENANT_ID)
-        .order('sort_order', { ascending: true })
-      if (error) {
-        console.error('Menu fetch error:', error)
-        setItems([])
-      } else {
+      try {
+        const { data, error } = await supabase
+          .from('menu_items')
+          .select('*')
+          .eq('tenant_id', TENANT_ID)
+          .order('sort_order', { ascending: true })
+        if (error || !data || data.length === 0) {
+          console.error('Menu fetch error or empty, falling back to mock data')
+          throw new Error('Fallback')
+        }
         console.log('Fetched items:', data?.length, data)
-        setItems(data || [])
+        setItems(data)
+      } catch (err) {
+        // Fallback to mock data if backend fetch fails or returns empty
+        const formattedMockData = mockMenuItems.map(item => ({
+          ...item,
+          image_url: item.image,
+          is_veg: item.name.toLowerCase().includes('paneer') || item.name.toLowerCase().includes('mushroom') || item.category === 'Sides' || item.category === 'Desserts' || item.category === 'Beverages' || item.name.toLowerCase().includes('dal makhani'),
+        }))
+        setItems(formattedMockData)
       }
       setItemsLoading(false)
     }
@@ -338,13 +399,6 @@ export default function MenuHome() {
     recognitionRef.current.start()
   }
 
-  // Particle +1 effect
-  const spawnParticle = (e) => {
-    const p = { id: Date.now(), x: e.clientX, y: e.clientY }
-    setParticles(prev => [...prev, p])
-    setTimeout(() => setParticles(prev => prev.filter(x => x.id !== p.id)), 600)
-  }
-
   // Add to cart
   const handleItemAdd = (item) => {
     useCartStore.getState().addItem({ ...item, qty: 1, modifiers: [], note: '' })
@@ -379,7 +433,8 @@ export default function MenuHome() {
         .map(([cat, el]) => ({ cat, top: el.getBoundingClientRect().top }))
         .filter(({ top }) => top < STICKY_H)  // sections that have scrolled above sticky bar
         .sort((a, b) => b.top - a.top)        // highest top = most recently scrolled past
-      setActiveCategory(passed.length > 0 ? passed[0].cat : 'all')
+      const nextCat = passed.length > 0 ? passed[0].cat : 'all'
+      setActiveCategory(prev => prev === nextCat ? prev : nextCat)
     }
     window.addEventListener('scroll', onScrollSpy, { passive: true })
     return () => window.removeEventListener('scroll', onScrollSpy)
@@ -480,124 +535,191 @@ export default function MenuHome() {
 
   // ── JSX ───────────────────────────────────────────────────────────────────
   return (
-    <div
-      style={{ maxWidth: 430, margin: '0 auto', minHeight: '100vh', backgroundColor: '#F8F8F8', position: 'relative', fontFamily: 'Inter, sans-serif', overflowX: 'hidden' }}
-    >
-      {/* Keyframe */}
-      <style>{`@keyframes flyUp { to { transform: translateY(-40px); opacity: 0; } } @keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    <div style={{ maxWidth: 430, margin: '0 auto', minHeight: '100vh', background: '#F1F5F9', position: 'relative', fontFamily: 'Inter, sans-serif', overflowX: 'hidden', paddingBottom: 160 }}>
+      {/* Premium CSS Styles */}
+      <style>{`
+        @keyframes flyUp { to { transform: translateY(-40px); opacity: 0; } } 
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .premium-header-bg {
+          position: relative;
+          background: #FFFFFF;
+        }
+        
+        .premium-active-pill {
+          position: relative;
+          background: linear-gradient(135deg, #FF4D4D 0%, #E11D48 100%) !important;
+          color: #FFFFFF !important;
+        }
+        
+        /* Smooth category pill transition */
+        .category-pill {
+          position: relative;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .category-pill::after {
+          content: '';
+          position: absolute;
+          bottom: 2px;
+          left: 50%;
+          transform: translateX(-50%);
+        }
+      `}</style>
+      
+      {/* ── HEADER (Gusto White Theme) ── */}
+      <motion.header 
+        initial={{ y: -30, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: 'spring', damping: 20, stiffness: 120 }}
+        style={{ 
+          position: 'sticky', top: 0, zIndex: 30, 
+          padding: '12px 20px', 
+          background: 'rgba(255, 255, 255, 0.85)',
+          backdropFilter: 'blur(16px) saturate(120%)',
+          WebkitBackdropFilter: 'blur(16px) saturate(120%)',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.02)',
+          borderBottom: '1px solid rgba(241, 245, 249, 0.8)'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 20, color: '#D91A2A' }}>🍴</span>
+            <span style={{ fontSize: 20, fontWeight: 900, color: '#D91A2A', letterSpacing: '0.05em', fontFamily: 'Outfit, sans-serif' }}>GUSTO</span>
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Voice Mic Button */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={startVoiceSearch}
+              style={{ 
+                width: 36, height: 36, borderRadius: '50%', 
+                display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                border: '1px solid #E2E8F0', cursor: 'pointer', 
+                background: isRecording ? '#D91A2A' : '#F8FAFC', 
+                color: isRecording ? '#FFFFFF' : '#64748B', 
+                transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                animation: isRecording ? 'pulse-ring 2s infinite ease-in-out' : 'none',
+                boxShadow: isRecording ? '0 0 0 8px rgba(217, 26, 42, 0.15)' : 'none'
+              }}
+              aria-label={isRecording ? 'Stop recording' : 'Voice search'}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                {isRecording ? 'stop' : 'mic'}
+              </span>
+            </motion.button>
 
-      {/* ── HEADER ── */}
-      <header data-sticky style={{ position: 'sticky', top: 0, zIndex: 30, backgroundColor: '#1B2B4B', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <div style={{ fontWeight: 800, fontSize: 18, color: 'white', lineHeight: 1.2, letterSpacing: '-0.02em' }}>The Grand Spice</div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 2 }}>
-            {session.name ? `Hi, ${session.name} · TABLE ${getTableNum()}` : 'Table 03 · Dine-in'}
+            {/* Cart Icon Button */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              id="header-cart-btn"
+              onClick={() => setCartOpen(true)}
+              style={{ 
+                position: 'relative', width: 36, height: 36, borderRadius: '50%', 
+                background: '#F8FAFC', 
+                color: '#64748B', 
+                display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                border: '1px solid #E2E8F0', 
+                cursor: 'pointer',
+              }}
+              aria-label="Open cart"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>shopping_cart</span>
+              {cartItems.length > 0 && (
+                <span style={{ 
+                  position: 'absolute', top: -4, right: -4, 
+                  minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, 
+                  background: '#D91A2A', 
+                  color: '#FFFFFF', fontSize: 9, fontWeight: 800, 
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                  border: '1.5px solid #FFFFFF', 
+                  boxShadow: '0 2px 5px rgba(0,0,0,0.1)' 
+                }}>
+                  {cartItems.reduce((a, i) => a + i.qty, 0)}
+                </span>
+              )}
+            </motion.button>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {/* Voice mic */}
-          <button
-            onClick={startVoiceSearch}
-            style={{ width: 38, height: 38, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer', background: isRecording ? '#EF4444' : '#FE932C', boxShadow: '0 2px 8px rgba(254,147,44,0.35)', transition: 'background 0.2s' }}
-            aria-label={isRecording ? 'Stop recording' : 'Voice search'}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'white' }}>
-              {isRecording ? 'stop' : 'mic'}
-            </span>
-          </button>
-          {/* Cart icon */}
-          <button
-            id="header-cart-btn"
-            onClick={() => setCartOpen(true)}
-            style={{ position: 'relative', background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: 10, width: 42, height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-            aria-label="Open cart"
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'white', fontVariationSettings: "'FILL' 1" }}>shopping_cart</span>
-            {cartItems.length > 0 && (
-              <span style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', backgroundColor: '#FE932C', color: 'white', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #1A365D' }}>
-                {cartItems.reduce((a, i) => a + i.qty, 0)}
-              </span>
-            )}
-          </button>
-        </div>
-      </header>
+      </motion.header>
 
-      {/* ── SEARCH & VEG ROW ── */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        padding: '16px',
-        background: '#F8F8F8',
-        // Issue 5: instant show/hide based on scroll direction
-        transform: showSearch ? 'translateY(0)' : 'translateY(-100%)',
-        transition: 'transform 0.15s ease',
-        position: 'sticky',
-        top: 74,
-        zIndex: 25,
+      {/* ── SEARCH & FILTER ROW ── */}
+      <div style={{ 
+        display: 'flex', alignItems: 'center', gap: 12, 
+        padding: '16px 20px', 
+        background: 'rgba(248, 250, 252, 0.88)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        position: 'sticky', top: 62, zIndex: 20, 
+        transform: showSearch ? 'translateY(0)' : 'translateY(-120%)', 
+        transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+        boxShadow: showSearch ? '0 10px 20px rgba(0,0,0,0.01)' : 'none',
+        borderBottom: '1px solid rgba(241, 245, 249, 0.5)'
       }}>
-        {/* Search bar — takes remaining space */}
-        <div style={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          background: 'white',
-          borderRadius: '12px',
-          padding: '12px 16px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+        <div style={{ 
+          flex: 1, display: 'flex', alignItems: 'center', gap: 10, 
+          background: '#FFFFFF', borderRadius: 24, padding: '10px 16px', 
+          boxShadow: searchFocused ? '0 0 0 4px rgba(217, 26, 42, 0.06), 0 4px 18px rgba(0,0,0,0.02)' : '0 4px 18px rgba(0,0,0,0.01)', 
+          border: searchFocused ? '1.5px solid #D91A2A' : '1px solid #E2E8F0',
+          transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
         }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#9CA3AF' }}>search</span>
+          <span className="material-symbols-outlined" style={{ fontSize: 20, color: searchFocused ? '#D91A2A' : '#94A3B8', transition: 'color 0.2s' }}>search</span>
           <input
             type="text"
-            placeholder={isRecording ? 'Listening...' : 'Search for dishes...'}
+            placeholder={isRecording ? 'Listening...' : 'Search menu...'}
             value={searchQuery}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
             onChange={e => setSearchQuery(e.target.value)}
-            style={{
-              border: 'none',
-              background: 'transparent',
-              outline: 'none',
-              fontSize: '15px',
-              width: '100%',
-              color: '#111827',
-              fontWeight: 500
-            }}
+            style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: 14, width: '100%', color: '#0F172A', fontWeight: 500 }}
           />
         </div>
 
-        {/* Veg toggle — right side of search row */}
-        <div 
+        <button 
           onClick={() => setVegOnly(!vegOnly)}
-          style={{
-            height: '48px',
-            padding: '0 12px',
-            borderRadius: '12px',
-            background: vegOnly ? '#DCFCE7' : 'white',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            cursor: 'pointer',
-            border: `1.5px solid ${vegOnly ? '#22C55E' : '#E5E7EB'}`,
-            transition: 'all 0.2s',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+          style={{ 
+            width: 42, height: 42, borderRadius: '50%', 
+            display: 'flex', alignItems: 'center', justifyContent: 'center', 
+            cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)', 
+            background: vegOnly ? '#059669' : '#FFFFFF', 
+            border: vegOnly ? 'none' : '1px solid #E2E8F0', 
+            color: vegOnly ? 'white' : '#64748B', 
+            boxShadow: vegOnly ? '0 6px 18px rgba(5, 150, 105, 0.3)' : '0 4px 18px rgba(0,0,0,0.01)' 
           }}
         >
-          <span style={{ fontSize: '14px' }}>🟢</span>
-          <span style={{ fontSize: '13px', fontWeight: 700, color: vegOnly ? '#16A34A' : '#4B5563' }}>VEG</span>
-        </div>
+          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>tune</span>
+        </button>
       </div>
 
       {/* ── CATEGORY PILLS ── */}
-      <div data-sticky style={{ position: 'sticky', top: 122, zIndex: 20, backgroundColor: '#F8F8F8', padding: '4px 0 12px' }}>
-        {/* Issue 6: render category tabs with activeTabRef on active tab */}
-        <div ref={pillsRef} style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '0 16px', scrollbarWidth: 'none' }}>
+      <div data-sticky style={{ 
+        position: 'sticky', 
+        top: 132, 
+        zIndex: 20, 
+        background: 'rgba(248, 250, 252, 0.88)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        paddingBottom: 12,
+        borderBottom: '1px solid rgba(241, 245, 249, 0.5)'
+      }}>
+        <div 
+          ref={pillsRef} 
+          className="hide-scrollbar"
+          style={{ 
+            display: 'flex', gap: 8, overflowX: 'auto', 
+            padding: '0 20px', alignItems: 'center'
+          }}
+        >
           {categories.map(cat => {
-            // activeCategory tracks which section is in view (scroll spy) or was tapped
             const isActive = activeCategory === cat.id
             return (
-              <button
+              <motion.button
                 key={cat.id}
                 ref={isActive ? activeTabRef : null}
+                whileTap={{ scale: 0.94 }}
+                whileHover={{ scale: 1.03 }}
                 onClick={() => {
                   if (cat.id === 'all') {
                     isManualScroll.current = true
@@ -608,7 +730,7 @@ export default function MenuHome() {
                     const el = sectionRefs.current[cat.id]
                     if (el) {
                       isManualScroll.current = true
-                      const y = el.getBoundingClientRect().top + window.scrollY - 185
+                      const y = el.getBoundingClientRect().top + window.scrollY - 180
                       window.scrollTo({ top: y, behavior: 'smooth' })
                       setActiveCategory(cat.id)
                       setTimeout(() => { isManualScroll.current = false }, 1200)
@@ -616,68 +738,65 @@ export default function MenuHome() {
                   }
                 }}
                 style={{
-                  flexShrink: 0,
-                  padding: '8px 18px',
-                  borderRadius: 999,
-                  border: 'none',
-                  background: isActive ? '#1B2B4B' : 'white',
-                  color: isActive ? 'white' : '#6B7280',
-                  fontWeight: isActive ? 700 : 500,
-                  fontSize: 13,
-                  cursor: 'pointer',
-                  boxShadow: isActive ? '0 2px 8px rgba(27,43,75,0.2)' : '0 1px 4px rgba(0,0,0,0.06)',
-                  transition: 'all 0.2s',
+                  flexShrink: 0, 
+                  padding: '8px 16px', 
+                  borderRadius: 20, 
+                  fontSize: 13, 
+                  fontWeight: 800, 
+                  cursor: 'pointer', 
+                  transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                  background: isActive ? 'linear-gradient(135deg, #FF4D4D 0%, #D91A2A 100%)' : '#FFFFFF',
+                  color: isActive ? '#FFFFFF' : '#64748B',
+                  border: isActive ? 'none' : '1px solid #E2E8F0',
+                  boxShadow: isActive ? '0 6px 16px rgba(217, 26, 42, 0.22)' : 'none',
                 }}
               >
-                {cat.name}
-              </button>
+                <span style={{ position: 'relative', zIndex: 2 }}>{cat.name}</span>
+              </motion.button>
             )
           })}
         </div>
       </div>
 
       {/* ── ITEM LIST ── */}
-      <main style={{ padding: '4px 16px 200px' }}>
+      <main style={{ padding: '24px 24px 200px' }}>
         {itemsLoading || items === null ? (
-          // Issue 8: inline shimmer skeleton
           <>
             <style>{`
-              @keyframes shimmer {
+              @keyframes shimmerLight {
                 0% { background-position: 200% 0; }
                 100% { background-position: -200% 0; }
               }
             `}</style>
-            <div style={{ padding: '4px 0' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {[1,2,3,4].map(i => (
-                <div key={i} style={{
-                  background: 'white', borderRadius: '16px', padding: '16px',
-                  marginBottom: '12px', display: 'flex', gap: '12px', alignItems: 'center',
-                  border: '1px solid #F3F4F6'
-                }}>
-                  <div style={{
-                    width: '90px', height: '90px', borderRadius: '12px', flexShrink: 0,
-                    background: 'linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%)',
-                    backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite'
-                  }}/>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ height: '16px', background: 'linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%)', borderRadius: '8px', marginBottom: '8px', width: '70%', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }}/>
-                    <div style={{ height: '12px', background: 'linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%)', borderRadius: '8px', width: '90%', marginBottom: '8px', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }}/>
-                    <div style={{ height: '14px', background: 'linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%)', borderRadius: '8px', width: '40%', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }}/>
+                <div key={i} style={{ padding: '16px', borderRadius: 20, display: 'flex', gap: 16, background: '#FFFFFF', border: '1px solid #F1F5F9' }}>
+                  <div style={{ width: 84, height: 84, borderRadius: 16, flexShrink: 0, background: 'linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%)', backgroundSize: '200% 100%', animation: 'shimmerLight 1.5s infinite' }}/>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                    <div style={{ height: 16, background: 'linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%)', borderRadius: 4, marginBottom: 8, width: '60%', backgroundSize: '200% 100%', animation: 'shimmerLight 1.5s infinite' }}/>
+                    <div style={{ height: 12, background: 'linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%)', borderRadius: 4, width: '100%', marginBottom: 12, backgroundSize: '200% 100%', animation: 'shimmerLight 1.5s infinite' }}/>
+                    <div style={{ height: 16, background: 'linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%)', borderRadius: 4, width: '30%', backgroundSize: '200% 100%', animation: 'shimmerLight 1.5s infinite' }}/>
                   </div>
                 </div>
               ))}
             </div>
           </>
         ) : displayedItems.length === 0 && items.length > 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-            <span style={{ fontSize: '48px' }}>🔍</span>
-            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#1B2B4B', marginTop: '16px' }}>No items found</h3>
-            <p style={{ color: '#6B7280', fontSize: '14px', marginTop: '4px' }}>Try adjusting your search or filters</p>
-            <button onClick={() => { setSearchQuery(''); setVegOnly(false); setActiveCategory('all') }} style={{ marginTop: '20px', color: '#F97316', fontWeight: 700, border: 'none', background: 'transparent' }}>Clear all filters</button>
+          <div style={{ textAlign: 'center', padding: '80px 20px' }}>
+            <div style={{ width: 80, height: 80, background: '#F1F5F9', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 36, color: '#94A3B8' }}>search_off</span>
+            </div>
+            <h3 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 20, fontWeight: 700, color: '#0F172A', margin: '0 0 8px' }}>No dishes found</h3>
+            <p style={{ color: '#64748B', fontSize: 14, margin: '0 0 24px' }}>Try adjusting your search or turning off the veg filter.</p>
+            <button 
+              onClick={() => { setSearchQuery(''); setVegOnly(false); setActiveCategory('all') }} 
+              style={{ padding: '12px 24px', background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)', color: '#FFFFFF', borderRadius: 24, fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px rgba(239, 68, 68, 0.3)' }}
+            >
+              Clear Filters
+            </button>
           </div>
         ) : (
-          // Always render grouped — categories are scroll anchors, not filters
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
             {(() => {
               const allCats = Array.from(new Set(displayedItems.map(i => i.category).filter(Boolean)))
               const ordered = [
@@ -688,44 +807,34 @@ export default function MenuHome() {
                 const catItems = displayedItems.filter(i => i.category === cat)
                 if (!catItems.length) return null
                 return (
-                  <div key={cat}>
-                    <div
+                  <motion.div key={cat} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+                    <h2
                       ref={el => sectionRefs.current[cat] = el}
-                      style={{
-                        fontSize: '11px', fontWeight: '600',
-                        letterSpacing: '0.08em', color: '#6B7280',
-                        textTransform: 'uppercase',
-                        padding: '16px 0 8px', margin: '0'
+                      style={{ 
+                        fontFamily: 'Outfit, sans-serif', 
+                        fontSize: 20, 
+                        fontWeight: 800, 
+                        color: '#0F172A', 
+                        paddingTop: 8, 
+                        paddingBottom: 16, 
+                        margin: 0,
+                        letterSpacing: '-0.02em'
                       }}
                     >
                       {cat}
-                    </div>
+                    </h2>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {catItems.map((item, idx) => <MenuItemCard key={item.id} item={item} idx={idx} navigate={navigate} handleItemAdd={handleItemAdd} spawnParticle={spawnParticle} />)}
+                      {catItems.map((item, idx) => (
+                        <MenuItemCard key={item.id} item={item} idx={idx} navigate={navigate} handleItemAdd={handleItemAdd} />
+                      ))}
                     </div>
-                  </div>
+                  </motion.div>
                 )
               })
             })()}
           </div>
         )}
       </main>
-
-      {/* ── STICKY OVERLAY ── */}
-      <div style={{
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 40,
-        background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)',
-        borderBottom: '1px solid #E5E7EB',
-        opacity: stickyVisible ? 1 : 0,
-        visibility: stickyVisible ? 'visible' : 'hidden',
-        transform: stickyVisible ? 'translateY(0)' : 'translateY(-10px)',
-        transition: 'all 0.3s ease',
-        pointerEvents: stickyVisible ? 'auto' : 'none',
-      }}>
-        <div style={{ padding: '8px 0' }}>
-          <CategoryBubbles categories={categories} activeCategory={activeCategory} onSelectCategory={setActiveCategory} size="compact" />
-        </div>
-      </div>
 
       {/* ── CART FAB ── */}
       <CartBar visible={navVisible} onOpen={() => setCartOpen(true)} />
@@ -735,9 +844,6 @@ export default function MenuHome() {
 
       {/* ── CART DRAWER OVERLAY ── */}
       <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} />
-
-      {/* ── PARTICLES ── */}
-      {particles.map(p => <Particle key={p.id} x={p.x} y={p.y} />)}
     </div>
   )
 }
