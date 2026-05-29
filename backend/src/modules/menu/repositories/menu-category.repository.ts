@@ -164,7 +164,7 @@ export async function createCategory(
   dto: CreateMenuCategoryDto,
   authContext: Request['context']
 ): Promise<MenuCategory> {
-  const userClient = createUserClient(authContext.accessToken);
+  const userClient = createUserClient(authContext.accessToken!);
 
   const payload = {
     tenant_id:  tenantId,

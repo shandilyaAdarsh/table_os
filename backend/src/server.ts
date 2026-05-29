@@ -14,7 +14,7 @@ import { WebSocketManager } from './modules/transport/websocket.manager';
 const app = createApp();
 const PORT = env.PORT;
 
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   logger.info(
     {
       port: PORT,

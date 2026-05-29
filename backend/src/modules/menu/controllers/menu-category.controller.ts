@@ -51,7 +51,7 @@ export async function getBranchCategories(req: Request<{ tenantId: string; branc
 
 export async function createCategory(req: Request<{ tenantId: string }>, res: Response, next: NextFunction) {
   try {
-    const tenantId = req.context.tenantId; // Derived strictly from auth context
+    const tenantId = req.context.tenantId!; // Derived strictly from auth context
     const dto = validate(CreateMenuCategorySchema, req.body);
     const category = await createMenuCategory(tenantId, dto, req.context);
     res.status(201).json(formatSuccess(category));

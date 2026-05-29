@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { authenticate, managerOrAbove } from '../../middleware/auth.middleware';
 import { IncidentService } from '../projection/incident.service';
+import { TelemetryBroadcaster } from '../observability/telemetry.broadcaster';
 
 const router: Router = Router({ mergeParams: true });
 
@@ -15,8 +16,8 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// POST /api/v1/infrastructure/chaos/gap
-router.post('/gap', authenticate, managerOrAbove, async (req: Request, res: Response) => {
+// POST /api/v1/infrastructure/chaos/sequence-gap
+router.post('/sequence-gap', authenticate, managerOrAbove, async (req: Request, res: Response) => {
   const tenantId = req.context.tenantId!;
   const branchId = req.body.branch_id || (req.query.branch_id as string);
 
@@ -24,43 +25,46 @@ router.post('/gap', authenticate, managerOrAbove, async (req: Request, res: Resp
     res.status(400).json({ success: false, error: 'branch_id is required' });
     return;
   }
+
+  TelemetryBroadcaster.enqueue({
+    tenant_id: tenantId,
+    runtime_surface: 'BACKEND_ENGINE',
+    domain: 'system',
+    severity: 'INFO',
+          event_type: 'SIMULATION_TRIGGERED',
+    metadata: { simulation: 'sequence_gap', details: req.body }
+  });
 
   await IncidentService.logIncident({
     tenant_id: tenantId,
     branch_id: branchId,
     incident_type: 'SEQUENCE_GAP',
     severity: 'WARNING',
-    message: 'SIMULATED: Sequence gap detected in operational projection engine during delta replay.',
+    message: 'SIMULATED: Sequence gap detected in operational projection engine.',
     details: { gap_start: 104, gap_end: 110 },
   });
 
   res.status(200).json({ success: true, message: 'Chaos event SEQUENCE_GAP injected successfully.' });
 });
 
-// POST /api/v1/infrastructure/chaos/drift
-router.post('/drift', authenticate, managerOrAbove, async (req: Request, res: Response) => {
+// POST /api/v1/infrastructure/chaos/duplicate-flood
+router.post('/duplicate-flood', authenticate, managerOrAbove, async (req: Request, res: Response) => {
   const tenantId = req.context.tenantId!;
-  const branchId = req.body.branch_id || (req.query.branch_id as string);
-
-  if (!branchId) {
-    res.status(400).json({ success: false, error: 'branch_id is required' });
-    return;
-  }
-
-  await IncidentService.logIncident({
+  
+  TelemetryBroadcaster.enqueue({
     tenant_id: tenantId,
-    branch_id: branchId,
-    incident_type: 'CHECKSUM_DRIFT',
-    severity: 'CRITICAL',
-    message: 'SIMULATED: Integrity checksum drift detected between local projection store and backend projection metadata.',
-    details: { expected_hash: 'sha256-a1b2c3d4', actual_hash: 'sha256-e5f6g7h8' },
+    runtime_surface: 'BACKEND_ENGINE',
+    domain: 'system',
+    severity: 'INFO',
+          event_type: 'SIMULATION_TRIGGERED',
+    metadata: { simulation: 'duplicate_flood', details: req.body }
   });
 
-  res.status(200).json({ success: true, message: 'Chaos event CHECKSUM_DRIFT injected successfully.' });
+  res.status(200).json({ success: true, message: 'Chaos event DUPLICATE_FLOOD injected successfully.' });
 });
 
-// POST /api/v1/infrastructure/chaos/partition
-router.post('/partition', authenticate, managerOrAbove, async (req: Request, res: Response) => {
+// POST /api/v1/infrastructure/chaos/reconnect-storm
+router.post('/reconnect-storm', authenticate, managerOrAbove, async (req: Request, res: Response) => {
   const tenantId = req.context.tenantId!;
   const branchId = req.body.branch_id || (req.query.branch_id as string);
 
@@ -68,6 +72,15 @@ router.post('/partition', authenticate, managerOrAbove, async (req: Request, res
     res.status(400).json({ success: false, error: 'branch_id is required' });
     return;
   }
+
+  TelemetryBroadcaster.enqueue({
+    tenant_id: tenantId,
+    runtime_surface: 'BACKEND_ENGINE',
+    domain: 'system',
+    severity: 'INFO',
+          event_type: 'SIMULATION_TRIGGERED',
+    metadata: { simulation: 'reconnect_storm', details: req.body }
+  });
 
   await IncidentService.logIncident({
     tenant_id: tenantId,
@@ -79,6 +92,22 @@ router.post('/partition', authenticate, managerOrAbove, async (req: Request, res
   });
 
   res.status(200).json({ success: true, message: 'Chaos event RECONNECT_STORM injected successfully.' });
+});
+
+// POST /api/v1/infrastructure/chaos/replay-chaos
+router.post('/replay-chaos', authenticate, managerOrAbove, async (req: Request, res: Response) => {
+  const tenantId = req.context.tenantId!;
+  
+  TelemetryBroadcaster.enqueue({
+    tenant_id: tenantId,
+    runtime_surface: 'BACKEND_ENGINE',
+    domain: 'system',
+    severity: 'INFO',
+          event_type: 'SIMULATION_TRIGGERED',
+    metadata: { simulation: 'replay_chaos', details: req.body }
+  });
+
+  res.status(200).json({ success: true, message: 'Chaos event REPLAY_CHAOS injected successfully.' });
 });
 
 export { router as chaosRouter };

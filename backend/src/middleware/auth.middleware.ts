@@ -80,6 +80,7 @@ export async function authenticate(
         device_session_id:    payload.session_id,
         full_name:            '', 
         must_change_password: false,
+        accessToken:          token,
       };
     } catch (runtimeErr) {
       // Fallback for Admin App: Validate Supabase JWT
@@ -99,6 +100,7 @@ export async function authenticate(
         device_session_id:    '', // Admin app doesn't rely on strict single device sessions here
         full_name:            validation.full_name ?? 'Admin',
         must_change_password: validation.must_change_password ?? false,
+        accessToken:          token,
       };
     }
 
@@ -294,6 +296,8 @@ export function requirePasswordChanged(
 // ─── Convenience role sets ────────────────────────────────────
 
 export const superAdminOnly = requireRole(ROLES.SUPER_ADMIN);
+
+export const internalEngineeringOrAbove = requireMinRole(ROLES.INTERNAL_ENGINEERING);
 
 export const adminOrAbove = requireMinRole(ROLES.RESTAURANT_ADMIN);
 

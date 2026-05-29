@@ -4,7 +4,6 @@
 // ============================================================
 
 import { SupabaseClient } from '@supabase/supabase-js';
-import { AppError } from '../../../shared/errors/AppError';
 
 export class AdminOnboardingService {
   /**
