@@ -4,6 +4,7 @@
 // ============================================================
 
 import { SupabaseClient } from '@supabase/supabase-js';
+import { TelemetryBroadcaster } from '../../observability/telemetry.broadcaster';
 
 export interface TableRuntimeState {
   table_id: string;
@@ -23,6 +24,18 @@ export async function rebuildTableProjection(
   tenantId: string,
   tableId: string
 ): Promise<TableRuntimeState> {
+  const startTime = Date.now();
+
+  TelemetryBroadcaster.enqueue({
+    tenant_id: tenantId,
+    runtime_surface: 'BACKEND_ENGINE',
+    domain: 'tables',
+    aggregate_id: tableId,
+    severity: 'INFO',
+          event_type: 'PROJECTION_REBUILD_STARTED',
+    metadata: { reason: 'DOMAIN_REBUILD' }
+  });
+
   // 1. Fetch active guest sessions (formerly qr_sessions)
   const { data: guests, error: guestsErr } = await supabase
     .from('guest_sessions')
@@ -88,8 +101,27 @@ export async function rebuildTableProjection(
     .single();
 
   if (error) {
+    TelemetryBroadcaster.enqueue({
+      tenant_id: tenantId,
+      runtime_surface: 'BACKEND_ENGINE',
+      domain: 'tables',
+      aggregate_id: tableId,
+      severity: 'INFO',
+          event_type: 'PROJECTION_REBUILD_FAILED',
+      metadata: { duration_ms: Date.now() - startTime, error: error.message }
+    });
     throw new Error(`Failed to upsert table projection: ${error.message}`);
   }
+
+  TelemetryBroadcaster.enqueue({
+    tenant_id: tenantId,
+    runtime_surface: 'BACKEND_ENGINE',
+    domain: 'tables',
+    aggregate_id: tableId,
+    severity: 'INFO',
+          event_type: 'PROJECTION_REBUILD_COMPLETED',
+    metadata: { duration_ms: Date.now() - startTime, state: runtimeState }
+  });
 
   return data as TableRuntimeState;
 }

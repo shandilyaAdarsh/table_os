@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { authenticate } from '../../middleware/auth.middleware';
 import { EventLedgerService } from './event-ledger.service';
+import { TelemetryBroadcaster } from '../observability/telemetry.broadcaster';
 
 const router: Router = Router({ mergeParams: true });
 
@@ -25,6 +26,15 @@ router.get('/replay', authenticate, async (req: Request, res: Response, next: Ne
       from_sequence: fromSequence,
       count: events.length,
       data: events,
+    });
+
+    TelemetryBroadcaster.enqueue({
+      tenant_id: tenantId,
+      runtime_surface: 'BACKEND_ENGINE',
+      domain: 'system',
+      severity: 'INFO',
+          event_type: 'REPLAY_COMPLETED',
+      metadata: { from_sequence: fromSequence, returned_count: events.length }
     });
   } catch (err) { next(err); }
 });
@@ -50,6 +60,18 @@ router.get('/range', authenticate, async (req: Request, res: Response, next: Nex
       end_sequence: endSeq,
       data: events,
     });
+
+    if (events.length < limit) {
+      TelemetryBroadcaster.enqueue({
+        tenant_id: tenantId,
+        runtime_surface: 'BACKEND_ENGINE',
+        domain: 'system',
+        severity: 'INFO',
+          event_type: 'REPLAY_GAP_DETECTED',
+        metadata: { expected: limit, returned: events.length, startSeq, endSeq }
+      });
+    }
+
   } catch (err) { next(err); }
 });
 

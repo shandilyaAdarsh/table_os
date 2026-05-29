@@ -54,7 +54,7 @@ export async function createCategory(req: Request, res: Response, next: NextFunc
   try {
     const tenantId = req.context.tenantId!;
     const dto = validate(CreateMenuCategorySchema, req.body);
-    const category = await createMenuCategory(tenantId, dto, req.context.userId);
+    const category = await createMenuCategory(tenantId, dto, req.context);
     res.status(201).json(formatSuccess(category));
   } catch (err) { next(err); }
 }

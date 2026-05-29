@@ -29,6 +29,8 @@ import { chaosRouter } from './modules/infrastructure/chaos.router';
 import { runtimeRouter } from './modules/projection/runtime.router';
 import { eventReplayRouter } from './modules/projection/event-replay.router';
 import { deploymentRouter } from './modules/projection/deployment.router';
+import { observabilityRouter } from './modules/observability/observability.router';
+import { contextRouter } from './modules/context/context.router';
 import { ObservabilityService } from './modules/infrastructure/observability.service';
 import { errorMiddleware } from './middleware/error.middleware';
 import { loggingMiddleware } from './middleware/logging.middleware';
@@ -61,9 +63,17 @@ export function createApp(): express.Application {
         'X-Device-Session-Id',
         'X-Forwarded-For',
         'X-QR-Session-Token',
+        'X-Retry-Count',
+        'x-request-id',
+        'Idempotency-Key',
       ],
     })
   );
+
+  // ─── OPTIONS Preflight (must be before all routes) ─────────────────────
+  // Required so browser preflights for credentialed cross-origin requests
+  // receive the correct CORS headers before touching any authenticated route.
+  app.options('*', cors());
 
   // ─── Observability Context Propagation ─────────────────────
   app.use(ObservabilityService.observabilityMiddleware);
@@ -141,11 +151,16 @@ export function createApp(): express.Application {
   app.use('/api/v1/runtime', runtimeRouter);
   app.use('/api/v1/runtime/events', eventReplayRouter);
   app.use('/api/v1/runtime', deploymentRouter);
+  app.use('/api/v1/runtime/observability', observabilityRouter);
 
   // ─── Admin API (requires auth & tenant context) ──────────────
   // The authoritative operational interface for the dashboard/admin panel.
   app.use('/v1/admin', adminRouter);
   app.use('/api/v1/admin', adminRouter);
+
+  // ─── Context/Bootstrap API ────────────────────────────────────
+  // Single-payload bootstrap for the admin app. Must resolve before routing.
+  app.use('/api/v1/context', contextRouter);
 
   // Future modules registered here:
   // app.use('/tenants/:tenantId/staff', staffRouter);
