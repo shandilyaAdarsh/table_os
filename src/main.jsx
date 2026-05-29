@@ -15,6 +15,8 @@ import ProtectedRoute from './components/shared/ProtectedRoute.jsx'
 // KDS
 import KDSBoard from './apps/kds/pages/KDSBoard'
 import KDSSettings from './apps/kds/pages/KDSSettings'
+import KDSLogin from './apps/kds/pages/KDSLogin'
+import KDSAdminLogin from './apps/kds/pages/KDSAdminLogin'
 
 // Customer Menu
 import { 
@@ -103,6 +105,35 @@ function CheckInRoute() {
   return <CheckIn onComplete={() => navigate('/menu/browse')} />
 }
 
+function KDSProtectedRoute({ children }) {
+  const user = useAuthStore(state => state.user)
+  const tenantId = useAuthStore(state => state.tenantId)
+  const logout = useAuthStore(state => state.logout)
+
+  const loginTime = localStorage.getItem('kds_login_timestamp')
+  const isSessionValid = loginTime && (Date.now() - Number(loginTime) < 10 * 60 * 60 * 1000)
+
+  // Clear invalid sessions safely inside useEffect
+  useEffect(() => {
+    if (!user || !tenantId || !isSessionValid) {
+      logout()
+    }
+  }, [user, tenantId, isSessionValid, logout])
+
+  // 1. If email/password session is invalid or expired, redirect to KDS admin login
+  if (!user || !tenantId || !isSessionValid) {
+    return <Navigate to="/kds/admin-login" replace />
+  }
+
+  // 2. If email/password session is valid, check KDS PIN authentication
+  const isPinAuthenticated = sessionStorage.getItem('kds_authenticated') === 'true'
+  if (!isPinAuthenticated) {
+    return <Navigate to="/kds/login" replace />
+  }
+
+  return children
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <AuthGate>
@@ -125,8 +156,18 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           {/* Admin App is handled natively in Flutter, no web routes here */}
 
           {/* KDS */}
-          <Route path="/kds" element={<KDSBoard />} />
-          <Route path="/kds/settings" element={<KDSSettings />} />
+          <Route path="/kds/admin-login" element={<KDSAdminLogin />} />
+          <Route path="/kds/login" element={<KDSLogin />} />
+          <Route path="/kds" element={
+            <KDSProtectedRoute>
+              <KDSBoard />
+            </KDSProtectedRoute>
+          } />
+          <Route path="/kds/settings" element={
+            <KDSProtectedRoute>
+              <KDSSettings />
+            </KDSProtectedRoute>
+          } />
 
           {/* Staff Runtime */}
           <Route path="/staff/login" element={<StaffLogin />} />

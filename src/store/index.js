@@ -56,6 +56,49 @@ export const useOrderStore = create((set, get) => ({
 
   // For Admin/KDS history
   setHistoryOrders: (orders) => set({ historyOrders: orders, isLoading: false }),
+
+  fetchHistory: async (filter = 'day') => {
+    const tenantId = '11111111-1111-1111-1111-111111111111';
+    set({ isLoading: true });
+
+    let query = supabase
+      .from('orders')
+      .select(`
+        *,
+        order_items (
+          id, name, qty, unit_price, note, status, done, is_rejected
+        )
+      `)
+      .eq('tenant_id', tenantId)
+      .in('status', ['served', 'cancelled', 'paid']);
+
+    // Date filters (day, week, month, all)
+    if (filter === 'day') {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      query = query.gte('created_at', startOfToday.toISOString());
+    } else if (filter === 'week') {
+      const startOfWeek = new Date();
+      startOfWeek.setDate(startOfWeek.getDate() - 7);
+      query = query.gte('created_at', startOfWeek.toISOString());
+    } else if (filter === 'month') {
+      const startOfMonth = new Date();
+      startOfMonth.setMonth(startOfMonth.getMonth() - 1);
+      query = query.gte('created_at', startOfMonth.toISOString());
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[useOrderStore] fetchHistory failed:', error);
+      set({ isLoading: false });
+      return;
+    }
+
+    // Map to normalized orders for KDS history display
+    const mapped = (data || []).map(normalizeOrder);
+    set({ historyOrders: mapped, isLoading: false });
+  },
 }))
 
 

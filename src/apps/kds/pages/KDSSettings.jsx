@@ -306,6 +306,40 @@ export default function KDSSettings() {
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '16px',
+              border: '1px solid #E6E8EA',
+              borderRadius: '10px',
+              background: '#FFFFFF',
+            }}>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#1A1C1E' }}>Lock KDS Terminal</div>
+                <div style={{ fontSize: '11px', color: '#6C757D', marginTop: '2px' }}>
+                  Deauthorizes this session, requiring PIN entry to access again
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  sessionStorage.removeItem('kds_authenticated');
+                  navigate('/kds/login');
+                }}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid #E6E8EA',
+                  background: '#FFFFFF',
+                  color: '#1A1C1E',
+                  fontSize: '11px', fontWeight: 800,
+                  cursor: 'pointer',
+                  textTransform: 'uppercase', letterSpacing: '0.05em',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Lock Session
+              </button>
+            </div>
+
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '16px',
               border: '1px solid #FECACA',
               borderRadius: '10px',
               background: '#FFFBF5',

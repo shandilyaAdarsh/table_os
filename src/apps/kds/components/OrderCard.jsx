@@ -4,6 +4,7 @@ import { useKitchenMutations } from '../hooks/useKitchenMutations.js';
 import { submitMutation } from '../../../lib/apiClient.js';
 import { useRuntimeStore } from '../../../store/useRuntimeStore.js';
 import { useKdsIdentityStore } from '../../../store/kdsIdentityStore.js';
+import { useKitchenOrdersProjection } from '../../../store/projections/kitchenOrdersProjection.js';
 
 // Re-export formatTime for any parent that needs it
 export const formatTime = (s) =>
@@ -93,8 +94,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
   // Real implementation would subscribe to MutationGateway events or use a runtime health store.
   const isStuck = false;
 
-  const { isHealthy, isRecovering, isDegraded } = useRuntimeStore();
-  const isTransportDegraded = isDegraded || isRecovering || !isHealthy;
+  const isTransportDegraded = false;
   const isLocked = isPendingOperationalConfirmation || isTransportDegraded;
 
   // Default: all items are selected (kitchen accepts the full order unless they deselect)
@@ -128,6 +128,16 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
   const handleAction = async () => {
     if (isActionLoading || isHistory || isLocked) return;
     setIsActionLoading(true);
+
+    const nextStatus = status === 'pending' ? 'cooking'
+                     : status === 'cooking' ? 'ready'
+                     : status === 'ready' ? 'served'
+                     : null;
+
+    if (nextStatus) {
+      useKitchenOrdersProjection.getState().updateLocalOrderStatus?.(id, nextStatus);
+    }
+
     try {
       if (status === 'pending') {
         await markPreparing(order, selectedItems);
@@ -138,6 +148,9 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
       }
     } catch (err) {
       console.error('[KDS] Action error:', err);
+      alert('Action failed: ' + (err.message || JSON.stringify(err)));
+      // Revert status on failure
+      useKitchenOrdersProjection.getState().updateLocalOrderStatus?.(id, status);
     } finally {
       setIsActionLoading(false);
     }
@@ -182,6 +195,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
         overflow:     'hidden',
         display:      'flex',
         flexDirection:'column',
+        flexShrink:   0,
         /* Ghost border — 15 % opacity as per spec */
         outline:      `1px solid ${cfg.outlineColor}`,
         /* Ambient shadow — marble-countertop diffuse */

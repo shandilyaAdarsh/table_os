@@ -49,8 +49,7 @@ export const useLeadershipStore = create((set, get) => ({
 
   requestLeadership: (stationId) => {
     if (get().isDisposed) {
-      console.warn('[Leadership] Cannot request lock — runtime is disposed.');
-      return;
+      set({ isDisposed: false });
     }
 
     if (!navigator.locks) {

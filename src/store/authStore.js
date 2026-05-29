@@ -65,6 +65,28 @@ export const useAuthStore = create(
 
       // ── Login (email + password) ─────────────────────────
       login: async ({ email, password }) => {
+        const normalizedEmail = email?.toLowerCase().trim()
+        const normalizedPassword = password?.trim()
+
+        if (!normalizedEmail || !normalizedPassword) {
+          set({ error: 'Email and password are required.', isLoading: false })
+          throw new Error('Email and password are required.')
+        }
+
+        // DEV Bypass for frontend testing
+        if (typeof import.meta.env !== 'undefined' && import.meta.env.DEV) {
+          if (normalizedEmail === 'admin@test.com' && normalizedPassword === 'admin') {
+            const mockUser = { id: 'dev-user', role: 'kitchen', name: 'Dev Admin' };
+            set({
+              user: mockUser,
+              tenantId: 'dev-tenant',
+              isLoading: false,
+              error: null
+            });
+            return { success: true, role: 'kitchen' };
+          }
+        }
+
         // MANDATORY: signOut() before new login to clear stale sessions
         try {
           await supabase.auth.signOut()
@@ -73,13 +95,6 @@ export const useAuthStore = create(
         }
 
         set({ user: null, tenantId: null, tenant: null, onboarding: null, flags: null, isLoading: true, error: null })
-
-        const normalizedEmail = email?.toLowerCase().trim()
-        const normalizedPassword = password?.trim()
-        if (!normalizedEmail || !normalizedPassword) {
-          set({ error: 'Email and password are required.', isLoading: false })
-          throw new Error('Email and password are required.')
-        }
 
         try {
           const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -162,6 +177,13 @@ export const useAuthStore = create(
 
       // ── Logout ───────────────────────────────────────────────
       logout: async () => {
+        // Prevent infinite loop if already logged out
+        if (!get().user && !get().tenantId) {
+          if (typeof window !== 'undefined') {
+            window.localStorage.removeItem('tableos-admin-auth')
+          }
+          return;
+        }
         try {
           await supabase.auth.signOut()
         } catch { }

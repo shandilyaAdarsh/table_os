@@ -7,6 +7,7 @@ import { useMutationCoordinator } from '../../../store/mutationCoordinator.js';
 import { useKdsIdentityStore } from '../../../store/kdsIdentityStore.js';
 import { useLeadershipStore } from '../../../store/leadershipStore.js';
 import { clearLeadershipState, clearAllRuntimeState } from '../../../lib/idbStorage.js';
+import { supabase } from '../../../lib/supabase.js';
 import OrderCard from '../components/OrderCard.jsx';
 import { Loader2 } from 'lucide-react';
 
@@ -55,44 +56,73 @@ const KDSBoard = () => {
 
   /* ── Dev fallback (inline) ─────────────────────── */
   const effectiveTenantId = tenantId || import.meta.env.VITE_TENANT_ID;
+  const effectiveBranchId = branchId || 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   const effectiveUser     = user || (effectiveTenantId ? { name: 'KDS Terminal', role: 'kitchen' } : null);
 
-  /* ── Initial fetch + Realtime subscription ──────── */
+  // Handle exclusive tab leadership lock lifecycle
+  useEffect(() => {
+    requestLeadership(stationId);
+    return () => {
+      disposeLeadership();
+    };
+  }, [stationId, requestLeadership, disposeLeadership]);
+
   /* ── Initial fetch ──────── */
   useEffect(() => {
-    if (!effectiveTenantId || !branchId) return;
-    
-    // Attempt lock acquisition on mount or station change
-    requestLeadership(stationId);
+    if (!effectiveTenantId || !effectiveBranchId) return;
 
     if (activeTab === 'Live Orders') {
       if (liveOrders.length === 0) setRealtimeStatus('connecting');
       Promise.all([
-        rebuildOrders(branchId, stationId),
-        rebuildMetrics(branchId, stationId)
+        rebuildOrders(effectiveBranchId, stationId),
+        rebuildMetrics(effectiveBranchId, stationId)
       ]).then(() => setRealtimeStatus('connected'));
     } else {
       if (historyOrders.length === 0) setRealtimeStatus('connecting');
       fetchHistory().then(() => setRealtimeStatus('connected'));
     }
+  }, [tenantId, effectiveBranchId, stationId, activeTab, rebuildOrders, rebuildMetrics, fetchHistory]);
 
-    // No probe needed, ProjectionCoordinator + WebSocketRuntime handles lifecycle
-    
-    // Centralized disposal delegation on unmount
-    return () => {
-      disposeLeadership();
+  /* ── Direct Supabase Realtime Subscription fallback ── */
+  useEffect(() => {
+    if (!effectiveTenantId || !effectiveBranchId) return;
+
+    let debounceTimeout;
+    const triggerRebuild = () => {
+      clearTimeout(debounceTimeout);
+      debounceTimeout = setTimeout(() => {
+        rebuildOrders(effectiveBranchId, stationId);
+      }, 300);
     };
-  }, [tenantId, branchId, stationId, activeTab, requestLeadership, disposeLeadership, rebuildOrders, rebuildMetrics, fetchHistory]);
 
-  /* ── Realtime subscription is now handled globally by WebSocketRuntime ── */
+    const channel = supabase
+      .channel('kds_board_db_realtime')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'orders',
+        filter: `tenant_id=eq.${effectiveTenantId}`
+      }, triggerRebuild)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'order_items'
+      }, triggerRebuild)
+      .subscribe();
+
+    return () => {
+      clearTimeout(debounceTimeout);
+      supabase.removeChannel(channel);
+    };
+  }, [effectiveTenantId, effectiveBranchId, stationId, rebuildOrders]);
 
   /* ── Page Visibility API: re-sync when tab regains focus ── */
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === 'visible' && effectiveTenantId && branchId) {
+      if (document.visibilityState === 'visible' && effectiveTenantId && effectiveBranchId) {
         if (activeTab === 'Live Orders') {
-          rebuildOrders(branchId, stationId);
-          rebuildMetrics(branchId, stationId);
+          rebuildOrders(effectiveBranchId, stationId);
+          rebuildMetrics(effectiveBranchId, stationId);
         } else {
           fetchHistory();
         }
@@ -100,7 +130,7 @@ const KDSBoard = () => {
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [tenantId, activeTab]);
+  }, [tenantId, effectiveBranchId, activeTab]);
 
   /* ── Live clock & Shift Timer ───────────────────── */
   const [shiftElapsed, setShiftElapsed] = useState(0);
@@ -298,12 +328,22 @@ const KDSBoard = () => {
               <span style={{ fontSize: '16px', fontWeight: 900, lineHeight: 1.1 }}>{metrics.totalOrdersToday || 0}</span>
             </div>
           </div>
-          <div style={{
+          <div
+            onDoubleClick={() => {
+              if (window.confirm('Reset shift timer?')) {
+                const storageKey = `kds_shift_start_${stationId || 'default'}`;
+                localStorage.setItem(storageKey, Date.now().toString());
+                setShiftElapsed(0);
+              }
+            }}
+            title="Double-click to reset shift timer"
+            style={{
             display: 'flex', alignItems: 'center', gap: '10px',
             padding: '6px 14px',
             background: '#F8F9FA', color: '#1A1C1E',
             borderRadius: '12px',
             border: '1px solid #E6E8EA',
+            cursor: 'pointer',
           }}>
             <span className="material-symbols-outlined" style={{ fontSize: '18px', color: '#6C757D' }}>timer</span>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -355,8 +395,8 @@ const KDSBoard = () => {
                 setRealtimeStatus('connecting');
                 if (activeTab === 'Live Orders') {
                   Promise.all([
-                    rebuildOrders(branchId, stationId),
-                    rebuildMetrics(branchId, stationId)
+                    rebuildOrders(effectiveBranchId, stationId),
+                    rebuildMetrics(effectiveBranchId, stationId)
                   ]).then(() => setRealtimeStatus('connected'));
                 } else {
                   fetchHistory(historyFilter).then(() => setRealtimeStatus('connected'));
@@ -365,6 +405,19 @@ const KDSBoard = () => {
               style={{ fontSize: '22px', color: '#6C757D', cursor: 'pointer' }}
             >
               refresh
+            </span>
+
+            {/* Lock session */}
+            <span
+              className="material-symbols-outlined"
+              title="Lock terminal"
+              onClick={() => {
+                sessionStorage.removeItem('kds_authenticated');
+                navigate('/kds/login');
+              }}
+              style={{ fontSize: '22px', color: '#6C757D', cursor: 'pointer' }}
+            >
+              lock
             </span>
 
           </div>
