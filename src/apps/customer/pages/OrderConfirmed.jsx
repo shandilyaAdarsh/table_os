@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import confetti from 'canvas-confetti'
-import { fetchWithRuntime } from '../../../lib/apiClient'
+import { supabase } from '../../../lib/supabase'
 import { motion } from 'framer-motion'
 
 export default function OrderConfirmed() {
@@ -23,9 +23,16 @@ export default function OrderConfirmed() {
 
     const fetchOrder = async () => {
       try {
-        const res = await fetchWithRuntime(`/api/v1/customer/orders/${resolvedOrderId}`)
-        if (!res.ok) throw new Error('Not found')
-        const { data } = await res.json()
+        const { data, error: fetchError } = await supabase
+          .from('orders')
+          .select(`
+            *,
+            order_items (*)
+          `)
+          .eq('id', resolvedOrderId)
+          .single()
+
+        if (fetchError) throw fetchError
         if (!data) throw new Error('Not found')
         
         setOrder(data)
@@ -165,7 +172,7 @@ export default function OrderConfirmed() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                   <span style={{ fontSize: 13, color: '#64748B', fontWeight: 500 }}>GST (5%)</span>
-                  <span style={{ fontSize: 13, color: '#0F172A', fontWeight: 700 }}>₹{gst.toFixed(2)}</span>
+                  <span style={{ fontSize: 13, color: '#0F172A', fontWeight: 700 }}>₹{tax.toFixed(2)}</span>
                 </div>
                 <div style={{
                   display: 'flex', justifyContent: 'space-between',

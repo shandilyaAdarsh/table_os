@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { fetchWithRuntime, submitMutation } from '../../../lib/apiClient'
+import { fetchWithRuntime } from '../../../lib/apiClient'
 import { runtime } from '../../../runtime'
 import { SupabaseTransportAdapter } from '../../../runtime/transport/SupabaseTransportAdapter'
 import { supabase } from '../../../lib/supabase'
@@ -39,13 +39,19 @@ export default function OrderTracking() {
 
     const fetchOrder = async () => {
       try {
-        const res = await fetchWithRuntime(`/api/v1/customer/orders/${resolvedOrderId}`)
-        if (res.ok) {
-          const { data } = await res.json()
-          if (data) {
-            setOrder(data)
-            setOrderStatus(data.status || 'pending')
-          }
+        const { data, error: fetchError } = await supabase
+          .from('orders')
+          .select(`
+            *,
+            order_items (*)
+          `)
+          .eq('id', resolvedOrderId)
+          .single()
+
+        if (fetchError) throw fetchError
+        if (data) {
+          setOrder(data)
+          setOrderStatus(data.status || 'pending')
         }
       } catch (err) {
         console.error('Error fetching tracking data:', err)
@@ -143,7 +149,7 @@ export default function OrderTracking() {
   const etaSeconds = Math.max(0, (baseMins * 60) - localElapsed)
   const etaMinutes = Math.ceil(etaSeconds / 60)
 
-  // Bill totals
+  // Live total
   const subtotal = orderItemsList.reduce((sum, item) =>
     sum + ((item.unit_price || 0) * (item.qty || 0)), 0)
   const tax = order?.tax_amount || 0
@@ -195,21 +201,21 @@ export default function OrderTracking() {
         description: `Order #${String(resolvedOrderId).slice(-6).toUpperCase()}`,
         image: 'https://i.imgur.com/n5tjHFD.png',
         handler: async (response) => {
-          const paymentId = response.razorpay_payment_id
+          try {
+            const { error } = await supabase
+              .from('orders')
+              .update({ status: 'paid' })
+              .eq('id', resolvedOrderId)
 
-          await submitMutation('/api/v1/runtime/mutations', {
-            mutation_id: 'process_payment',
-            idempotency_key: crypto.randomUUID(),
-            payload: {
-              order_id: resolvedOrderId,
-              table_num: order?.table_num || getTableNum(),
-              tenant_id: '11111111-1111-1111-1111-111111111111',
-              payment_id: paymentId
-            }
-          })
+            if (error) throw error
 
-          setPaymentDone(true)
-          setPaymentLoading(false)
+            setPaymentDone(true)
+          } catch (err) {
+            console.error('Payment callback error:', err)
+            alert('Could not update payment status. Please contact staff.')
+          } finally {
+            setPaymentLoading(false)
+          }
         },
         prefill: {
           name: 'Guest',
@@ -480,7 +486,7 @@ export default function OrderTracking() {
 
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
               <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500 }}>GST (5%)</span>
-              <span style={{ fontSize: '13px', color: '#0F172A', fontWeight: 700 }}>₹{gst.toFixed(2)}</span>
+              <span style={{ fontSize: '13px', color: '#0F172A', fontWeight: 700 }}>₹{tax.toFixed(2)}</span>
             </div>
 
             <div style={{

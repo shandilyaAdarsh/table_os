@@ -7,9 +7,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCartStore, useSessionStore } from '../../../store/index'
-import { submitMutation } from '../../../lib/apiClient'
 import { AnimatePresence, motion } from 'framer-motion'
 import { getTableNum } from '../utils/tableNum'
+import { supabase } from '../../../lib/supabase'
 
 // Hardcoded — env vars are NOT reliably set on Vercel for this demo build
 const TENANT_ID = import.meta.env.VITE_TENANT_ID || '11111111-1111-1111-1111-111111111111'
@@ -34,6 +34,9 @@ export default function CartDrawer({ open, onClose }) {
 
   const subtotal   = cartItems.reduce((a, i) => a + ((i.unit_price || i.price || 0) * i.qty), 0)
   const totalQty   = cartItems.reduce((a, i) => a + i.qty, 0)
+  const cgst       = subtotal * 0.025
+  const sgst       = subtotal * 0.025
+  const grandTotal = subtotal + cgst + sgst
 
   // Lock body scroll while open
   useEffect(() => {
@@ -80,43 +83,57 @@ export default function CartDrawer({ open, onClose }) {
       // Read guest session saved by CheckIn screen
       const guestSession = JSON.parse(localStorage.getItem('customerSession') || '{}')
 
-      const response = await submitMutation('/api/v1/runtime/mutations', {
-        mutation_id: 'create_order',
-        idempotency_key: crypto.randomUUID(),
-        payload: {
+      // 1. Insert into old orders table
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .insert({
           tenant_id: TENANT_ID,
           table_num: resolvedTableNum,
-          note: note || `Order by ${guestSession.name || 'Guest'} · Party of ${guestSession.guestCount || 1}`,
+          guest_name: guestSession.name || 'Guest',
+          guest_count: guestSession.guestCount || 1,
+          total_amount: Math.round(grandTotal),
+          status: 'pending',
+          is_new: true,
+          note: note || ''
         })
         .select()
         .single()
 
-      if (error) {
-        console.error('[CartDrawer] order insert error:', error)
-        throw error
-      }
+      if (orderError) throw orderError
 
-      const { error: itemsError } = await supabase.from('order_items').insert(
-        cartItems.map(item => ({
-          order_id:     order.id,
-          name:         item.name,
-          qty:          item.qty,
-          unit_price:   item.unit_price || item.price || 0,
-        }))
-      )
+      const newOrderId = orderData.id
 
-      if (itemsError) {
-        console.error('[CartDrawer] order_items insert error:', itemsError)
-        throw itemsError
-      }
+      // 2. Insert into old order_items table
+      const itemsToInsert = cartItems.map(item => {
+        // If the frontend fell back to mock data, item.id will be 'm1', etc.
+        // This causes a UUID cast error in Postgres. If not a UUID, send null.
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id)
+        
+        return {
+          order_id: newOrderId,
+          menu_item_id: isUuid ? item.id : null,
+          name: item.name,
+          qty: item.qty,
+          unit_price: item.unit_price || item.price || 0,
+          modifiers: item.modifiers || [],
+          status: 'pending',
+          is_rejected: false,
+          done: false
+        }
+      })
 
-      const newOrderId = order.id
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(itemsToInsert)
+
+      if (itemsError) throw itemsError
+
       clear()
       onClose()
       navigate(`/menu/confirmed/${newOrderId}`, { state: { orderId: newOrderId } })
     } catch (err) {
-      console.error('[CartDrawer] placeOrder failed:', err.message)
-      alert('Could not place order. Please try again.')
+      console.error('[CartDrawer] placeOrder failed:', err)
+      alert('Could not place order. Please try again. ' + (err.message || ''))
     } finally {
       setIsPlacing(false)
     }

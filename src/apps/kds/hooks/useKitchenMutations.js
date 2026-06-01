@@ -2,12 +2,20 @@ import { supabase } from '../../../lib/supabase.js';
 
 export function useKitchenMutations() {
   return {
-    markPreparing: async (order) => {
+    markPreparing: async (order, selectedItems = []) => {
       const { error } = await supabase
         .from('orders')
         .update({ status: 'cooking' })
         .eq('id', order.id);
       if (error) throw error;
+
+      if (selectedItems.length > 0) {
+        const { error: itemsError } = await supabase
+          .from('order_items')
+          .update({ done: true, status: 'accepted' })
+          .in('id', selectedItems);
+        if (itemsError) throw itemsError;
+      }
     },
     
     markReady: async (order) => {

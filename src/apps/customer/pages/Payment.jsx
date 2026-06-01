@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { fetchWithRuntime, submitMutation } from '../../../lib/apiClient'
+import { fetchWithRuntime } from '../../../lib/apiClient'
+import { supabase } from '../../../lib/supabase'
 
 export default function PaymentScreen() {
   const { id } = useParams()
@@ -16,9 +17,16 @@ export default function PaymentScreen() {
   useEffect(() => {
     const fetchOrder = async () => {
       try {
-        const res = await fetchWithRuntime(`/api/v1/customer/orders/${id}`)
-        if (!res.ok) throw new Error('Order not found')
-        const { data } = await res.json()
+        const { data, error } = await supabase
+          .from('orders')
+          .select(`
+            *,
+            order_items (*)
+          `)
+          .eq('id', id)
+          .single()
+
+        if (error) throw error
         if (!data) throw new Error('Order not found')
         setOrder(data)
       } catch (err) {
@@ -36,16 +44,12 @@ export default function PaymentScreen() {
     
     setTimeout(async () => {
       try {
-        await submitMutation('/api/v1/runtime/mutations', {
-          mutation_id: 'process_payment',
-          idempotency_key: crypto.randomUUID(),
-          payload: {
-            order_id: id,
-            table_num: order?.table_num || 'T03',
-            tenant_id: '11111111-1111-1111-1111-111111111111',
-            payment_id: `cash_${Date.now()}`
-          }
-        })
+        const { error } = await supabase
+          .from('orders')
+          .update({ status: 'paid' })
+          .eq('id', id)
+
+        if (error) throw error
         
         setSuccess(true)
         setTimeout(() => {

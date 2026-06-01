@@ -27,34 +27,59 @@ export default function Cart() {
       const tableNum = getTableNum()
       const guestSession = JSON.parse(localStorage.getItem('customerSession') || '{}')
 
-      // Use RPC bridge to handle snapshot / Phase 5 order insertion cleanly
-      const subtotal = cartItems.reduce((a, i) => a + (i.unit_price || i.price || 0) * i.qty, 0)
+      // Bypassing the RPC and inserting directly into the older schema
+      const subtotal = cartItems.reduce((a, i) => a + ((i.unit_price || i.price || 0) * i.qty), 0)
 
-      const payload = {
-        tenant_id: TENANT_ID,
-        table_num: tableNum,
-        guest_name: guestSession.name || 'Guest',
-        party_size: guestSession.guestCount || 1,
-        total_amount: Math.round(subtotal * 100), // minor units (paise)
-        items: cartItems.map(item => ({
-          id: item.id,
+      // 1. Insert into old orders table
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          tenant_id: TENANT_ID,
+          table_num: tableNum,
+          guest_name: guestSession.name || 'Guest',
+          guest_count: guestSession.guestCount || 1,
+          total_amount: subtotal,
+          status: 'pending',
+          is_new: true,
+          note: ''
+        })
+        .select()
+        .single()
+
+      if (orderError) throw orderError
+
+      const orderId = orderData.id
+
+      // 2. Insert into old order_items table
+      const itemsToInsert = cartItems.map(item => {
+        // If the frontend fell back to mock data, item.id will be 'm1', etc.
+        // This causes a UUID cast error in Postgres. If not a UUID, send null.
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id)
+        
+        return {
+          order_id: orderId,
+          menu_item_id: isUuid ? item.id : null,
           name: item.name,
           qty: item.qty,
-          unit_price: Math.round((item.unit_price || item.price || 0) * 100), // minor units
-          modifiers: item.modifiers || []
-        }))
-      }
+          unit_price: item.unit_price || item.price || 0,
+          modifiers: item.modifiers || [],
+          status: 'pending',
+          is_rejected: false,
+          done: false
+        }
+      })
 
-      const { data, error } = await supabase.rpc('place_direct_order', { payload })
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(itemsToInsert)
 
-      if (error) throw error
+      if (itemsError) throw itemsError
 
-      const orderId = data?.order_id || data
       clear()
       navigate(`/menu/confirmed/${orderId}`, { state: { orderId } })
     } catch (err) {
-      console.error('[Cart] placeOrder failed:', err.message)
-      alert('Could not place order. Please try again.')
+      console.error('[Cart] placeOrder failed:', err)
+      alert('Could not place order. Please try again. ' + (err.message || ''))
     } finally {
       setIsPlacing(false)
     }

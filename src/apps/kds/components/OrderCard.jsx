@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useKitchenMutations } from '../hooks/useKitchenMutations.js';
-import { submitMutation } from '../../../lib/apiClient.js';
 import { useRuntimeStore } from '../../../store/useRuntimeStore.js';
 import { useKdsIdentityStore } from '../../../store/kdsIdentityStore.js';
 import { useKitchenOrdersProjection } from '../../../store/projections/kitchenOrdersProjection.js';
+import { supabase } from '../../../lib/supabase.js';
 
 // Re-export formatTime for any parent that needs it
 export const formatTime = (s) =>
@@ -165,17 +165,11 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
       onConfirm: async () => {
         setIsActionLoading(true);
         try {
-          const { runtimeSessionId, kitchenDeviceId } = useKdsIdentityStore.getState();
-          await submitMutation('/api/v1/mutations', {
-            mutation_id: `KITCHEN_REJECT_ORDER_${id}_${Date.now()}`,
-            idempotency_key: `KITCHEN_REJECT_ORDER_${id}`,
-            payload: {
-              type: 'KITCHEN_REJECT_ORDER',
-              orderId: id,
-              runtimeSessionId,
-              kitchenDeviceId
-            }
-          });
+          const { error } = await supabase
+            .from('orders')
+            .update({ status: 'cancelled' })
+            .eq('id', id);
+          if (error) throw error;
         } catch (err) {
           console.error('[KDS] Cancel error:', err);
         } finally {

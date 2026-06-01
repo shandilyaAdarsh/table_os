@@ -58,7 +58,8 @@ export const useOrderStore = create((set, get) => ({
   setHistoryOrders: (orders) => set({ historyOrders: orders, isLoading: false }),
 
   fetchHistory: async (filter = 'day') => {
-    const tenantId = '11111111-1111-1111-1111-111111111111';
+    const { tenantId } = useAuthStore.getState();
+    if (!tenantId) return;
     set({ isLoading: true });
 
     let query = supabase

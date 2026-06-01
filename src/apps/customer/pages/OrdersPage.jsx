@@ -79,6 +79,13 @@ export default function OrdersPage() {
     // Here we set an interval as a fallback atomic rebuild
     const fallbackPoll = setInterval(fetchOrders, 10000)
 
+    const channel = supabase
+      .channel('public:orders')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
+        const isMyOrder = session.phone
+          ? payload.new.guest_phone === session.phone
+          : payload.new.guest_name === session.name;
+
         if (!isMyOrder) return
 
         if (payload.eventType === 'INSERT') {
@@ -91,6 +98,7 @@ export default function OrdersPage() {
       .subscribe()
 
     return () => {
+      clearInterval(fallbackPoll)
       try {
         supabase.removeChannel(channel)
       } catch (e) {}

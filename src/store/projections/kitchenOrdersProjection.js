@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { fetchWithRuntime } from '../../lib/apiClient';
 import { supabase } from '../../lib/supabase';
 
+let currentFetchId = 0;
+
 export const useKitchenOrdersProjection = create((set, get) => ({
   orders: [],
   isRebuilding: false,
@@ -13,7 +15,7 @@ export const useKitchenOrdersProjection = create((set, get) => ({
   },
 
   rebuild: async (branchId, stationId = null) => {
-    if (get().isRebuilding) return;
+    const fetchId = ++currentFetchId;
     set({ isRebuilding: true, error: null });
 
     try {
@@ -29,6 +31,7 @@ export const useKitchenOrdersProjection = create((set, get) => ({
         .order('created_at', { ascending: true });
 
       if (fetchError) throw fetchError;
+      if (fetchId !== currentFetchId) return; // a newer fetch is happening
 
       // Map Supabase table schema to KDSBoard model format
       const mappedOrders = (data || []).map(order => ({
@@ -79,9 +82,9 @@ export const useKitchenOrdersProjection = create((set, get) => ({
         set({ orders: sortedOrders });
     } catch (e) {
       console.error('[KitchenOrdersProjection] Rebuild failed', e);
-      set({ error: e.message });
+      if (fetchId === currentFetchId) set({ error: e.message });
     } finally {
-      set({ isRebuilding: false });
+      if (fetchId === currentFetchId) set({ isRebuilding: false });
     }
   },
 
