@@ -1,5 +1,8 @@
 {
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
-  ]
+  ],
+  "env": {
+    "VERCEL_GIT_FETCH_SUBMODULES": "1"
+  }
 }
