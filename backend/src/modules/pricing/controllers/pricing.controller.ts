@@ -76,3 +76,18 @@ export async function resolvePrice(req: Request<{ tenantId: string }>, res: Resp
     next(error);
   }
 }
+
+export async function resolvePricesBatch(req: Request<{ tenantId: string }>, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const tenantId = String(req.params.tenantId);
+    const entityIds = req.body.entity_ids || [];
+    const currencyCode = req.body.currency_code || 'USD';
+    const asOf = req.body.as_of;
+
+    const resolutions = await pricingService.resolvePricesBatch(tenantId, entityIds, currencyCode, asOf);
+    
+    res.json(formatSuccess(resolutions));
+  } catch (error) {
+    next(error);
+  }
+}

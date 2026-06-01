@@ -1,6 +1,7 @@
 // ============================================================
 // src/modules/tables/repositories/table-section.repository.ts
-// DB access for table sections. No business logic.
+// DB access for table sections. Uses supabaseAdmin (service_role).
+// If the table is missing in the schema, a descriptive error is thrown.
 // ============================================================
 
 import { supabaseAdmin } from '../../../config/supabase';
@@ -20,7 +21,7 @@ export async function listSections(tenantId: string, branchId?: string): Promise
 
   const { data, error } = await q;
   if (error) {
-    logger.error({ err: error, tenantId }, 'listSections failed');
+    logger.error({ err: error, tenantId, branchId }, 'listSections failed');
     throw new Error(`[SectionRepo] listSections: ${error.message}`);
   }
   return data ?? [];
@@ -35,14 +36,16 @@ export async function findSectionById(tenantId: string, sectionId: string): Prom
     .is('deleted_at', null)
     .maybeSingle();
 
-  if (error) throw new Error(`[SectionRepo] findSectionById: ${error.message}`);
+  if (error) {
+    throw new Error(`[SectionRepo] findSectionById: ${error.message}`);
+  }
   return data;
 }
 
 export async function createSection(
   tenantId: string,
   dto: CreateSectionInput,
-  _createdBy: string,
+  _actorId: string,
 ): Promise<TableSection> {
   const { data, error } = await supabaseAdmin
     .from('table_sections')
@@ -66,7 +69,7 @@ export async function updateSection(
   tenantId: string,
   sectionId: string,
   dto: UpdateSectionInput,
-  _updatedBy: string,
+  _actorId: string,
 ): Promise<TableSection | null> {
   const { version_num, ...updateFields } = dto;
   const { data, error } = await supabaseAdmin
@@ -79,7 +82,9 @@ export async function updateSection(
     .select()
     .maybeSingle();
 
-  if (error) throw new Error(`[SectionRepo] updateSection: ${error.message}`);
+  if (error) {
+    throw new Error(`[SectionRepo] updateSection: ${error.message}`);
+  }
   return data;
 }
 
@@ -91,5 +96,7 @@ export async function softDeleteSection(tenantId: string, sectionId: string): Pr
     .eq('id', sectionId)
     .is('deleted_at', null);
 
-  if (error) throw new Error(`[SectionRepo] softDeleteSection: ${error.message}`);
+  if (error) {
+    throw new Error(`[SectionRepo] softDeleteSection: ${error.message}`);
+  }
 }

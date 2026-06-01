@@ -16,6 +16,12 @@ router.get(
   pricingController.resolvePrice
 );
 
+router.post(
+  '/resolved',
+  requirePermissions('ALL', 'VIEW_MENU'),
+  pricingController.resolvePricesBatch
+);
+
 // List prices for an item
 router.get(
   '/',

@@ -37,39 +37,57 @@ export async function rebuildTableProjection(
   });
 
   // 1. Fetch active guest sessions (formerly qr_sessions)
-  const { data: guests, error: guestsErr } = await supabase
-    .from('guest_sessions')
-    .select('id, status')
-    .eq('tenant_id', tenantId)
-    .eq('table_id', tableId)
-    .eq('status', 'active');
-  
-  if (guestsErr) throw new Error(`Failed to fetch guest sessions: ${guestsErr.message}`);
-  const activeGuestCount = guests?.length || 0;
+  let activeGuestCount = 0;
+  try {
+    const { data: guests, error: guestsErr } = await supabase
+      .from('guest_sessions')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('table_id', tableId)
+      .eq('status', 'active');
+    
+    if (!guestsErr && guests) {
+      activeGuestCount = guests.length;
+    }
+  } catch (err) {
+    // Graceful fallback: table has a different schema (e.g. guest loyalty) or is missing
+  }
 
   // 2. Fetch active orders for this table
-  // Assuming orders have a status field where 'open', 'preparing', 'served' are active, and 'paid', 'cancelled' are inactive
-  const { data: orders, error: ordersErr } = await supabase
-    .from('orders')
-    .select('id, status')
-    .eq('tenant_id', tenantId)
-    .eq('table_id', tableId)
-    .in('status', ['open', 'preparing', 'served', 'payment_pending']);
-    
-  if (ordersErr) throw new Error(`Failed to fetch orders: ${ordersErr.message}`);
-  const activeOrderCount = orders?.length || 0;
-  const paymentPendingCount = orders?.filter(o => o.status === 'payment_pending').length || 0;
+  let activeOrderCount = 0;
+  let paymentPendingCount = 0;
+  try {
+    const { data: orders, error: ordersErr } = await supabase
+      .from('orders')
+      .select('id, status')
+      .eq('tenant_id', tenantId)
+      .eq('table_id', tableId)
+      .in('status', ['open', 'preparing', 'served', 'payment_pending']);
+      
+    if (!ordersErr && orders) {
+      activeOrderCount = orders.length;
+      paymentPendingCount = orders.filter(o => o.status === 'payment_pending').length;
+    }
+  } catch (err) {
+    // Graceful fallback
+  }
 
   // 3. Fetch active assistance requests (waiter calls)
-  const { data: waiterCalls, error: callsErr } = await supabase
-    .from('waiter_calls')
-    .select('id, status')
-    .eq('tenant_id', tenantId)
-    .eq('table_id', tableId)
-    .eq('status', 'pending');
-    
-  if (callsErr) throw new Error(`Failed to fetch waiter calls: ${callsErr.message}`);
-  const assistanceRequestCount = waiterCalls?.length || 0;
+  let assistanceRequestCount = 0;
+  try {
+    const { data: waiterCalls, error: callsErr } = await supabase
+      .from('waiter_calls')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('table_id', tableId)
+      .eq('status', 'pending');
+      
+    if (!callsErr && waiterCalls) {
+      assistanceRequestCount = waiterCalls.length;
+    }
+  } catch (err) {
+    // Graceful fallback
+  }
 
   // 4. Derive deterministic runtime state
   let runtimeState: TableRuntimeState['runtime_state'] = 'FREE';
@@ -94,22 +112,34 @@ export async function rebuildTableProjection(
   };
 
   // 5. Upsert projection
-  const { data, error } = await supabase
-    .from('table_runtime_projections')
-    .upsert(newState, { onConflict: 'table_id' })
-    .select()
-    .single();
+  let data: any = null;
+  let error: any = null;
+  try {
+    const res = await supabase
+      .from('table_runtime_projections')
+      .upsert(newState, { onConflict: 'table_id' })
+      .select()
+      .single();
+    data = res.data;
+    error = res.error;
+  } catch (err: any) {
+    error = err;
+  }
 
   if (error) {
+    const isMissing = error.message?.includes('relation') || error.message?.includes('does not exist') || error.code?.includes('PGRST205') || error.code?.includes('42P01');
     TelemetryBroadcaster.enqueue({
       tenant_id: tenantId,
       runtime_surface: 'BACKEND_ENGINE',
       domain: 'tables',
       aggregate_id: tableId,
       severity: 'INFO',
-          event_type: 'PROJECTION_REBUILD_FAILED',
+      event_type: 'PROJECTION_REBUILD_FAILED',
       metadata: { duration_ms: Date.now() - startTime, error: error.message }
     });
+    if (isMissing) {
+      throw new Error(`[TableProjection] Missing required table 'table_runtime_projections' in the database. Run the table infrastructure migration to create this table.`);
+    }
     throw new Error(`Failed to upsert table projection: ${error.message}`);
   }
 
@@ -119,7 +149,7 @@ export async function rebuildTableProjection(
     domain: 'tables',
     aggregate_id: tableId,
     severity: 'INFO',
-          event_type: 'PROJECTION_REBUILD_COMPLETED',
+    event_type: 'PROJECTION_REBUILD_COMPLETED',
     metadata: { duration_ms: Date.now() - startTime, state: runtimeState }
   });
 

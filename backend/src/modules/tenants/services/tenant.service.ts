@@ -25,3 +25,15 @@ export async function addBranchToTenant(req: CreateBranchRequest): Promise<Branc
   await getTenantById(req.tenant_id);
   return repo.createBranch(req);
 }
+
+export async function updateBranch(tenantId: string, branchId: string, updates: Partial<Branch>): Promise<Branch> {
+  // Ensure tenant exists
+  await getTenantById(tenantId);
+  return repo.updateBranch(tenantId, branchId, updates);
+}
+
+export async function deleteBranch(tenantId: string, branchId: string): Promise<void> {
+  // Ensure tenant exists
+  await getTenantById(tenantId);
+  return repo.deleteBranch(tenantId, branchId);
+}

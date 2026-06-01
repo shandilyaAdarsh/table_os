@@ -36,6 +36,7 @@ declare global {
 
 import { RuntimeAuthService } from '../modules/auth/services/runtime-auth.service';
 import { validateAccessToken } from '../modules/auth/services/auth.service';
+import { resolvePermissions } from '../utils/permission-checker';
 
 /**
  * Core authentication middleware.
@@ -96,7 +97,7 @@ export async function authenticate(
         tenantId:             validation.tenant_id!,
         tenant_id:            validation.tenant_id!,
         branchIds:            validation.branch_ids ?? [],
-        permissions:          new Set<Permission>(), // Permissions are derived via role hierarchies
+        permissions:          await resolvePermissions(validation.user_id!, validation.tenant_id ?? null),
         device_session_id:    '', // Admin app doesn't rely on strict single device sessions here
         full_name:            validation.full_name ?? 'Admin',
         must_change_password: validation.must_change_password ?? false,

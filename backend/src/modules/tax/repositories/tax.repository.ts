@@ -64,6 +64,25 @@ export class TaxRepository {
     return data as TaxProfile;
   }
 
+  async getProfiles(tenantId: string, includeDeleted: boolean = false): Promise<TaxProfile[]> {
+    let query = this.supabase
+      .from('tax_profiles')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .order('priority', { ascending: true });
+
+    if (!includeDeleted) {
+      query = query.is('deleted_at', null);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw new AppError('Failed to fetch tax profiles', 500, ErrorCode.INTERNAL_SERVER_ERROR, true, { error });
+    }
+    return data as TaxProfile[];
+  }
+
   async updateProfile(
     tenantId: string,
     id: string,

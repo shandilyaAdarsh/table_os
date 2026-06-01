@@ -114,17 +114,21 @@ export async function listOrdersByBranch(
   branchId: string,
   filters?: { status?: OrderStatus }
 ): Promise<Order[]> {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
   let query = supabaseAdmin
     .from('orders')
     .select('*')
     .eq('tenant_id', tenantId)
-    .eq('branch_id', branchId);
+    .eq('branch_id', branchId)
+    .gte('created_at', sevenDaysAgo.toISOString());
 
   if (filters?.status) {
     query = query.eq('status', filters.status);
   }
 
-  const { data, error } = await query.order('created_at', { ascending: false });
+  const { data, error } = await query.order('created_at', { ascending: false }).limit(200);
 
   if (error) {
     throw new AppError(`Failed to list branch orders: ${error.message}`, 500, ErrorCode.INTERNAL_SERVER_ERROR);

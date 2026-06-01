@@ -16,10 +16,11 @@ export function useProjection({
 
   // 1. Initialize
   useEffect(() => {
-    if (!projection) {
+    if (!store.projections[projectionId]) {
       store.initProjection(projectionId);
     }
-  }, [projectionId, projection, store]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectionId, store.initProjection]);
 
   // 2. Transport Subscription
   useEffect(() => {

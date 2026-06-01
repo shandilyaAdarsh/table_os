@@ -39,11 +39,11 @@ export async function updateFloor(
   tenantId: string,
   floorId: string,
   dto: UpdateFloorInput,
-  actorId: string,
+  _actorId: string,
 ): Promise<TableFloor> {
   const existing = await floorRepo.findFloorById(tenantId, floorId);
   if (!existing) throw new AppError('Floor not found', 404, 'NOT_FOUND');
-  const updated = await floorRepo.updateFloor(tenantId, floorId, dto, actorId);
+  const updated = await floorRepo.updateFloor(tenantId, floorId, dto);
   if (!updated) throw new AppError('Floor was modified by another request. Reload and retry.', 409, 'CONFLICT');
   return updated;
 }

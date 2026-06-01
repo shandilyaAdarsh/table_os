@@ -90,10 +90,21 @@ router.get('/projections/health', authenticate, async (_req: Request, res: Respo
 router.get('/projections/checksum', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const tenantId = req.context.tenantId!;
-    const { data } = await supabaseAdmin
-      .from('table_runtime_projections')
-      .select('table_id, runtime_state')
-      .eq('tenant_id', tenantId);
+    let data: any = null;
+    try {
+      const res = await supabaseAdmin
+        .from('table_runtime_projections')
+        .select('table_id, runtime_state')
+        .eq('tenant_id', tenantId);
+      if (res.error) throw res.error;
+      data = res.data;
+    } catch (err: any) {
+      const isMissing = err.message?.includes('relation') || err.message?.includes('does not exist') || err.code?.includes('PGRST205') || err.code?.includes('42P01');
+      if (isMissing) {
+        throw new Error(`[RuntimeRouter] Missing required table 'table_runtime_projections'. Run the table infrastructure migration.`);
+      }
+      throw err;
+    }
 
     const hash = crypto.createHash('sha256').update(JSON.stringify(data ?? [])).digest('hex');
     res.status(200).json({ checksum: hash });

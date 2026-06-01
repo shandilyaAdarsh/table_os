@@ -62,5 +62,19 @@ tenantScoped.post(
   controller.createBranch
 );
 
+// Update branch
+tenantScoped.patch(
+  '/branches/:branchId',
+  requirePermission(PERMISSIONS.MANAGE_SETTINGS),
+  controller.updateBranch
+);
+
+// Delete branch
+tenantScoped.delete(
+  '/branches/:branchId',
+  requirePermission(PERMISSIONS.MANAGE_SETTINGS),
+  controller.deleteBranch
+);
+
 // Mount scoped router
 tenantRouter.use('/:tenantId', tenantScoped);

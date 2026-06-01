@@ -21,6 +21,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { supabaseAdmin } from '../../config/supabase';
 import { findAdminProfileById } from '../auth/repositories/auth.repository';
 import { logger as log } from '../../shared/utils/logger';
+import { skippedTenantsFallback } from '../admin/onboarding/onboarding.admin.service';
 
 // ─── Response shape (mirrors AppContextDto in Flutter) ───────
 
@@ -53,6 +54,7 @@ interface BootstrapResponse {
     }>;
     onboarding: {
       is_complete: boolean;
+      is_skipped: boolean;
       steps_completed: string[];
     };
     flags: {
@@ -101,8 +103,9 @@ export async function bootstrap(
     let tenant: BootstrapResponse['data']['tenant'] = null;
     let branches: BootstrapResponse['data']['branches'] = [];
     let onboarding: BootstrapResponse['data']['onboarding'] = {
-      isComplete: false,
-      stepsCompleted: [],
+      is_complete: false,
+      is_skipped: false,
+      steps_completed: [],
     };
 
     if (hasTenant) {
@@ -111,7 +114,6 @@ export async function bootstrap(
         .from('tenants')
         .select('id, name, slug, status, created_at')
         .eq('id', tenantId)
-        .is('deleted_at', null)
         .maybeSingle();
 
       if (tenantError) {
@@ -126,7 +128,7 @@ export async function bootstrap(
           slug: tenantData.slug,
           plan: 'standard', // Reserved for future billing integration
           status: tenantData.status,
-          is_active: tenantData.status === 'active',
+          is_active: tenantData.status !== 'suspended' && tenantData.status !== 'deleted',
         };
         log.info({ userId, tenantId, name: tenantData.name }, '[Bootstrap] Tenant resolved');
       } else {
@@ -139,8 +141,7 @@ export async function bootstrap(
         .from('branches')
         .select('id, name, timezone, status')
         .eq('tenant_id', tenantId)
-        .neq('status', 'deleted')
-        .is('deleted_at', null);
+        .neq('status', 'deleted');
 
       if (branchError) {
         log.error({ userId, tenantId, error: branchError }, '[Bootstrap] Branch lookup failed');
@@ -158,23 +159,30 @@ export async function bootstrap(
       // 2c. Load onboarding state
       const { data: onboardingData, error: onboardingError } = await supabaseAdmin
         .from('onboarding_state')
-        .select('is_complete, steps_completed')
+        .select('is_complete, steps_completed, is_skipped')
         .eq('tenant_id', tenantId)
         .maybeSingle();
 
-      if (onboardingError) {
+      if (onboardingError || !onboardingData) {
         log.warn({ userId, tenantId, error: onboardingError }, '[Bootstrap] Onboarding lookup failed — defaulting to incomplete');
-      } else if (onboardingData) {
+        const isSkipped = tenantId ? skippedTenantsFallback.has(tenantId) : false;
+        onboarding = {
+          is_complete: false,
+          is_skipped: isSkipped,
+          steps_completed: [],
+        };
+      } else {
         onboarding = {
           is_complete: onboardingData.is_complete ?? false,
+          is_skipped: onboardingData.is_skipped ?? false,
           steps_completed: (onboardingData.steps_completed as string[]) ?? [],
         };
       }
-      log.info({ userId, tenantId, onboardingComplete: onboarding.is_complete }, '[Bootstrap] Onboarding state resolved');
+      log.info({ userId, tenantId, onboardingComplete: onboarding.is_complete, onboardingSkipped: onboarding.is_skipped }, '[Bootstrap] Onboarding state resolved');
     }
 
     // ── 3. Compute flags ───────────────────────────────────────────────────
-    const requiresOnboarding = !hasTenant || !onboarding.is_complete || !tenant?.is_active;
+    const requiresOnboarding = hasTenant ? (!onboarding.is_complete && !onboarding.is_skipped) : false;
     const subscriptionExpired = Boolean(tenant && tenant.status === 'suspended');
     const accountSuspended = !profile.is_active || profile.is_locked;
 

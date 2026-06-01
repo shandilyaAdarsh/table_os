@@ -1,6 +1,7 @@
 // ============================================================
 // src/modules/menu/repositories/menu-item.repository.ts
 // All DB access for menu items, including branch-effective views.
+// Any DB schema error throws a descriptive exception — no local fallbacks.
 // ============================================================
 
 import { supabaseAdmin } from '../../../config/supabase';
@@ -26,7 +27,6 @@ export async function findItemsByTenant(
     .is('deleted_at', null);
 
   if (query.search) {
-    // Utilize GIN index on search_vector
     q = q.textSearch('search_vector', query.search, { type: 'websearch', config: 'simple' });
   }
 
@@ -37,7 +37,6 @@ export async function findItemsByTenant(
   if (query.is_featured)  q = q.eq('is_featured', true);
 
   if (query.dietary_tags?.length) {
-    // @> operator: all specified tags must be present
     q = q.contains('dietary_tags', query.dietary_tags);
   }
 
@@ -62,7 +61,9 @@ export async function findItemById(
     .eq('id', itemId)
     .maybeSingle();
 
-  if (error) throw new Error(`[MenuItemRepo] findItemById: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuItemRepo] findItemById: ${error.message}`);
+  }
   return data;
 }
 
@@ -77,7 +78,9 @@ export async function findAnyItemById(
     .eq('id', itemId)
     .maybeSingle();
 
-  if (error) throw new Error(`[MenuItemRepo] findAnyItemById: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuItemRepo] findAnyItemById: ${error.message}`);
+  }
   return data;
 }
 
@@ -93,7 +96,9 @@ export async function findItemBySlug(
     .eq('slug', slug)
     .maybeSingle();
 
-  if (error) throw new Error(`[MenuItemRepo] findItemBySlug: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuItemRepo] findItemBySlug: ${error.message}`);
+  }
   return data;
 }
 
@@ -109,7 +114,9 @@ export async function findItemBySku(
     .eq('sku', sku)
     .maybeSingle();
 
-  if (error) throw new Error(`[MenuItemRepo] findItemBySku: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuItemRepo] findItemBySku: ${error.message}`);
+  }
   return data;
 }
 
@@ -128,11 +135,12 @@ export async function findBranchItemOverride(
     .eq('item_id', itemId)
     .maybeSingle();
 
-  if (error) throw new Error(`[MenuItemRepo] findBranchItemOverride: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuItemRepo] findBranchItemOverride: ${error.message}`);
+  }
   return data;
 }
 
-/** Returns ALL overrides for a branch (batch load for menu assembly). */
 export async function findAllBranchItemOverrides(
   tenantId: string,
   branchId: string
@@ -143,7 +151,9 @@ export async function findAllBranchItemOverrides(
     .eq('tenant_id', tenantId)
     .eq('branch_id', branchId);
 
-  if (error) throw new Error(`[MenuItemRepo] findAllBranchItemOverrides: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuItemRepo] findAllBranchItemOverrides: ${error.message}`);
+  }
   return data ?? [];
 }
 
@@ -194,10 +204,10 @@ export async function updateMenuItem(
   updatedBy: string
 ): Promise<MenuItem> {
   const { version_num, ...updateData } = dto;
-  
+
   const { data, error } = await supabaseAdmin
     .from('menu_items')
-    .update({ 
+    .update({
       ...updateData,
       updated_by: updatedBy,
       version_num: version_num + 1
@@ -209,21 +219,23 @@ export async function updateMenuItem(
     .select()
     .maybeSingle();
 
-  if (error) throw new Error(`[MenuItemRepo] updateMenuItem: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuItemRepo] updateMenuItem: ${error.message}`);
+  }
   if (!data) throw new Error(`[MenuItemRepo] updateMenuItem: Concurrency conflict or item not found`);
   return data;
 }
 
 export async function softDeleteMenuItem(
-  tenantId: string, 
-  itemId: string, 
+  tenantId: string,
+  itemId: string,
   deletedBy: string,
   versionNum: number
 ): Promise<void> {
   const { data, error } = await supabaseAdmin
     .from('menu_items')
-    .update({ 
-      deleted_at: new Date().toISOString(), 
+    .update({
+      deleted_at: new Date().toISOString(),
       status: 'archived',
       updated_by: deletedBy,
       version_num: versionNum + 1
@@ -235,20 +247,22 @@ export async function softDeleteMenuItem(
     .select()
     .maybeSingle();
 
-  if (error) throw new Error(`[MenuItemRepo] softDeleteMenuItem: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuItemRepo] softDeleteMenuItem: ${error.message}`);
+  }
   if (!data) throw new Error(`[MenuItemRepo] softDeleteMenuItem: Concurrency conflict or item not found`);
 }
 
 export async function restoreItem(
-  tenantId: string, 
-  itemId: string, 
+  tenantId: string,
+  itemId: string,
   restoredBy: string,
   versionNum: number
 ): Promise<MenuItem> {
   const { data, error } = await supabaseAdmin
     .from('menu_items')
-    .update({ 
-      deleted_at: null, 
+    .update({
+      deleted_at: null,
       status: 'active',
       updated_by: restoredBy,
       version_num: versionNum + 1
@@ -259,7 +273,9 @@ export async function restoreItem(
     .select()
     .maybeSingle();
 
-  if (error) throw new Error(`[MenuItemRepo] restoreItem: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuItemRepo] restoreItem: ${error.message}`);
+  }
   if (!data) throw new Error(`[MenuItemRepo] restoreItem: Concurrency conflict or item not found`);
   return data;
 }
@@ -286,7 +302,9 @@ export async function upsertBranchItemOverride(
     .select()
     .single();
 
-  if (error) throw new Error(`[MenuItemRepo] upsertBranchItemOverride: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuItemRepo] upsertBranchItemOverride: ${error.message}`);
+  }
   return data;
 }
 
@@ -302,7 +320,9 @@ export async function deleteBranchItemOverride(
     .eq('branch_id', branchId)
     .eq('item_id', itemId);
 
-  if (error) throw new Error(`[MenuItemRepo] deleteBranchItemOverride: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuItemRepo] deleteBranchItemOverride: ${error.message}`);
+  }
 }
 
 // ─── Modifier Group Links ─────────────────────────────────────
@@ -312,14 +332,15 @@ export async function replaceItemModifierGroups(
   itemId: string,
   modifierGroupIds: string[]
 ): Promise<void> {
-  // Atomic replace: delete all, then insert new links
   const { error: delError } = await supabaseAdmin
     .from('menu_item_modifier_groups')
     .delete()
     .eq('tenant_id', tenantId)
     .eq('item_id', itemId);
 
-  if (delError) throw new Error(`[MenuItemRepo] replaceItemModifierGroups (delete): ${delError.message}`);
+  if (delError) {
+    throw new Error(`[MenuItemRepo] replaceItemModifierGroups (delete): ${delError.message}`);
+  }
 
   if (modifierGroupIds.length === 0) return;
 
@@ -334,7 +355,9 @@ export async function replaceItemModifierGroups(
     .from('menu_item_modifier_groups')
     .insert(rows);
 
-  if (insError) throw new Error(`[MenuItemRepo] replaceItemModifierGroups (insert): ${insError.message}`);
+  if (insError) {
+    throw new Error(`[MenuItemRepo] replaceItemModifierGroups (insert): ${insError.message}`);
+  }
 }
 
 export async function findModifierGroupIdsForItem(
@@ -349,6 +372,8 @@ export async function findModifierGroupIdsForItem(
     .eq('is_active', true)
     .order('sort_order', { ascending: true });
 
-  if (error) throw new Error(`[MenuItemRepo] findModifierGroupIdsForItem: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuItemRepo] findModifierGroupIdsForItem: ${error.message}`);
+  }
   return (data ?? []).map((r) => r.modifier_group_id);
 }

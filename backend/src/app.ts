@@ -18,6 +18,7 @@ import { availabilityRouter } from './modules/availability/availability.router';
 import { snapshotRouter } from './modules/snapshot/snapshot.router';
 import { publicMenuRouter } from './modules/snapshot/public-menu.router';
 import { publicAvailabilityRouter } from './modules/availability/public-availability.router';
+import { settingsRouter } from './modules/settings/settings.router';
 import { adminRouter } from './modules/admin/admin.router';
 import { publicQrRouter } from './modules/tables/qr/table-qr.router';
 import { cartRouter } from './modules/cart/cart.router';
@@ -113,10 +114,23 @@ export function createApp(): express.Application {
   
   // Menu routes: /api/tenants/:tenantId/menu/**
   app.use('/tenants/:tenantId/menu', menuRouter);
+  app.use('/api/v1/tenants/:tenantId/menu', menuRouter);
+
   app.use('/tenants/:tenantId/pricing', pricingRouter);
+  app.use('/api/v1/tenants/:tenantId/pricing', pricingRouter);
+
   app.use('/tenants/:tenantId/tax', taxRouter);
+  app.use('/api/v1/tenants/:tenantId/tax', taxRouter);
+
   app.use('/tenants/:tenantId/modifier', modifierRouter);
+  app.use('/api/v1/tenants/:tenantId/modifier', modifierRouter);
+
   app.use('/tenants/:tenantId/availability', availabilityRouter);
+  app.use('/api/v1/tenants/:tenantId/availability', availabilityRouter);
+
+  // Settings
+  app.use('/settings', settingsRouter);
+  app.use('/api/v1/settings', settingsRouter);
 
   // ─── Public Snapshot API (no auth required) ─────────────────
   // CDN-cacheable branch menu snapshots for QR ordering.

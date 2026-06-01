@@ -39,3 +39,25 @@ export async function createBranch(req: Request, res: Response, next: NextFuncti
     next(err);
   }
 }
+
+export async function updateBranch(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const tenantId = String(req.params.tenantId);
+    const branchId = String(req.params.branchId);
+    const branch = await service.updateBranch(tenantId, branchId, req.body);
+    res.json({ data: branch });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deleteBranch(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const tenantId = String(req.params.tenantId);
+    const branchId = String(req.params.branchId);
+    await service.deleteBranch(tenantId, branchId);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
