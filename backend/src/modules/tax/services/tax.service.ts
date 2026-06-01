@@ -24,6 +24,10 @@ export class TaxService {
     return this.taxRepository.createProfile(tenantId, userId, payload);
   }
 
+  async listProfiles(tenantId: string, includeDeleted: boolean = false): Promise<TaxProfile[]> {
+    return this.taxRepository.getProfiles(tenantId, includeDeleted);
+  }
+
   async getProfile(tenantId: string, id: string): Promise<TaxProfile> {
     return this.taxRepository.getProfileById(tenantId, id);
   }

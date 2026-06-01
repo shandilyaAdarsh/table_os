@@ -43,5 +43,5 @@ export function useAvailabilityPolling({ tenantSlug, tenantId, branchId, interva
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [tenantSlug, branchId, intervalMs, setOverlayData, setStale]);
+  }, [tenantSlug, tenantId, branchId, intervalMs, setOverlayData, setStale]);
 }

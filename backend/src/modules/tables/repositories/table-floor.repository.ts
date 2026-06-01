@@ -1,6 +1,7 @@
 // ============================================================
 // src/modules/tables/repositories/table-floor.repository.ts
-// DB access for table floors. No business logic.
+// DB access for table floors. Uses supabaseAdmin (service_role).
+// If the table is missing in the schema, a descriptive error is thrown.
 // ============================================================
 
 import { supabaseAdmin } from '../../../config/supabase';
@@ -20,7 +21,7 @@ export async function listFloors(tenantId: string, branchId?: string): Promise<T
 
   const { data, error } = await q;
   if (error) {
-    logger.error({ err: error, tenantId }, 'listFloors failed');
+    logger.error({ err: error, tenantId, branchId }, 'listFloors failed');
     throw new Error(`[FloorRepo] listFloors: ${error.message}`);
   }
   return data ?? [];
@@ -35,15 +36,13 @@ export async function findFloorById(tenantId: string, floorId: string): Promise<
     .is('deleted_at', null)
     .maybeSingle();
 
-  if (error) throw new Error(`[FloorRepo] findFloorById: ${error.message}`);
+  if (error) {
+    throw new Error(`[FloorRepo] findFloorById: ${error.message}`);
+  }
   return data;
 }
 
-export async function createFloor(
-  tenantId: string,
-  dto: CreateFloorInput,
-  _createdBy: string,
-): Promise<TableFloor> {
+export async function createFloor(tenantId: string, dto: CreateFloorInput, _actorId: string): Promise<TableFloor> {
   const { data, error } = await supabaseAdmin
     .from('table_floors')
     .insert({
@@ -66,7 +65,6 @@ export async function updateFloor(
   tenantId: string,
   floorId: string,
   dto: UpdateFloorInput,
-  _updatedBy: string,
 ): Promise<TableFloor | null> {
   const { version_num, ...updateFields } = dto;
   const { data, error } = await supabaseAdmin
@@ -79,7 +77,9 @@ export async function updateFloor(
     .select()
     .maybeSingle();
 
-  if (error) throw new Error(`[FloorRepo] updateFloor: ${error.message}`);
+  if (error) {
+    throw new Error(`[FloorRepo] updateFloor: ${error.message}`);
+  }
   return data;
 }
 
@@ -91,5 +91,7 @@ export async function softDeleteFloor(tenantId: string, floorId: string): Promis
     .eq('id', floorId)
     .is('deleted_at', null);
 
-  if (error) throw new Error(`[FloorRepo] softDeleteFloor: ${error.message}`);
+  if (error) {
+    throw new Error(`[FloorRepo] softDeleteFloor: ${error.message}`);
+  }
 }

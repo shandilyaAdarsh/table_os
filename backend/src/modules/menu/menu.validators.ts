@@ -55,11 +55,11 @@ export const CreateTaxRateSchema = z.object({
 // ─── Category Schemas ─────────────────────────────────────────
 
 export const CreateMenuCategorySchema = z.object({
-  parent_id:   optUuid,
+  parent_id:   z.string().uuid().nullable().optional(),
   name:        nonEmpty,
   slug,
-  description: z.string().max(2000).optional(),
-  image_url:   z.string().url().optional(),
+  description: z.string().max(2000).nullable().optional(),
+  image_url:   z.string().nullable().optional(),
   sort_order:  sortOrder,
 });
 
@@ -68,7 +68,7 @@ export const UpdateMenuCategorySchema = z.object({
   name:        z.string().min(1).max(500).optional(),
   slug:        slug.optional(),
   description: z.string().max(2000).nullable().optional(),
-  image_url:   z.string().url().nullable().optional(),
+  image_url:   z.string().nullable().optional(),
   sort_order:  z.number().int().min(0).optional(),
   is_active:   z.boolean().optional(),
   version_num: z.number().int().min(1),
@@ -86,20 +86,20 @@ export const CreateMenuItemSchema = z.object({
   category_id:        uuid,
   name:               nonEmpty,
   slug,
-  description:        z.string().max(5000).optional(),
-  short_description:  z.string().max(500).optional(),
-  sku:                z.string().max(100).optional(),
+  description:        z.string().max(5000).nullable().optional(),
+  short_description:  z.string().max(500).nullable().optional(),
+  sku:                z.string().max(100).nullable().optional(),
   base_price:         price,
   pricing_type:       z.enum(PRICING_TYPES).optional().default('fixed'),
-  tax_group_id:       optUuid,
+  tax_group_id:       z.string().uuid().nullable().optional(),
   dietary_tags:       z.array(z.string().max(50)).max(20).optional().default([]),
   spice_level:        z.enum(SPICE_LEVELS).optional().default('none'),
-  prep_time_minutes:  z.number().int().min(0).max(600).optional(),
+  prep_time_minutes:  z.number().int().min(0).max(600).nullable().optional(),
   sort_order:         sortOrder,
   is_featured:        z.boolean().optional().default(false),
-  image_url:          z.string().url().optional(),
-  thumbnail_url:      z.string().url().optional(),
-  modifier_group_ids: z.array(uuid).max(20).optional(),
+  image_url:          z.string().nullable().optional(),
+  thumbnail_url:      z.string().nullable().optional(),
+  modifier_group_ids: z.array(uuid).max(20).nullable().optional(),
 });
 
 export const UpdateMenuItemSchema = z.object({
@@ -118,8 +118,8 @@ export const UpdateMenuItemSchema = z.object({
   sort_order:         z.number().int().min(0).optional(),
   is_featured:        z.boolean().optional(),
   status:             z.enum(ITEM_STATUSES).optional(),
-  image_url:          z.string().url().nullable().optional(),
-  thumbnail_url:      z.string().url().nullable().optional(),
+  image_url:          z.string().nullable().optional(),
+  thumbnail_url:      z.string().nullable().optional(),
   version_num:        z.number().int().min(1),
 });
 

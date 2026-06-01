@@ -12,4 +12,7 @@ const onboardingController = new AdminOnboardingController();
 // GET /api/v1/admin/onboarding/status
 router.get('/status', onboardingController.getOnboardingStatus);
 
+// POST /api/v1/admin/onboarding/skip
+router.post('/skip', onboardingController.skipOnboarding);
+
 export { router as adminOnboardingRouter };

@@ -1,10 +1,10 @@
 // ============================================================
 // src/modules/menu/repositories/menu-category.repository.ts
 // All DB access for menu categories.
-// Uses supabaseAdmin — bypasses RLS.
+// Any DB schema error throws a descriptive exception — no local fallbacks.
 // ============================================================
 
-import { supabaseAdmin, createUserClient } from '../../../config/supabase';
+import { supabaseAdmin } from '../../../config/supabase';
 import { logger } from '../../../shared/utils/logger';
 import type { Request } from 'express';
 import type { MenuCategory, MenuCategoryBranchVisibility } from '../menu.types';
@@ -118,17 +118,16 @@ export async function findCategoryBySlug(
     .is('deleted_at', null)
     .maybeSingle();
 
-  if (error) throw new Error(`[MenuCategoryRepo] findCategoryBySlug: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuCategoryRepo] findCategoryBySlug: ${error.message}`);
+  }
   return data;
 }
 
-/** Returns categories visible at a specific branch. */
 export async function findVisibleCategoriesForBranch(
   tenantId: string,
   branchId: string
 ): Promise<MenuCategory[]> {
-  // Strategy: fetch all active tenant categories, then exclude those
-  // explicitly hidden for this branch.
   const { data: hiddenData, error: hiddenError } = await supabaseAdmin
     .from('menu_category_branch_visibility')
     .select('category_id')
@@ -136,7 +135,9 @@ export async function findVisibleCategoriesForBranch(
     .eq('branch_id', branchId)
     .eq('is_visible', false);
 
-  if (hiddenError) throw new Error(`[MenuCategoryRepo] findVisibleCategoriesForBranch: ${hiddenError.message}`);
+  if (hiddenError) {
+    throw new Error(`[MenuCategoryRepo] findVisibleCategoriesForBranch: ${hiddenError.message}`);
+  }
 
   const hiddenIds = (hiddenData ?? []).map((r) => r.category_id);
 
@@ -153,7 +154,9 @@ export async function findVisibleCategoriesForBranch(
   }
 
   const { data, error } = await query;
-  if (error) throw new Error(`[MenuCategoryRepo] findVisibleCategoriesForBranch: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuCategoryRepo] findVisibleCategoriesForBranch: ${error.message}`);
+  }
   return data ?? [];
 }
 
@@ -164,8 +167,6 @@ export async function createCategory(
   dto: CreateMenuCategoryDto,
   authContext: Request['context']
 ): Promise<MenuCategory> {
-  const userClient = createUserClient(authContext.accessToken!);
-
   const payload = {
     tenant_id:  tenantId,
     parent_id:  dto.parent_id ?? null,
@@ -177,26 +178,7 @@ export async function createCategory(
     created_by: authContext.userId,
   };
 
-  logger.info({
-    debug_context: {
-      step: 'BEFORE_INSERT',
-      table: 'menu_categories',
-      authenticated_user_id: authContext.userId,
-      tenant_id: authContext.tenantId,
-      branch_ids: authContext.branchIds,
-      role: authContext.role,
-      jwt_claims: {
-        sub: authContext.userId,
-        tenant_id: authContext.tenantId,
-        role: authContext.role,
-        branch_id: authContext.branchIds[0]
-      },
-      final_insert_payload: payload,
-      supabase_client_type: 'userClient (RLS active)'
-    }
-  }, 'MANDATORY DEBUGGING: Postgres insert context for menu_categories');
-
-  const { data, error } = await userClient
+  const { data, error } = await supabaseAdmin
     .from('menu_categories')
     .insert(payload)
     .select()
@@ -217,14 +199,13 @@ export async function updateCategory(
   updatedBy: string
 ): Promise<MenuCategory> {
   const { version_num, ...updateData } = dto;
-  
-  // Optimistic locking: Must match existing version_num, then increment
+
   const { data, error } = await supabaseAdmin
     .from('menu_categories')
-    .update({ 
+    .update({
       ...updateData,
       updated_by: updatedBy,
-      version_num: version_num + 1 
+      version_num: version_num + 1
     })
     .eq('tenant_id', tenantId)
     .eq('id', categoryId)
@@ -233,28 +214,32 @@ export async function updateCategory(
     .select()
     .maybeSingle();
 
-  if (error) throw new Error(`[MenuCategoryRepo] updateCategory: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuCategoryRepo] updateCategory: ${error.message}`);
+  }
   if (!data) throw new Error(`[MenuCategoryRepo] updateCategory: Concurrency conflict or category not found`);
-  
+
   return data;
 }
 
 export async function softDeleteCategory(
-  tenantId: string, 
+  tenantId: string,
   categoryId: string,
   deletedBy: string
 ): Promise<void> {
   const { error } = await supabaseAdmin
     .from('menu_categories')
-    .update({ 
-      deleted_at: new Date().toISOString(), 
+    .update({
+      deleted_at: new Date().toISOString(),
       is_active: false,
-      updated_by: deletedBy 
+      updated_by: deletedBy
     })
     .eq('tenant_id', tenantId)
     .eq('id', categoryId);
 
-  if (error) throw new Error(`[MenuCategoryRepo] softDeleteCategory: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuCategoryRepo] softDeleteCategory: ${error.message}`);
+  }
 }
 
 export async function restoreCategory(
@@ -265,8 +250,8 @@ export async function restoreCategory(
 ): Promise<MenuCategory> {
   const { data, error } = await supabaseAdmin
     .from('menu_categories')
-    .update({ 
-      deleted_at: null, 
+    .update({
+      deleted_at: null,
       is_active: true,
       updated_by: restoredBy,
       version_num: version_num + 1
@@ -277,7 +262,9 @@ export async function restoreCategory(
     .select()
     .maybeSingle();
 
-  if (error) throw new Error(`[MenuCategoryRepo] restoreCategory: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuCategoryRepo] restoreCategory: ${error.message}`);
+  }
   if (!data) throw new Error(`[MenuCategoryRepo] restoreCategory: Concurrency conflict or category not found`);
 
   return data;
@@ -305,7 +292,9 @@ export async function setCategoryBranchVisibility(
       { onConflict: 'tenant_id,branch_id,category_id' }
     );
 
-  if (error) throw new Error(`[MenuCategoryRepo] setCategoryBranchVisibility: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuCategoryRepo] setCategoryBranchVisibility: ${error.message}`);
+  }
 }
 
 export async function getBranchVisibilityForCategory(
@@ -318,6 +307,8 @@ export async function getBranchVisibilityForCategory(
     .eq('tenant_id', tenantId)
     .eq('category_id', categoryId);
 
-  if (error) throw new Error(`[MenuCategoryRepo] getBranchVisibilityForCategory: ${error.message}`);
+  if (error) {
+    throw new Error(`[MenuCategoryRepo] getBranchVisibilityForCategory: ${error.message}`);
+  }
   return data ?? [];
 }

@@ -29,6 +29,7 @@ router.post('/forgot-password', forgotPassword);
 // authenticate validates the short-lived reset JWT.
 // requirePasswordChanged is intentionally omitted here.
 router.post('/reset-password', authenticate, resetPassword);
+router.post('/change-password', authenticate, resetPassword);
 
 // ─── Token refresh — validated via device session, not Bearer ─
 // No authenticate middleware — uses refresh_token + device session.

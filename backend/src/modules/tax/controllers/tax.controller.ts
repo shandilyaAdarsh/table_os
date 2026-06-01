@@ -26,6 +26,16 @@ export class TaxController {
     }
   };
 
+  listProfiles = async (req: Request<{ tenantId: string }>, res: Response, next: NextFunction) => {
+    try {
+      const includeDeleted = req.query.include_deleted === 'true';
+      const profiles = await this.taxService.listProfiles(req.params.tenantId, includeDeleted);
+      res.status(200).json({ success: true, data: profiles });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   getProfile = async (req: Request<{ tenantId: string; id: string }>, res: Response, next: NextFunction) => {
     try {
       const id = z.string().uuid().parse(req.params.id);

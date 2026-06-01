@@ -1,7 +1,7 @@
 // ============================================================
 // src/modules/tables/repositories/table.repository.ts
 // All DB access for table management. Uses supabaseAdmin (bypasses RLS).
-// Business logic: none. Receives pre-validated payloads from service.
+// Business logic: none. Any DB schema error throws a descriptive exception.
 // ============================================================
 
 import { supabaseAdmin } from '../../../config/supabase';
@@ -50,7 +50,9 @@ export async function findTableByNumber(
     .is('deleted_at', null)
     .maybeSingle();
 
-  if (error) throw new Error(`[TableRepo] findTableByNumber: ${error.message}`);
+  if (error) {
+    throw new Error(`[TableRepo] findTableByNumber: ${error.message}`);
+  }
   if (!data) return null;
   return {
     ...data,
@@ -62,28 +64,54 @@ export async function listTables(
   tenantId: string,
   query: TableListQuery,
 ): Promise<{ data: Table[]; total: number }> {
-  let q = supabaseAdmin
-    .from('tables')
-    .select('*, table_runtime_projections(runtime_state)', { count: 'exact' })
-    .eq('tenant_id', tenantId)
-    .is('deleted_at', null);
-
-  if (query.branch_id) q = q.eq('branch_id', query.branch_id);
-  if (query.floor_id)   q = q.eq('floor_id', query.floor_id);
-  if (query.section_id) q = q.eq('section_id', query.section_id);
-  if (query.is_active !== undefined) q = q.eq('is_active', query.is_active);
-
   const page  = query.page  ?? 1;
   const limit = query.limit ?? 50;
   const from  = (page - 1) * limit;
 
+  let q = supabaseAdmin
+    .from('tables')
+    .select('*, table_runtime_projections(runtime_state)', { count: 'exact' })
+    .eq('tenant_id', tenantId)
+    .eq('is_active', true);
+
+  if (query.branch_id) q = q.eq('branch_id', query.branch_id);
+  if (query.floor_id)   q = q.eq('floor_id', query.floor_id);
+  if (query.section_id) q = q.eq('section_id', query.section_id);
+
   q = q.order('table_number', { ascending: true }).range(from, from + limit - 1);
 
   const { data, error, count } = await q;
+
   if (error) {
+    // If the runtime projections join fails but the tables table exists, fall back without the join
+    if (error.message.includes('table_runtime_projections') || error.message.includes('relation')) {
+      let qFallback = supabaseAdmin
+        .from('tables')
+        .select('*', { count: 'exact' })
+        .eq('tenant_id', tenantId)
+        .eq('is_active', true);
+
+      if (query.branch_id) qFallback = qFallback.eq('branch_id', query.branch_id);
+      if (query.floor_id)   qFallback = qFallback.eq('floor_id', query.floor_id);
+      if (query.section_id) qFallback = qFallback.eq('section_id', query.section_id);
+
+      qFallback = qFallback.order('table_number', { ascending: true }).range(from, from + limit - 1);
+
+      const { data: fallbackData, error: fallbackError, count: fallbackCount } = await qFallback;
+
+      if (fallbackError) {
+        logger.error({ err: fallbackError, tenantId, query }, 'listTables fallback failed');
+        throw new Error(`[TableRepo] listTables: ${fallbackError.message}`);
+      }
+
+      const mapped = (fallbackData ?? []).map(t => ({ ...t, runtime_state: 'FREE' }));
+      return { data: mapped as any, total: fallbackCount ?? 0 };
+    }
+
     logger.error({ err: error, tenantId, query }, 'listTables failed');
     throw new Error(`[TableRepo] listTables: ${error.message}`);
   }
+
   const mapped = (data ?? []).map(t => ({
     ...t,
     runtime_state: (t as any).table_runtime_projections?.runtime_state ?? 'FREE',
@@ -138,13 +166,11 @@ export async function updateTable(
     .select()
     .maybeSingle();
 
-  if (error) throw new Error(`[TableRepo] updateTable: ${error.message}`);
+  if (error) {
+    throw new Error(`[TableRepo] updateTable: ${error.message}`);
+  }
   return data;
 }
-
-// updateTableStatus is removed — runtime state is a derived projection, not a mutable column.
-
-// assignQrCodeToTable is superseded by table_qr_tokens — removed.
 
 export async function softDeleteTable(
   tenantId: string,
@@ -158,7 +184,9 @@ export async function softDeleteTable(
     .eq('id', tableId)
     .is('deleted_at', null);
 
-  if (error) throw new Error(`[TableRepo] softDeleteTable: ${error.message}`);
+  if (error) {
+    throw new Error(`[TableRepo] softDeleteTable: ${error.message}`);
+  }
 }
 
 // ─── Table State History ──────────────────────────────────────
@@ -184,7 +212,9 @@ export async function appendTableStateHistory(
     .select()
     .single();
 
-  if (error) throw new Error(`[TableRepo] appendTableStateHistory: ${error.message}`);
+  if (error) {
+    throw new Error(`[TableRepo] appendTableStateHistory: ${error.message}`);
+  }
   return data;
 }
 
@@ -201,7 +231,9 @@ export async function getTableStateHistory(
     .order('occurred_at', { ascending: false })
     .limit(limit);
 
-  if (error) throw new Error(`[TableRepo] getTableStateHistory: ${error.message}`);
+  if (error) {
+    throw new Error(`[TableRepo] getTableStateHistory: ${error.message}`);
+  }
   return data ?? [];
 }
 
@@ -219,7 +251,9 @@ export async function findReservationById(
     .is('deleted_at', null)
     .maybeSingle();
 
-  if (error) throw new Error(`[TableRepo] findReservationById: ${error.message}`);
+  if (error) {
+    throw new Error(`[TableRepo] findReservationById: ${error.message}`);
+  }
   return data;
 }
 
@@ -235,7 +269,9 @@ export async function listReservationsForTable(
     .is('deleted_at', null)
     .order('reserved_at', { ascending: true });
 
-  if (error) throw new Error(`[TableRepo] listReservationsForTable: ${error.message}`);
+  if (error) {
+    throw new Error(`[TableRepo] listReservationsForTable: ${error.message}`);
+  }
   return data ?? [];
 }
 
@@ -253,14 +289,16 @@ export async function createReservation(
       customer_name:  dto.customer_name,
       customer_phone: dto.customer_phone ?? null,
       party_size:     dto.party_size,
-      reserved_at:    dto.reserved_at,
       notes:          dto.notes ?? null,
+      reserved_at:    dto.reserved_at,
       created_by:     createdBy,
     })
     .select()
     .single();
 
-  if (error) throw new Error(`[TableRepo] createReservation: ${error.message}`);
+  if (error) {
+    throw new Error(`[TableRepo] createReservation: ${error.message}`);
+  }
   return data;
 }
 
@@ -282,7 +320,9 @@ export async function updateReservationStatus(
     .select()
     .maybeSingle();
 
-  if (error) throw new Error(`[TableRepo] updateReservationStatus: ${error.message}`);
+  if (error) {
+    throw new Error(`[TableRepo] updateReservationStatus: ${error.message}`);
+  }
   return data;
 }
 
@@ -293,13 +333,17 @@ export async function rotateTableQrToken(
   tableId: string,
 ): Promise<string> {
   // 1. Invalidate old active tokens for this table
-  await supabaseAdmin
+  const { error: updateError } = await supabaseAdmin
     .from('table_qr_tokens')
     .update({ is_active: false, revoked_at: new Date().toISOString() })
     .eq('tenant_id', tenantId)
     .eq('table_id', tableId)
     .eq('is_active', true);
-    
+
+  if (updateError) {
+    throw new Error(`[TableRepo] rotateTableQrToken (revoke): ${updateError.message}`);
+  }
+
   // 2. Generate a new crypto token (48 hex chars)
   const crypto = require('crypto');
   const newToken = crypto.randomBytes(24).toString('hex');
@@ -308,15 +352,17 @@ export async function rotateTableQrToken(
   const { data, error } = await supabaseAdmin
     .from('table_qr_tokens')
     .insert({
-      tenant_id: tenantId,
-      table_id: tableId,
+      tenant_id:    tenantId,
+      table_id:     tableId,
       public_token: newToken,
-      is_active: true,
+      is_active:    true,
     })
     .select('public_token')
     .single();
 
-  if (error) throw new Error(`[TableRepo] rotateTableQrToken: ${error.message}`);
+  if (error) {
+    throw new Error(`[TableRepo] rotateTableQrToken (insert): ${error.message}`);
+  }
   return data.public_token;
 }
 
@@ -332,7 +378,8 @@ export async function getActiveQrToken(
     .eq('is_active', true)
     .maybeSingle();
 
-  if (error) throw new Error(`[TableRepo] getActiveQrToken: ${error.message}`);
+  if (error) {
+    throw new Error(`[TableRepo] getActiveQrToken: ${error.message}`);
+  }
   return data?.public_token ?? null;
 }
-

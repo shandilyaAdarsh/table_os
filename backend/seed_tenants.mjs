@@ -64,6 +64,7 @@ async function seed() {
 
     // 3. Create/Get Tenant
     const slug = t.name.toLowerCase().replace(/\s+/g, '-');
+    const restaurantCode = slug.toUpperCase().replace(/[^A-Z0-9]/g, '');
     let tenantId;
     const { data: existingTenant } = await supabase.from('tenants').select('id').eq('slug', slug).single();
     if (existingTenant) {
@@ -72,6 +73,7 @@ async function seed() {
         const { data: tenantData, error: tenantError } = await supabase.from('tenants').insert({
           name: t.name,
           slug: slug,
+          restaurant_code: restaurantCode,
           status: 'active'
         }).select('id').single();
         if (tenantError) {

@@ -11,7 +11,9 @@ export async function findTenantById(id: string): Promise<Tenant | null> {
     .from('tenants')
     .select('*')
     .eq('id', id)
-    .eq('status', 'active')
+    // Allow trial, active, and suspended statuses — never filter by status here.
+    // Tenant gating (suspension, etc.) is handled at the middleware/controller layer.
+    .neq('status', 'deleted')
     .is('deleted_at', null)
     .single();
 
@@ -56,6 +58,10 @@ export async function createBranch(req: CreateBranchRequest): Promise<Branch> {
         tenant_id: req.tenant_id,
         name: req.name,
         timezone: req.timezone ?? 'UTC',
+        address: req.address ?? null,
+        phone: req.phone ?? null,
+        email: req.email ?? null,
+        region: req.region ?? null,
         status: 'active',
       },
     ])
@@ -64,4 +70,27 @@ export async function createBranch(req: CreateBranchRequest): Promise<Branch> {
 
   if (error) throw new Error(error.message);
   return data as Branch;
+}
+
+export async function updateBranch(tenantId: string, branchId: string, updates: Partial<Branch>): Promise<Branch> {
+  const { data, error } = await supabaseAdmin
+    .from('branches')
+    .update(updates)
+    .eq('id', branchId)
+    .eq('tenant_id', tenantId)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data as Branch;
+}
+
+export async function deleteBranch(tenantId: string, branchId: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from('branches')
+    .update({ status: 'deleted', deleted_at: new Date().toISOString() })
+    .eq('id', branchId)
+    .eq('tenant_id', tenantId);
+
+  if (error) throw new Error(error.message);
 }

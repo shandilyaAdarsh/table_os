@@ -5,6 +5,9 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 
+// Fallback cache for remote databases missing the onboarding_state table
+export const skippedTenantsFallback = new Set<string>();
+
 export class AdminOnboardingService {
   /**
    * Fetches the aggregated onboarding status for a tenant using a single RPC call.
@@ -37,5 +40,29 @@ export class AdminOnboardingService {
       setup_stage: 'EMPTY',
       is_operational: false
     };
+  }
+
+  /**
+   * Marks the onboarding as skipped for a given tenant.
+   */
+  public async skipOnboarding(supabase: SupabaseClient, tenantId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('onboarding_state')
+        .upsert(
+          { tenant_id: tenantId, is_skipped: true },
+          { onConflict: 'tenant_id' }
+        );
+      
+      if (error) {
+        console.warn(`[OnboardingService] Table onboarding_state is missing on remote database. Recording skip in-memory: ${error.message}`);
+        skippedTenantsFallback.add(tenantId);
+      } else {
+        console.log(`[OnboardingService] Successfully skipped onboarding for tenant ${tenantId} in database.`);
+      }
+    } catch (err) {
+      console.warn(`[OnboardingService] Exception during skipOnboarding. Recording skip in-memory`, err);
+      skippedTenantsFallback.add(tenantId);
+    }
   }
 }

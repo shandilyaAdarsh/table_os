@@ -46,11 +46,11 @@ export interface UpdateTaxRateDto {
 // ─── Category DTOs ───────────────────────────────────────────
 
 export interface CreateMenuCategoryDto {
-  parent_id?:   string;
+  parent_id?:   string | null;
   name:         string;
   slug:         string;
-  description?: string;
-  image_url?:   string;
+  description?: string | null;
+  image_url?:   string | null;
   sort_order?:  number;
 }
 
@@ -77,20 +77,20 @@ export interface CreateMenuItemDto {
   category_id:           string;
   name:                  string;
   slug:                  string;
-  description?:          string;
-  short_description?:    string;
-  sku?:                  string;
+  description?:          string | null;
+  short_description?:    string | null;
+  sku?:                  string | null;
   base_price:            number;
   pricing_type?:         PricingType;
-  tax_group_id?:         string;
+  tax_group_id?:         string | null;
   dietary_tags?:         string[];
   spice_level?:          SpiceLevel;
-  prep_time_minutes?:    number;
+  prep_time_minutes?:    number | null;
   sort_order?:           number;
   is_featured?:          boolean;
-  image_url?:            string;
-  thumbnail_url?:        string;
-  modifier_group_ids?:   string[];  // Link existing groups at creation
+  image_url?:            string | null;
+  thumbnail_url?:        string | null;
+  modifier_group_ids?:   string[] | null;  // Link existing groups at creation
 }
 
 export interface UpdateMenuItemDto {

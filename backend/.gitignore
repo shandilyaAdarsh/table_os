@@ -4,3 +4,6 @@ dist/
 *.env.local
 *.log
 pnpm-debug.log*
+mock_tables_db.json
+mock_menu_db.json
+

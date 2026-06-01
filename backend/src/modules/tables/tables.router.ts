@@ -28,8 +28,8 @@ const router: Router = Router({ mergeParams: true });
 router.get('/floors', requireMinRole(ROLES.STAFF), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const tenantId = req.context.tenantId!;
-    // Assuming tableService has listFloors
-    const data = await tableService.listFloors(tenantId);
+    const branchId = req.query.branch_id as string | undefined;
+    const data = await tableService.listFloors(tenantId, branchId);
     res.status(200).json({ success: true, data });
   } catch (err) { next(err); }
 });

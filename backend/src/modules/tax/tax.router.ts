@@ -28,6 +28,11 @@ router.post('/profiles',
   taxController.createProfile
 );
 
+router.get('/profiles', 
+  requirePermissions('ANY', PERMISSIONS.VIEW_MENU, PERMISSIONS.MANAGE_MENU), 
+  taxController.listProfiles
+);
+
 router.get('/profiles/:id', 
   requirePermissions('ANY', PERMISSIONS.VIEW_MENU, PERMISSIONS.MANAGE_MENU), 
   taxController.getProfile
