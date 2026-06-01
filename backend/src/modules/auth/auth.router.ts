@@ -10,6 +10,7 @@ import {
   refreshToken,
   forgotPassword,
   resetPassword,
+  setPassword,
   getSession,
   listSessions,
   exchangeRuntimeSession,
@@ -36,6 +37,7 @@ router.post('/refresh', refreshToken);
 
 // ─── Authenticated routes ─────────────────────────────────────
 router.post('/logout',    authenticate,                              logoutHandler);
+router.post('/set-password', authenticate,                           setPassword);
 router.get( '/session',   authenticate, requirePasswordChanged,      getSession);
 router.get( '/sessions',  authenticate, requirePasswordChanged,      listSessions);
 

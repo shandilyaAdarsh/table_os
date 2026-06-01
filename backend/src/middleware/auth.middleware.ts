@@ -24,7 +24,13 @@ declare global {
        * Verified, server-sourced auth context.
        * NEVER populate from req.body or req.query.
        */
-      context: AuthContext & { full_name: string; must_change_password: boolean };
+      context: AuthContext & {
+        full_name: string;
+        must_change_password: boolean;
+        is_first_login: boolean;
+        password_updated_at: string | null;
+        accessToken: string;
+      };
       accessToken: string;
       device_fingerprint: string;
       ip_address: string;
@@ -36,6 +42,8 @@ declare global {
 
 import { RuntimeAuthService } from '../modules/auth/services/runtime-auth.service';
 import { validateAccessToken } from '../modules/auth/services/auth.service';
+import { findAdminProfileById } from '../modules/auth/repositories/auth.repository';
+import { getTenantById } from '../modules/tenants/services/tenant.service';
 
 /**
  * Core authentication middleware.
@@ -80,6 +88,9 @@ export async function authenticate(
         device_session_id:    payload.session_id,
         full_name:            '', 
         must_change_password: false,
+        is_first_login:       false,
+        password_updated_at:  null,
+        accessToken:          token,
       };
     } catch (runtimeErr) {
       // Fallback for Admin App: Validate Supabase JWT
@@ -99,6 +110,9 @@ export async function authenticate(
         device_session_id:    '', // Admin app doesn't rely on strict single device sessions here
         full_name:            validation.full_name ?? 'Admin',
         must_change_password: validation.must_change_password ?? false,
+        is_first_login:       validation.is_first_login ?? false,
+        password_updated_at:  validation.password_updated_at ?? null,
+        accessToken:          token,
       };
     }
 
@@ -280,15 +294,56 @@ export function requireBranchAccess(branchIdParam = 'branchId') {
 
 // ─── requirePasswordChanged ───────────────────────────────────
 
-export function requirePasswordChanged(
+export async function requirePasswordChanged(
   req: Request,
   _res: Response,
   next: NextFunction
-): void {
-  if (req.context?.must_change_password) {
-    return next(new MustChangePasswordError());
+): Promise<void> {
+  try {
+    if (!req.context?.id) {
+      throw new AuthenticationError();
+    }
+
+    // Fresh profile lookup from DB on every protected request to satisfy security requirements
+    const profile = await findAdminProfileById(req.context.id);
+    if (!profile) {
+      throw new AuthenticationError('Profile not found');
+    }
+
+    if (profile.is_first_login || profile.must_change_password) {
+      throw new MustChangePasswordError();
+    }
+    next();
+  } catch (err) {
+    next(err);
   }
-  next();
+}
+
+// ─── requireOnboardingCompleted ───────────────────────────────
+
+export async function requireOnboardingCompleted(
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.context?.tenantId) {
+      throw new AuthenticationError('Tenant context missing');
+    }
+
+    // Fresh profile lookup from DB
+    const tenant = await getTenantById(req.context.tenantId);
+    if (!tenant) {
+      throw new AuthenticationError('Tenant not found');
+    }
+
+    if (tenant.onboarding_completed === false) {
+      return next(new ForbiddenError('ONBOARDING_REQUIRED'));
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
 }
 
 // ─── Convenience role sets ────────────────────────────────────

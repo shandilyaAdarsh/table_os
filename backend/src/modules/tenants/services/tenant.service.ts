@@ -4,7 +4,7 @@ import { NotFoundError } from '../../../shared/errors/AppError';
 
 export async function getTenantById(id: string): Promise<Tenant> {
   const tenant = await repo.findTenantById(id);
-  if (!tenant) throw new NotFoundError('Tenant not found');
+  if (!tenant) throw new NotFoundError('Tenant');
   return tenant;
 }
 

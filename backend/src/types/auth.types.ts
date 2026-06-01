@@ -49,6 +49,8 @@ export interface AdminProfile {
   last_login_at: string | null;
   last_login_ip: string | null;
   must_change_password: boolean;
+  is_first_login: boolean;
+  password_updated_at: string | null;
   failed_login_count: number;
   created_by: string | null;
   created_at: string;
@@ -124,6 +126,8 @@ export interface LogoutRequest {
 export interface AuthenticatedUser extends AuthContext {
   full_name: string;
   must_change_password: boolean;
+  is_first_login: boolean;
+  password_updated_at: string | null;
 }
 
 // ─── Rate Limiting ────────────────────────────────────────────
@@ -146,6 +150,8 @@ export interface TokenValidationResult {
   branch_ids?: string[];
   full_name?: string;
   must_change_password?: boolean;
+  is_first_login?: boolean;
+  password_updated_at?: string | null;
   error?: string;
 }
 

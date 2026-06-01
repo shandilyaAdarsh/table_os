@@ -5,7 +5,7 @@
 // ============================================================
 
 import { Router } from 'express';
-import { authenticate } from '../../middleware/auth.middleware';
+import { authenticate, requirePasswordChanged, requireOnboardingCompleted } from '../../middleware/auth.middleware';
 import { tenantContext } from '../../middleware/tenant.middleware';
 import { adminMenuRouter } from './menu/menu.admin.router';
 import { adminPricingRouter } from './pricing/pricing.admin.router';
@@ -15,13 +15,20 @@ import { qrAdminRouter } from '../tables/qr/qr.admin.router';
 import { maintenanceRouter } from '../maintenance/maintenance.router';
 import { waiterCallRouter } from '../waiter-call/waiter-call.router';
 import { adminOnboardingRouter } from './onboarding/onboarding.admin.router';
+import { adminDashboardRouter } from './dashboard/dashboard.admin.router';
 
 const router: Router = Router({ mergeParams: true });
 
-// ─── Global Admin Middleware ──────────────────────────────────
-// Every Admin API requires authentication and a valid tenant context
+// Every Admin API requires authentication, a valid tenant context, and completed password onboarding
 router.use(authenticate);
 router.use(tenantContext);
+router.use(requirePasswordChanged);
+
+// Onboarding router (exempt from requireOnboardingCompleted)
+router.use('/onboarding', adminOnboardingRouter);
+
+// Enforce onboarding completion for all other admin modules
+router.use(requireOnboardingCompleted);
 
 // ─── Module Routers ───────────────────────────────────────────
 router.use('/menu', adminMenuRouter);
@@ -31,7 +38,7 @@ router.use('/tables', tablesRouter);
 router.use('/qr', qrAdminRouter);
 router.use('/maintenance', maintenanceRouter);
 router.use('/waiter-calls', waiterCallRouter);
-router.use('/onboarding', adminOnboardingRouter);
+router.use('/dashboard', adminDashboardRouter);
 
 // Future Admin routers:
 // router.use('/staff', adminStaffRouter);

@@ -11,6 +11,7 @@ import {
   refreshAccessToken,
   requestPasswordReset,
   completePasswordReset,
+  completeFirstLoginPasswordSetup,
 } from '../services/auth.service';
 import { RuntimeAuthService } from '../services/runtime-auth.service';
 import {
@@ -125,6 +126,24 @@ export async function resetPassword(
     await completePasswordReset(req.context.id, body.new_password, getIp(req), getUa(req));
     res.status(200).json(
       ResponseFormatter.success(null, 'Password updated. Please log in with your new password.')
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── POST /auth/set-password ─────────────────────────────────
+
+export async function setPassword(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const body = validate(ResetPasswordSchema, req.body);
+    await completeFirstLoginPasswordSetup(req.context.id, body.new_password, getIp(req), getUa(req));
+    res.status(200).json(
+      ResponseFormatter.success(null, 'Password configured successfully. Onboarding completed.')
     );
   } catch (err) {
     next(err);

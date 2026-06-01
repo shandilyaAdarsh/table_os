@@ -3,6 +3,13 @@ export interface Tenant {
   name: string;
   slug: string;
   status: 'active' | 'suspended' | 'deleted';
+  display_name: string | null;
+  city: string | null;
+  state: string | null;
+  full_address: string | null;
+  timezone: string | null;
+  onboarding_step: number;
+  onboarding_completed: boolean;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

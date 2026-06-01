@@ -53,5 +53,12 @@ tenantScoped.post(
   controller.createBranch
 );
 
+// Special endpoint for Flutter Admin App context bootstrap
+tenantRouter.get(
+  '/current',
+  authenticate,
+  controller.getCurrentContext
+);
+
 // Mount scoped router
 tenantRouter.use('/:tenantId', tenantScoped);

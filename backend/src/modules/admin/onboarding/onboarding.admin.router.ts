@@ -12,4 +12,16 @@ const onboardingController = new AdminOnboardingController();
 // GET /api/v1/admin/onboarding/status
 router.get('/status', onboardingController.getOnboardingStatus);
 
+// PUT /api/v1/admin/onboarding/restaurant-info
+router.put('/restaurant-info', onboardingController.updateRestaurantInfo);
+
+// PUT /api/v1/admin/onboarding/business-config
+router.put('/business-config', onboardingController.updateBusinessConfig);
+
+// PUT /api/v1/admin/onboarding/gst-legal
+router.put('/gst-legal', onboardingController.updateGstLegalConfig);
+
+// PUT /api/v1/admin/onboarding/tables-hours
+router.put('/tables-hours', onboardingController.updateTablesAndHours);
+
 export { router as adminOnboardingRouter };

@@ -61,6 +61,9 @@ export function createApp(): express.Application {
         'X-Device-Session-Id',
         'X-Forwarded-For',
         'X-QR-Session-Token',
+        'Accept',
+        'X-Request-Id',
+        'X-Retry-Count',
       ],
     })
   );

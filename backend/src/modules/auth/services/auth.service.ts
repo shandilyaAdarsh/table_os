@@ -200,6 +200,8 @@ export async function loginWithEmail(
     permissions: await resolvePermissions(profile.id, profile.tenant_id),
     full_name: profile.full_name,
     must_change_password: profile.must_change_password,
+    is_first_login: profile.is_first_login,
+    password_updated_at: profile.password_updated_at,
     device_session_id: deviceSession.id,
   };
 
@@ -360,6 +362,43 @@ export async function completePasswordReset(
   log.info({ userId }, 'Password reset completed');
 }
 
+export async function completeFirstLoginPasswordSetup(
+  userId: string,
+  newPassword: string,
+  ipAddress: string,
+  userAgent: string
+): Promise<void> {
+  const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+    password: newPassword,
+  });
+
+  if (error) throw new TokenInvalidError('Password setup failed');
+
+  // Update profile setting is_first_login to false and password_updated_at to now
+  const { error: profileError } = await supabaseAdmin
+    .from('admin_profiles')
+    .update({
+      is_first_login: false,
+      password_updated_at: new Date().toISOString(),
+      must_change_password: false,
+    })
+    .eq('id', userId);
+
+  if (profileError) {
+    throw new Error(`[AuthService] completeFirstLoginPasswordSetup: ${profileError.message}`);
+  }
+
+  await writeAuditLog({
+    userId,
+    eventType: 'PASSWORD_RESET_COMPLETED',
+    ipAddress,
+    userAgent,
+    metadata: { first_login_complete: true },
+  });
+
+  log.info({ userId }, 'First login password setup completed');
+}
+
 // ─── Token Validation ─────────────────────────────────────────
 
 /**
@@ -401,5 +440,7 @@ export async function validateAccessToken(accessToken: string): Promise<TokenVal
     branch_ids: (data.user.app_metadata?.branch_ids as string[]) ?? [],
     full_name: profile.full_name,
     must_change_password: profile.must_change_password,
+    is_first_login: profile.is_first_login,
+    password_updated_at: profile.password_updated_at,
   };
 }

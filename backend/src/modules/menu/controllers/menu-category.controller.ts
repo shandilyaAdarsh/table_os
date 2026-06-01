@@ -7,6 +7,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { validate } from '../../../shared/utils/validation.utils';
 import { formatSuccess } from '../../../shared/utils/response-formatter';
+import { ForbiddenError } from '../../../shared/errors/AppError';
 import {
   CreateMenuCategorySchema,
   UpdateMenuCategorySchema,
@@ -52,6 +53,7 @@ export async function getBranchCategories(req: Request<{ tenantId: string; branc
 export async function createCategory(req: Request<{ tenantId: string }>, res: Response, next: NextFunction) {
   try {
     const tenantId = req.context.tenantId; // Derived strictly from auth context
+    if (!tenantId) throw new ForbiddenError('Tenant context is required');
     const dto = validate(CreateMenuCategorySchema, req.body);
     const category = await createMenuCategory(tenantId, dto, req.context);
     res.status(201).json(formatSuccess(category));

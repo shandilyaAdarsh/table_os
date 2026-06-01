@@ -11,9 +11,12 @@ export async function findTenantById(id: string): Promise<Tenant | null> {
     .from('tenants')
     .select('*')
     .eq('id', id)
-    .eq('status', 'active')
-    .is('deleted_at', null)
+    .neq('status', 'deleted')
     .single();
+
+  if (error) {
+    console.error(`[findTenantById] Supabase error for ${id}:`, error);
+  }
 
   if (error || !data) return null;
   return data as Tenant;
