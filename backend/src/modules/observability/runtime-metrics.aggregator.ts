@@ -27,8 +27,9 @@ export class RuntimeMetricsAggregator {
     return map.get(key)!;
   }
 
-  private static getInitialSnapshot(): RuntimeSnapshot {
+  private static getInitialSnapshot(tenantId: string): RuntimeSnapshot {
     return {
+      tenantId,
       transportState: 'LIVE', // Defaulting to LIVE for backend, but this reflects overall mesh health in a real setup
       isDegraded: false,
       isRecovering: false,
@@ -96,7 +97,7 @@ export class RuntimeMetricsAggregator {
 
   public static getSnapshot(tenantId: string): RuntimeSnapshot {
     if (!this.snapshots.has(tenantId)) {
-      this.snapshots.set(tenantId, this.getInitialSnapshot());
+      this.snapshots.set(tenantId, this.getInitialSnapshot(tenantId));
     }
     const snapshot = this.snapshots.get(tenantId)!;
     // dynamically update bufferSize

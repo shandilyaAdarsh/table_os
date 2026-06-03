@@ -10,6 +10,7 @@ import { resolvePermissions } from '../../../utils/permission-checker';
 import { AuthenticationError, ForbiddenError } from '../../../shared/errors/AppError';
 import { ROLES, type Role } from '../../../types/rbac.types';
 import { logger } from '../../../shared/utils/logger';
+import { supabaseAdmin } from '../../../config/supabase';
 
 export interface RuntimeJwtPayload {
   sub: string;
@@ -39,16 +40,33 @@ export class RuntimeAuthService {
       throw new AuthenticationError('Invalid platform credentials');
     }
 
-    if (!validation.tenant_id) {
-      throw new ForbiddenError('User has no assigned tenant context');
+    let effectiveTenantId = validation.tenant_id;
+    const role = validation.role as Role;
+
+    if (!effectiveTenantId) {
+      if (role === ROLES.SUPER_ADMIN) {
+        // Look up the branch's tenant dynamically
+        const { data: branchData } = await supabaseAdmin
+          .from('branches')
+          .select('tenant_id')
+          .eq('id', branchId)
+          .single();
+          
+        if (branchData) {
+          effectiveTenantId = branchData.tenant_id;
+        } else {
+          effectiveTenantId = '00000000-0000-0000-0000-000000000000';
+        }
+      } else {
+        throw new ForbiddenError('User has no assigned tenant context');
+      }
     }
 
     // 2. Resolve granular permissions
-    const permissionsSet = await resolvePermissions(validation.user_id, validation.tenant_id);
+    const permissionsSet = await resolvePermissions(validation.user_id, effectiveTenantId);
     const permissions = Array.from(permissionsSet);
 
     // 3. Branch access governance
-    const role = validation.role as Role;
     if (
       role !== ROLES.SUPER_ADMIN &&
       role !== ROLES.RESTAURANT_ADMIN &&
@@ -70,7 +88,7 @@ export class RuntimeAuthService {
     // 4. Construct strict envelope
     const payload: Omit<RuntimeJwtPayload, 'iat' | 'exp'> = {
       sub: validation.user_id,
-      tenant_id: validation.tenant_id!,
+      tenant_id: effectiveTenantId,
       branch_id: branchId,
       role,
       permissions,

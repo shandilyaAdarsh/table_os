@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import * as service from '../services/tenant.service';
+import { ResponseFormatter } from '../../../shared/utils/response-formatter';
 
 export async function getTenant(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -15,7 +16,7 @@ export async function listBranches(req: Request, res: Response, next: NextFuncti
   try {
     const tenantId = String(req.params.tenantId);
     const branches = await service.getTenantBranches(tenantId);
-    res.json({ data: branches });
+    res.status(200).json(ResponseFormatter.success(branches));
   } catch (err) {
     next(err);
   }

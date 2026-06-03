@@ -24,6 +24,13 @@ export const LoginSchema = z.object({
   remember_me: z.boolean().optional().default(false),
 });
 
+export const StaffLoginSchema = z.object({
+  tenantId: z.string({ required_error: 'Tenant ID is required' }).uuid('Invalid tenant ID format'),
+  branchId: z.string({ required_error: 'Branch ID is required' }).uuid('Invalid branch ID format'),
+  employeeId: z.string({ required_error: 'Employee ID is required' }).min(1, 'Employee ID is required'),
+  pin: z.string({ required_error: 'PIN is required' }).min(4, 'PIN must be at least 4 digits'),
+});
+
 export const RefreshTokenSchema = z.object({
   refresh_token: z
     .string({ required_error: 'Refresh token is required' })

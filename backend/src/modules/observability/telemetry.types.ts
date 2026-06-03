@@ -47,7 +47,11 @@ export type TelemetryEventType =
   | 'SEQUENCE_GAP_DETECTED'
   | 'SIMULATION_TRIGGERED'
   // Operational Safety
-  | 'RUNTIME_SAFETY_ACTION';
+  | 'RUNTIME_SAFETY_ACTION'
+  // Custom Detections
+  | 'CLOCK_DRIFT_DETECTED'
+  | 'REPLAY_LAG_DETECTED'
+  | 'QUEUE_STARVATION_DETECTED';
 
 export interface BaseTelemetryEvent {
   tenant_id: string;

@@ -55,6 +55,7 @@ interface BootstrapResponse {
     onboarding: {
       is_complete: boolean;
       is_skipped: boolean;
+      step: number;
       steps_completed: string[];
     };
     flags: {
@@ -105,6 +106,7 @@ export async function bootstrap(
     let onboarding: BootstrapResponse['data']['onboarding'] = {
       is_complete: false,
       is_skipped: false,
+      step: 1,
       steps_completed: [],
     };
 
@@ -159,30 +161,42 @@ export async function bootstrap(
       // 2c. Load onboarding state
       const { data: onboardingData, error: onboardingError } = await supabaseAdmin
         .from('onboarding_state')
-        .select('is_complete, steps_completed, is_skipped')
+        .select('is_complete, steps_completed')
         .eq('tenant_id', tenantId)
         .maybeSingle();
 
-      if (onboardingError || !onboardingData) {
-        log.warn({ userId, tenantId, error: onboardingError }, '[Bootstrap] Onboarding lookup failed — defaulting to incomplete');
-        const isSkipped = tenantId ? skippedTenantsFallback.has(tenantId) : false;
-        onboarding = {
-          is_complete: false,
-          is_skipped: isSkipped,
-          steps_completed: [],
-        };
-      } else {
-        onboarding = {
-          is_complete: onboardingData.is_complete ?? false,
-          is_skipped: onboardingData.is_skipped ?? false,
-          steps_completed: (onboardingData.steps_completed as string[]) ?? [],
-        };
-      }
+        if (onboardingError || !onboardingData) {
+          log.warn({ userId, tenantId, error: onboardingError }, '[Bootstrap] Onboarding lookup failed — defaulting to incomplete');
+          const isSkipped = tenantId ? skippedTenantsFallback.has(tenantId) : false;
+          onboarding = {
+            is_complete: false,
+            is_skipped: isSkipped,
+            step: 1,
+            steps_completed: [],
+          };
+        } else {
+          const stepsList = (onboardingData.steps_completed as string[]) ?? [];
+          let currentStep = 1;
+          if (stepsList.includes('restaurant_info')) currentStep = 2;
+          if (stepsList.includes('business_config')) currentStep = 3;
+          if (stepsList.includes('gst_legal')) currentStep = 4;
+          if (stepsList.includes('tables_hours')) currentStep = 5;
+
+          onboarding = {
+            is_complete: onboardingData.is_complete ?? false,
+            is_skipped: tenantId ? skippedTenantsFallback.has(tenantId) : false,
+            step: currentStep,
+            steps_completed: stepsList,
+          };
+        }
       log.info({ userId, tenantId, onboardingComplete: onboarding.is_complete, onboardingSkipped: onboarding.is_skipped }, '[Bootstrap] Onboarding state resolved');
     }
 
     // ── 3. Compute flags ───────────────────────────────────────────────────
-    const requiresOnboarding = hasTenant ? (!onboarding.is_complete && !onboarding.is_skipped) : false;
+    // If the tenant is already active, we shouldn't force onboarding on them repeatedly
+    // This allows existing/legacy admins to bypass the setup wizard automatically
+    const requiresOnboarding = hasTenant ? 
+      (!onboarding.is_complete && !onboarding.is_skipped && tenant?.status !== 'active') : false;
     const subscriptionExpired = Boolean(tenant && tenant.status === 'suspended');
     const accountSuspended = !profile.is_active || profile.is_locked;
 

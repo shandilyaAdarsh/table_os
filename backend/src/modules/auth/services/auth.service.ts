@@ -375,16 +375,16 @@ export async function validateAccessToken(accessToken: string): Promise<TokenVal
   }
 
   const { data: userRecord, error: userError } = await supabaseAdmin
-    .from('users')
-    .select('tenant_id, role, branch_ids, is_first_login')
-    .eq('auth_id', data.user.id)
+    .from('admin_profiles')
+    .select('tenant_id, role, must_change_password')
+    .eq('id', data.user.id)
     .single();
 
   if (userError || !userRecord) {
     return { valid: false, error: 'User profile not found' };
   }
 
-  if (!userRecord.tenant_id) {
+  if (!userRecord.tenant_id && userRecord.role !== 'SUPER_ADMIN') {
     return { valid: false, error: 'User has no tenant assigned. Contact support.' };
   }
 
@@ -394,7 +394,7 @@ export async function validateAccessToken(accessToken: string): Promise<TokenVal
     email: data.user.email,
     role: userRecord.role,
     tenant_id: userRecord.tenant_id,
-    branch_ids: userRecord.branch_ids ?? [],
-    must_change_password: Boolean(userRecord.is_first_login),
+    branch_ids: (data.user.app_metadata?.branch_ids as string[]) ?? [],
+    must_change_password: Boolean(userRecord.must_change_password),
   };
 }

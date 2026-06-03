@@ -57,4 +57,94 @@ export class AdminOnboardingController {
       next(error);
     }
   };
+  public updateRestaurantInfo = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const tenantId = req.context?.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ success: false, error: 'Missing tenant_id context' });
+        return;
+      }
+
+      await onboardingService.updateRestaurantInfo(supabaseAdmin, tenantId, req.body);
+
+      res.status(200).json({
+        success: true,
+        message: 'Restaurant info updated successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+  public updateBusinessConfig = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const tenantId = req.context?.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ success: false, error: 'Missing tenant_id context' });
+        return;
+      }
+
+      await onboardingService.updateBusinessConfig(supabaseAdmin, tenantId, req.body);
+
+      res.status(200).json({
+        success: true,
+        message: 'Business config updated successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public updateGstLegal = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const tenantId = req.context?.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ success: false, error: 'Missing tenant_id context' });
+        return;
+      }
+
+      await onboardingService.updateGstLegal(supabaseAdmin, tenantId, req.body);
+
+      res.status(200).json({
+        success: true,
+        message: 'GST config updated successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public updateTablesHours = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const tenantId = req.context?.tenantId;
+      if (!tenantId) {
+        res.status(400).json({ success: false, error: 'Missing tenant_id context' });
+        return;
+      }
+
+      await onboardingService.updateTablesHours(supabaseAdmin, tenantId, req.body);
+
+      res.status(200).json({
+        success: true,
+        message: 'Tables and hours updated successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 }

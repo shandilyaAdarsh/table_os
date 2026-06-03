@@ -15,10 +15,12 @@ import pricingRouter from './modules/pricing/pricing.router';
 import { taxRouter } from './modules/tax/tax.router';
 import { modifierRouter } from './modules/modifier/modifier.router';
 import { availabilityRouter } from './modules/availability/availability.router';
+import { staffRouter } from './modules/staff/staff.router';
 import { snapshotRouter } from './modules/snapshot/snapshot.router';
 import { publicMenuRouter } from './modules/snapshot/public-menu.router';
 import { publicAvailabilityRouter } from './modules/availability/public-availability.router';
 import { settingsRouter } from './modules/settings/settings.router';
+import { publicTenantRouter } from './modules/tenants/public-tenant.router';
 import { adminRouter } from './modules/admin/admin.router';
 import { publicQrRouter } from './modules/tables/qr/table-qr.router';
 import { cartRouter } from './modules/cart/cart.router';
@@ -47,7 +49,7 @@ export function createApp(): express.Application {
     cors({
       origin: (requestOrigin, callback) => {
         if (!requestOrigin) return callback(null, true);
-        if (requestOrigin.startsWith('http://localhost:')) {
+        if (requestOrigin.startsWith('http://localhost:') || requestOrigin.startsWith('http://127.0.0.1:')) {
           return callback(null, true);
         }
         if (corsOrigins.includes(requestOrigin)) {
@@ -73,7 +75,7 @@ export function createApp(): express.Application {
 
   // ─── OPTIONS Preflight (must be before all routes) ─────────────────────
   // Required so browser preflights for credentialed cross-origin requests
-  // receive the correct CORS headers before touching any authenticated route.
+  // receive the-correct CORS headers before touching any authenticated route.
   app.options('*', cors());
 
   // ─── Observability Context Propagation ─────────────────────
@@ -128,6 +130,9 @@ export function createApp(): express.Application {
   app.use('/tenants/:tenantId/availability', availabilityRouter);
   app.use('/api/v1/tenants/:tenantId/availability', availabilityRouter);
 
+  app.use('/tenants/:tenantId/staff', staffRouter);
+  app.use('/api/v1/tenants/:tenantId/staff', staffRouter);
+
   // Settings
   app.use('/settings', settingsRouter);
   app.use('/api/v1/settings', settingsRouter);
@@ -139,6 +144,9 @@ export function createApp(): express.Application {
   app.use('/api/v1/public/branches', snapshotRouter);
   app.use('/api/v1/public/branches', publicAvailabilityRouter);
   app.use('/public', publicMenuRouter);
+  
+  // ─── Public Organizations API (no auth required) ────────────
+  app.use('/api/v1/public/organizations', publicTenantRouter);
 
   // ─── Public QR Runtime API (no auth required, rate limited) ──────────
   app.use('/api/v1/public/table', publicQrRouter);

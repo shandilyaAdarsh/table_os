@@ -43,4 +43,8 @@ router.get( '/sessions',  authenticate, requirePasswordChanged,      listSession
 // ─── Runtime Exchange (no authenticate middleware, accepts Supabase token directly) ─
 router.post('/runtime/exchange', exchangeRuntimeSession);
 
+// ─── Staff Waiter / POS Login ─────────────────────────────────
+import { staffLogin } from './controllers/staff-auth.controller';
+router.post('/staff/login', staffLogin);
+
 export { router as authRouter };

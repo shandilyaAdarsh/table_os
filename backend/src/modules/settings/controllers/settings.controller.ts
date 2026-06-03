@@ -19,7 +19,7 @@ const DEFAULT_SETTINGS = {
 
 export async function getSettings(req: Request, res: Response): Promise<void> {
   try {
-    const tenantId = req.params.tenantId || req.tenant?.id;
+    const tenantId = req.params.tenantId || req.context?.tenantId;
     const branchId = req.query.branch_id as string | undefined;
 
     if (!tenantId) {
@@ -98,7 +98,7 @@ export async function getSettings(req: Request, res: Response): Promise<void> {
 
 export async function updateSettings(req: Request, res: Response): Promise<void> {
   try {
-    const tenantId = req.params.tenantId || req.tenant?.id;
+    const tenantId = req.params.tenantId || req.context?.tenantId;
     const updateData = req.body;
 
     if (!tenantId) {
