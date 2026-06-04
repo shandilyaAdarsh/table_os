@@ -10,9 +10,18 @@ const supabaseAdmin = createClient(
 );
 
 async function run() {
-  const { data, error } = await supabaseAdmin.from('restaurant_settings').select('*').limit(1);
-  console.log('Error:', error);
-  console.log('Data:', data);
+  const { data, error } = await supabaseAdmin.rpc('get_table_columns', { table_name: 'staff' });
+  if (error) {
+    // If RPC doesn't exist, we can use a direct SQL query or just check keys of a row
+    const { data: rows } = await supabaseAdmin.from('staff').select('*').limit(1);
+    if (rows && rows.length > 0) {
+      console.log('Columns:', Object.keys(rows[0]));
+    } else {
+      console.log('No rows in staff table to extract columns from');
+    }
+  } else {
+    console.log('Columns (RPC):', data);
+  }
 }
 
 run();

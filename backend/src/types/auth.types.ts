@@ -121,7 +121,8 @@ export interface LogoutRequest {
 
 // ─── Middleware Context ───────────────────────────────────────
 
-export interface AuthenticatedUser extends AuthContext {
+export interface AuthenticatedUser extends Omit<AuthContext, 'permissions'> {
+  permissions: Permission[];
   full_name: string;
   must_change_password: boolean;
 }

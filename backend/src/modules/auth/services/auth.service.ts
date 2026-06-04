@@ -197,7 +197,7 @@ export async function loginWithEmail(
     tenant_id: profile.tenant_id,
     tenantId: profile.tenant_id,
     branchIds: (authData.user.app_metadata?.branch_ids as string[]) ?? [],
-    permissions: await resolvePermissions(profile.id, profile.tenant_id),
+    permissions: Array.from(await resolvePermissions(profile.id, profile.tenant_id)),
     full_name: profile.full_name,
     must_change_password: profile.must_change_password,
     device_session_id: deviceSession.id,

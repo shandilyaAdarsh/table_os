@@ -135,7 +135,11 @@ export async function resetPassword(
 
 export async function getSession(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    res.status(200).json(ResponseFormatter.success({ user: req.context }));
+    const user = {
+      ...req.context,
+      permissions: Array.from(req.context.permissions),
+    };
+    res.status(200).json(ResponseFormatter.success({ user }));
   } catch (err) {
     next(err);
   }

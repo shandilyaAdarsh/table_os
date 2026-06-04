@@ -35,6 +35,7 @@ import { observabilityRouter } from './modules/observability/observability.route
 import { contextRouter } from './modules/context/context.router';
 import { customerRouter } from './modules/customer/customer.router';
 import { analyticsRouter } from './modules/analytics/analytics.router';
+import { staffRouter } from './modules/staff/staff.router';
 import { ObservabilityService } from './modules/infrastructure/observability.service';
 import { errorMiddleware } from './middleware/error.middleware';
 import { loggingMiddleware } from './middleware/logging.middleware';
@@ -193,9 +194,9 @@ export function createApp(): express.Application {
   // Single-payload bootstrap for the admin app. Must resolve before routing.
   app.use('/api/v1/context', contextRouter);
 
-  // Future modules registered here:
-  // app.use('/tenants/:tenantId/staff', staffRouter);
-
+  // Staff API (requires auth & tenant context)
+  app.use('/tenants/:tenantId/staff', staffRouter);
+  app.use('/api/v1/tenants/:tenantId/staff', staffRouter);
   // ─── 404 handler ───────────────────────────────────────────
   app.use((_req, res) => {
     res.status(404).json({
