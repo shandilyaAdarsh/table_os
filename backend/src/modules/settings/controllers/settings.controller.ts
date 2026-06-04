@@ -27,6 +27,14 @@ export async function getSettings(req: Request, res: Response): Promise<void> {
       return;
     }
 
+    // Helper: build default in-memory payload (used when DB schema is not migrated yet)
+    const buildDefaults = () => ({
+      tenant_id: tenantId,
+      branch_id: branchId ?? null,
+      ...DEFAULT_SETTINGS,
+      updated_at: new Date().toISOString(),
+    });
+
     let query = supabaseAdmin
       .from('restaurant_settings')
       .select('*')
@@ -41,15 +49,11 @@ export async function getSettings(req: Request, res: Response): Promise<void> {
     const { data, error } = await query.maybeSingle();
 
     if (error && error.code !== 'PGRST116') {
-      // Ignore missing table error PGRST205 for now and return defaults if DB is unmigrated
-      if (error.code === 'PGRST205') {
-        const payload = {
-          tenant_id: tenantId,
-          branch_id: branchId ?? null,
-          ...DEFAULT_SETTINGS,
-          updated_at: new Date().toISOString(),
-        };
-        res.status(200).json({ success: true, data: payload });
+      // PGRST205 = table not found; 42703 = column not found (schema not migrated yet)
+      // Both cases: return in-memory defaults — do NOT crash with 500.
+      if (error.code === 'PGRST205' || error.code === '42703') {
+        log.warn({ tenantId, errorCode: error.code }, 'restaurant_settings schema not fully migrated — returning defaults');
+        res.status(200).json({ success: true, data: buildDefaults() });
         return;
       }
       log.error({ tenantId, error }, 'Failed to fetch settings');
@@ -58,7 +62,7 @@ export async function getSettings(req: Request, res: Response): Promise<void> {
     }
 
     if (!data) {
-      // Upsert default row on first load
+      // Try to upsert default row on first load
       const newSettings = {
         tenant_id: tenantId,
         branch_id: branchId ?? null,
@@ -72,8 +76,9 @@ export async function getSettings(req: Request, res: Response): Promise<void> {
         .single();
 
       if (insertError) {
-        // If table doesn't exist, just return in-memory defaults
-        if (insertError.code === 'PGRST205') {
+        // If table/column doesn't exist, return in-memory defaults
+        if (insertError.code === 'PGRST205' || insertError.code === '42703') {
+          log.warn({ tenantId, errorCode: insertError.code }, 'restaurant_settings schema not migrated — returning defaults');
           res.status(200).json({
             success: true,
             data: { ...newSettings, updated_at: new Date().toISOString() },
@@ -95,6 +100,7 @@ export async function getSettings(req: Request, res: Response): Promise<void> {
     res.status(500).json({ success: false, error: { message: 'Internal server error' } });
   }
 }
+
 
 export async function updateSettings(req: Request, res: Response): Promise<void> {
   try {
@@ -128,8 +134,9 @@ export async function updateSettings(req: Request, res: Response): Promise<void>
     const { data, error } = await query.select().maybeSingle();
 
     if (error) {
-      if (error.code === 'PGRST205') {
-        // Mock successful update if table not migrated yet
+      if (error.code === 'PGRST205' || error.code === '42703') {
+        // Mock successful update if table/column not migrated yet
+        log.warn({ tenantId, errorCode: error.code }, 'restaurant_settings schema not migrated — mock update success');
         res.status(200).json({ success: true, data: updateData });
         return;
       }

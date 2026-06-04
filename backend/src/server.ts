@@ -8,6 +8,7 @@ import { env } from './config/env'; // Must be first — validates env before an
 import { createApp } from './app';
 import { logger } from './shared/utils/logger';
 import { GracefulShutdownService } from './modules/infrastructure/graceful-shutdown.service';
+import { AppError } from './shared/errors/AppError';
 
 import { WebSocketManager } from './modules/transport/websocket.manager';
 
@@ -55,7 +56,14 @@ GracefulShutdownService.registerHook('WebSocket Transport', 60, async () => {
 });
 
 process.on('unhandledRejection', (reason) => {
-  logger.error({ reason }, 'Unhandled promise rejection');
+  // Operational errors (AppError with isOperational=true) are expected domain
+  // errors that slipped through without a try/catch. Log them but do NOT crash.
+  if (reason instanceof AppError && reason.isOperational) {
+    logger.warn({ reason }, 'Unhandled operational AppError (non-fatal) — check missing try/catch');
+    return;
+  }
+  // Truly unexpected errors (bugs, type errors, etc.) should trigger shutdown.
+  logger.error({ reason }, 'Unhandled promise rejection — initiating graceful shutdown');
   GracefulShutdownService.initiateShutdown('unhandledRejection');
 });
 
