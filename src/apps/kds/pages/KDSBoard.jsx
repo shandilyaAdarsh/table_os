@@ -5,6 +5,7 @@ import { useKitchenOrdersProjection } from '../../../store/projections/kitchenOr
 import { useKitchenMetricsProjection } from '../../../store/projections/kitchenMetricsProjection.js';
 import { useMutationCoordinator } from '../../../store/mutationCoordinator.js';
 import { useKdsIdentityStore } from '../../../store/kdsIdentityStore.js';
+import { useRuntimeIdentityStore } from '../../../store/runtimeIdentityStore.js';
 import { useLeadershipStore } from '../../../store/leadershipStore.js';
 import { clearLeadershipState, clearAllRuntimeState } from '../../../lib/idbStorage.js';
 import OrderCard from '../components/OrderCard.jsx';
@@ -28,7 +29,8 @@ const KDSBoard = () => {
   const liveOrders = getOptimisticOrders(queue);
 
   // Identity
-  const { branchId, stationId } = useKdsIdentityStore();
+  const { stationId } = useKdsIdentityStore();
+  const { branchId } = useRuntimeIdentityStore();
   
   // Leadership Election (Multi-tab protection)
   const { isLeader, isAttemptingLock, leaderHeartbeatAge, requestLeadership, forceLeadershipRecovery, disposeLeadership } = useLeadershipStore();
