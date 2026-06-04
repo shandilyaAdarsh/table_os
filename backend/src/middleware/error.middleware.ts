@@ -18,11 +18,11 @@ export const errorMiddleware = (
   let message = 'Internal Server Error';
   let details = undefined;
 
-  if (err instanceof AppError) {
-    statusCode = err.statusCode;
+  if (err instanceof AppError || err.isOperational) {
+    statusCode = err.statusCode || 500;
     errorCode = err.code as ErrorCode;
     message = err.message;
-    details = (err as any).fields ?? err.details;
+    details = err.fields ?? err.details;
   } else if (err.name === 'ZodError') {
     statusCode = 422;
     errorCode = ErrorCode.VALIDATION_ERROR;

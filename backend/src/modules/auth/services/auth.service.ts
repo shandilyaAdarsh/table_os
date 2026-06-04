@@ -374,27 +374,32 @@ export async function validateAccessToken(accessToken: string): Promise<TokenVal
     return { valid: false, error: error?.message ?? 'Invalid token' };
   }
 
-  const { data: userRecord, error: userError } = await supabaseAdmin
-    .from('users')
-    .select('tenant_id, role, branch_ids, is_first_login')
-    .eq('auth_id', data.user.id)
-    .single();
+  const profile = await findAdminProfileById(data.user.id);
 
-  if (userError || !userRecord) {
-    return { valid: false, error: 'User profile not found' };
+  if (!profile) {
+    return { valid: false, error: 'Admin profile not found' };
   }
 
-  if (!userRecord.tenant_id) {
-    return { valid: false, error: 'User has no tenant assigned. Contact support.' };
+  if (!profile.is_active) {
+    return { valid: false, error: 'Account is disabled' };
   }
+
+  if (profile.is_locked) {
+    return { valid: false, error: 'Account is locked' };
+  }
+
+  const branchIds = Array.isArray(data.user.app_metadata?.branch_ids)
+    ? (data.user.app_metadata.branch_ids as string[])
+    : [];
 
   return {
     valid: true,
     user_id: data.user.id,
     email: data.user.email,
-    role: userRecord.role,
-    tenant_id: userRecord.tenant_id,
-    branch_ids: userRecord.branch_ids ?? [],
-    must_change_password: Boolean(userRecord.is_first_login),
+    role: profile.role,
+    tenant_id: profile.tenant_id,
+    branch_ids: branchIds,
+    full_name: profile.full_name,
+    must_change_password: profile.must_change_password ?? false,
   };
 }

@@ -14,6 +14,7 @@ import {
   listSessions,
   exchangeRuntimeSession,
 } from './controllers/auth.controller';
+import { loginKds } from './controllers/kds-auth.controller';
 import {
   authenticate,
   requirePasswordChanged,
@@ -23,6 +24,7 @@ const router: Router = Router();
 
 // ─── Public routes ────────────────────────────────────────────
 router.post('/login',           login);
+router.post('/kds/login',       loginKds);
 router.post('/forgot-password', forgotPassword);
 
 // ─── Reset password — requires JWT from email link ────────────

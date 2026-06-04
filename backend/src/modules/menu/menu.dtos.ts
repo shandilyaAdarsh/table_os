@@ -216,3 +216,22 @@ export interface MenuCategoryListQuery {
   page?:         number;
   limit?:        number;
 }
+
+// ─── Recommendation DTOs ──────────────────────────────────────
+
+import type { RecommendationType } from './menu.types';
+
+export interface CreateRecommendationDto {
+  branch_id?:                string;
+  recommended_menu_item_id: string;
+  recommendation_type:      RecommendationType;
+  priority?:                 number;
+}
+
+export interface UpdateRecommendationDto {
+  branch_id?:                string | null;
+  recommended_menu_item_id?: string;
+  recommendation_type?:      RecommendationType;
+  priority?:                 number;
+  is_active?:                boolean;
+}

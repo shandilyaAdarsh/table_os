@@ -64,7 +64,7 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
     }
 
     // 2. Entropy / length validation
-    if (!publicToken || publicToken.length < 32) {
+    if (!publicToken || publicToken.length < 16) {
       res.status(400).json({ success: false, message: 'Invalid token format.' });
       return;
     }
@@ -81,11 +81,34 @@ router.get('/:token', async (req: Request, res: Response, next: NextFunction) =>
       data: bootstrapPayload
     });
   } catch (err: any) { 
-    // Do not leak internal errors to public clients
-    if (err.message === 'Invalid or expired QR code.' || err.message === 'Table is currently unavailable.') {
-       res.status(404).json({ success: false, message: err.message });
+    // Map internal error messages to standard error codes
+    let code = 'INTERNAL_ERROR';
+    let status = 500;
+
+    if (err.message === 'Invalid or expired QR code.') {
+      code = 'QR_NOT_FOUND';
+      status = 404;
+    } else if (
+      err.message === 'TABLE_RECORD_MISSING' ||
+      err.message === 'TABLE_SOFT_DELETED' ||
+      err.message === 'TABLE_INACTIVE'
+    ) {
+      code = 'TABLE_NOT_FOUND';
+      status = 404;
+    } else if (
+      err.message === 'BRANCH_MISSING' ||
+      err.message === 'TENANT_MISSING' ||
+      err.message === 'Branch is suspended.' || 
+      err.message === 'Tenant is not currently operational.'
+    ) {
+      code = 'BRANCH_NOT_FOUND';
+      status = 404;
+    }
+
+    if (status === 404) {
+      res.status(404).json({ success: false, code, message: err.message });
     } else {
-       next(err);
+      next(err);
     }
   }
 });

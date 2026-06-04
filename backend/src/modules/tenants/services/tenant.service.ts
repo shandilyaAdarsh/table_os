@@ -4,7 +4,7 @@ import { NotFoundError } from '../../../shared/errors/AppError';
 
 export async function getTenantById(id: string): Promise<Tenant> {
   const tenant = await repo.findTenantById(id);
-  if (!tenant) throw new NotFoundError('Tenant not found');
+  if (!tenant) throw new NotFoundError('Tenant');
   return tenant;
 }
 
@@ -27,13 +27,12 @@ export async function addBranchToTenant(req: CreateBranchRequest): Promise<Branc
 }
 
 export async function updateBranch(tenantId: string, branchId: string, updates: Partial<Branch>): Promise<Branch> {
-  // Ensure tenant exists
-  await getTenantById(tenantId);
-  return repo.updateBranch(tenantId, branchId, updates);
+  // Tenant access is enforced by authenticate + tenantContext middleware.
+  const branch = await repo.updateBranch(tenantId, branchId, updates);
+  if (!branch) throw new NotFoundError('Branch');
+  return branch;
 }
 
 export async function deleteBranch(tenantId: string, branchId: string): Promise<void> {
-  // Ensure tenant exists
-  await getTenantById(tenantId);
-  return repo.deleteBranch(tenantId, branchId);
+  await repo.deleteBranch(tenantId, branchId);
 }

@@ -8,6 +8,73 @@ import { supabaseAdmin } from '../../../config/supabase';
 import { logger } from '../../../shared/utils/logger';
 import type { MenuItem, BranchMenuItemOverride } from '../menu.types';
 import type { CreateMenuItemDto, UpdateMenuItemDto, MenuItemListQuery } from '../menu.dtos';
+import { findCategoryById } from './menu-category.repository';
+
+/** Columns from orderlyy_admin-app bootstrap SQL coexisting with the modern menu schema. */
+type LegacyMenuItemColumns = {
+  category: boolean;
+  price: boolean;
+  is_available: boolean;
+};
+
+let legacyColumnsCache: LegacyMenuItemColumns | null = null;
+
+async function columnExistsOnMenuItems(column: string): Promise<boolean> {
+  const { error } = await supabaseAdmin.from('menu_items').select(column).limit(0);
+  if (!error) return true;
+
+  const msg = error.message.toLowerCase();
+  return !(
+    msg.includes(column) &&
+    (msg.includes('does not exist') || msg.includes('could not find'))
+  );
+}
+
+async function getLegacyMenuItemColumns(): Promise<LegacyMenuItemColumns> {
+  if (legacyColumnsCache) return legacyColumnsCache;
+
+  const [category, price, is_available] = await Promise.all([
+    columnExistsOnMenuItems('category'),
+    columnExistsOnMenuItems('price'),
+    columnExistsOnMenuItems('is_available'),
+  ]);
+
+  legacyColumnsCache = { category, price, is_available };
+  return legacyColumnsCache;
+}
+
+async function legacyCategoryLabel(
+  tenantId: string,
+  categoryId: string
+): Promise<string> {
+  const category = await findCategoryById(tenantId, categoryId);
+  if (!category) {
+    throw new Error(`[MenuItemRepo] category not found: ${categoryId}`);
+  }
+  return category.name;
+}
+
+async function applyLegacyMenuItemFields(
+  tenantId: string,
+  row: Record<string, unknown>,
+  opts: {
+    categoryId: string;
+    basePrice: number;
+    status?: string;
+  }
+): Promise<void> {
+  const legacy = await getLegacyMenuItemColumns();
+
+  if (legacy.category) {
+    row.category = await legacyCategoryLabel(tenantId, opts.categoryId);
+  }
+  if (legacy.price) {
+    row.price = opts.basePrice;
+  }
+  if (legacy.is_available) {
+    row.is_available = (opts.status ?? 'active') === 'active';
+  }
+}
 
 // ─── Queries ──────────────────────────────────────────────────
 
@@ -164,28 +231,36 @@ export async function createMenuItem(
   dto: CreateMenuItemDto,
   createdBy: string
 ): Promise<MenuItem> {
+  const row: Record<string, unknown> = {
+    tenant_id:         tenantId,
+    category_id:       dto.category_id,
+    name:              dto.name,
+    slug:              dto.slug,
+    description:       dto.description ?? null,
+    short_description: dto.short_description ?? null,
+    sku:               dto.sku ?? null,
+    base_price:        dto.base_price,
+    pricing_type:      dto.pricing_type ?? 'fixed',
+    tax_group_id:      dto.tax_group_id ?? null,
+    dietary_tags:      dto.dietary_tags ?? [],
+    spice_level:       dto.spice_level ?? 'none',
+    prep_time_minutes: dto.prep_time_minutes ?? null,
+    sort_order:        dto.sort_order ?? 0,
+    is_featured:       dto.is_featured ?? false,
+    image_url:         dto.image_url ?? null,
+    thumbnail_url:     dto.thumbnail_url ?? null,
+    created_by:        createdBy,
+  };
+
+  await applyLegacyMenuItemFields(tenantId, row, {
+    categoryId: dto.category_id,
+    basePrice: dto.base_price,
+    status: 'active',
+  });
+
   const { data, error } = await supabaseAdmin
     .from('menu_items')
-    .insert({
-      tenant_id:         tenantId,
-      category_id:       dto.category_id,
-      name:              dto.name,
-      slug:              dto.slug,
-      description:       dto.description ?? null,
-      short_description: dto.short_description ?? null,
-      sku:               dto.sku ?? null,
-      base_price:        dto.base_price,
-      pricing_type:      dto.pricing_type ?? 'fixed',
-      tax_group_id:      dto.tax_group_id ?? null,
-      dietary_tags:      dto.dietary_tags ?? [],
-      spice_level:       dto.spice_level ?? 'none',
-      prep_time_minutes: dto.prep_time_minutes ?? null,
-      sort_order:        dto.sort_order ?? 0,
-      is_featured:       dto.is_featured ?? false,
-      image_url:         dto.image_url ?? null,
-      thumbnail_url:     dto.thumbnail_url ?? null,
-      created_by:        createdBy,
-    })
+    .insert(row)
     .select()
     .single();
 
@@ -205,13 +280,26 @@ export async function updateMenuItem(
 ): Promise<MenuItem> {
   const { version_num, ...updateData } = dto;
 
+  const patch: Record<string, unknown> = {
+    ...updateData,
+    updated_by: updatedBy,
+    version_num: version_num + 1,
+  };
+
+  const legacy = await getLegacyMenuItemColumns();
+  if (updateData.category_id && legacy.category) {
+    patch.category = await legacyCategoryLabel(tenantId, updateData.category_id);
+  }
+  if (updateData.base_price !== undefined && legacy.price) {
+    patch.price = updateData.base_price;
+  }
+  if (updateData.status !== undefined && legacy.is_available) {
+    patch.is_available = updateData.status === 'active';
+  }
+
   const { data, error } = await supabaseAdmin
     .from('menu_items')
-    .update({
-      ...updateData,
-      updated_by: updatedBy,
-      version_num: version_num + 1
-    })
+    .update(patch)
     .eq('tenant_id', tenantId)
     .is('deleted_at', null)
     .eq('id', itemId)
@@ -336,7 +424,7 @@ export async function replaceItemModifierGroups(
     .from('menu_item_modifier_groups')
     .delete()
     .eq('tenant_id', tenantId)
-    .eq('item_id', itemId);
+    .eq('menu_item_id', itemId);
 
   if (delError) {
     throw new Error(`[MenuItemRepo] replaceItemModifierGroups (delete): ${delError.message}`);
@@ -346,9 +434,9 @@ export async function replaceItemModifierGroups(
 
   const rows = modifierGroupIds.map((groupId, idx) => ({
     tenant_id:         tenantId,
-    item_id:           itemId,
+    menu_item_id:      itemId,
     modifier_group_id: groupId,
-    sort_order:        idx,
+    display_order:     idx,
   }));
 
   const { error: insError } = await supabaseAdmin
@@ -368,9 +456,9 @@ export async function findModifierGroupIdsForItem(
     .from('menu_item_modifier_groups')
     .select('modifier_group_id')
     .eq('tenant_id', tenantId)
-    .eq('item_id', itemId)
+    .eq('menu_item_id', itemId)
     .eq('is_active', true)
-    .order('sort_order', { ascending: true });
+    .order('display_order', { ascending: true });
 
   if (error) {
     throw new Error(`[MenuItemRepo] findModifierGroupIdsForItem: ${error.message}`);

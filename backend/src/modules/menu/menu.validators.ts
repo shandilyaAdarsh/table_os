@@ -234,3 +234,23 @@ export const MenuCategoryListQuerySchema = z.object({
   page:         z.coerce.number().int().min(1).optional().default(1),
   limit:        z.coerce.number().int().min(1).max(200).optional().default(50),
 });
+
+// ─── Recommendation Schemas ─────────────────────────────────────
+
+const RECOMMENDATION_TYPES = ['complementary', 'variant', 'beverage', 'upsell', 'popular_pair'] as const;
+
+export const CreateRecommendationSchema = z.object({
+  branch_id:                optUuid,
+  recommended_menu_item_id: uuid,
+  recommendation_type:      z.enum(RECOMMENDATION_TYPES),
+  priority:                 z.number().int().optional().default(0),
+});
+
+export const UpdateRecommendationSchema = z.object({
+  branch_id:                uuid.nullable().optional(),
+  recommended_menu_item_id: uuid.optional(),
+  recommendation_type:      z.enum(RECOMMENDATION_TYPES).optional(),
+  priority:                 z.number().int().optional(),
+  is_active:                z.boolean().optional(),
+});
+

@@ -21,7 +21,10 @@ import type { Request, Response, NextFunction } from 'express';
 import { supabaseAdmin } from '../../config/supabase';
 import { findAdminProfileById } from '../auth/repositories/auth.repository';
 import { logger as log } from '../../shared/utils/logger';
-import { skippedTenantsFallback } from '../admin/onboarding/onboarding.admin.service';
+import {
+  skippedTenantsFallback,
+  resolveOnboardingStep,
+} from '../admin/onboarding/onboarding.admin.service';
 
 // ─── Response shape (mirrors AppContextDto in Flutter) ───────
 
@@ -45,6 +48,7 @@ interface BootstrapResponse {
       plan: string;
       status: string;
       is_active: boolean;
+      dismissed_qr_banner: boolean;
     } | null;
     branches: Array<{
       id: string;
@@ -55,6 +59,7 @@ interface BootstrapResponse {
     onboarding: {
       is_complete: boolean;
       is_skipped: boolean;
+      step: number;
       steps_completed: string[];
     };
     flags: {
@@ -68,7 +73,7 @@ interface BootstrapResponse {
 
 // Current bootstrap schema version.
 // Increment when the payload shape changes to invalidate stale client caches.
-const BOOTSTRAP_VERSION = 1;
+const BOOTSTRAP_VERSION = 2;
 
 // ─── Controller ───────────────────────────────────────────────
 
@@ -105,6 +110,7 @@ export async function bootstrap(
     let onboarding: BootstrapResponse['data']['onboarding'] = {
       is_complete: false,
       is_skipped: false,
+      step: 1,
       steps_completed: [],
     };
 
@@ -112,7 +118,7 @@ export async function bootstrap(
       // 2a. Load tenant
       const { data: tenantData, error: tenantError } = await supabaseAdmin
         .from('tenants')
-        .select('id, name, slug, status, created_at')
+        .select('id, name, slug, status, created_at, dismissed_qr_banner')
         .eq('id', tenantId)
         .maybeSingle();
 
@@ -129,6 +135,7 @@ export async function bootstrap(
           plan: 'standard', // Reserved for future billing integration
           status: tenantData.status,
           is_active: tenantData.status !== 'suspended' && tenantData.status !== 'deleted',
+          dismissed_qr_banner: tenantData.dismissed_qr_banner ?? false,
         };
         log.info({ userId, tenantId, name: tenantData.name }, '[Bootstrap] Tenant resolved');
       } else {
@@ -159,7 +166,7 @@ export async function bootstrap(
       // 2c. Load onboarding state
       const { data: onboardingData, error: onboardingError } = await supabaseAdmin
         .from('onboarding_state')
-        .select('is_complete, steps_completed, is_skipped')
+        .select('is_complete, steps_completed')
         .eq('tenant_id', tenantId)
         .maybeSingle();
 
@@ -169,13 +176,18 @@ export async function bootstrap(
         onboarding = {
           is_complete: false,
           is_skipped: isSkipped,
+          step: resolveOnboardingStep([], false, isSkipped),
           steps_completed: [],
         };
       } else {
+        const stepsCompleted = (onboardingData.steps_completed as string[]) ?? [];
+        const isComplete = onboardingData.is_complete ?? false;
+        const isSkipped = skippedTenantsFallback.has(tenantId);
         onboarding = {
-          is_complete: onboardingData.is_complete ?? false,
-          is_skipped: onboardingData.is_skipped ?? false,
-          steps_completed: (onboardingData.steps_completed as string[]) ?? [],
+          is_complete: isComplete,
+          is_skipped: isSkipped,
+          steps_completed: stepsCompleted,
+          step: resolveOnboardingStep(stepsCompleted, isComplete, isSkipped),
         };
       }
       log.info({ userId, tenantId, onboardingComplete: onboarding.is_complete, onboardingSkipped: onboarding.is_skipped }, '[Bootstrap] Onboarding state resolved');

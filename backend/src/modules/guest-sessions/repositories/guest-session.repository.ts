@@ -7,13 +7,13 @@ export class GuestSessionRepository {
   static async createSession(
     dto: CreateGuestSessionDto & { expires_at: string }
   ): Promise<GuestSession> {
-    // 1. Create customer identity first
+    // 1. Create or ensure customer identity first
     const { error: identityError } = await supabaseAdmin
       .from('customer_identities')
-      .insert({
+      .upsert({
         id: dto.customer_identity_id,
         tenant_id: dto.tenant_id,
-      })
+      }, { onConflict: 'id' })
       .select('id')
       .single();
 
@@ -23,18 +23,23 @@ export class GuestSessionRepository {
     }
 
     // 2. Create the session
+    const crypto = require('crypto');
     const { data, error } = await supabaseAdmin
       .from('guest_sessions')
       .insert({
         tenant_id: dto.tenant_id,
         branch_id: dto.branch_id,
         table_id: dto.table_id,
-        device_fingerprints: [dto.device_fingerprint],
-        snapshot_id: dto.snapshot_id ?? null,
-        customer_identity_id: dto.customer_identity_id,
-        status: 'ACTIVE',
-        expires_at: dto.expires_at,
-        last_active_at: new Date().toISOString(),
+        session_token: crypto.randomUUID(),
+        guest_identifier: dto.customer_identity_id,
+        is_active: true,
+        session_data: {
+          device_fingerprints: [dto.device_fingerprint],
+          expires_at: dto.expires_at,
+          snapshot_id: dto.snapshot_id ?? null,
+        },
+        started_at: new Date().toISOString(),
+        last_activity_at: new Date().toISOString(),
       })
       .select()
       .single();
@@ -67,8 +72,7 @@ export class GuestSessionRepository {
       .select('*')
       .eq('tenant_id', tenantId)
       .eq('table_id', tableId)
-      .eq('status', 'ACTIVE')
-      .gt('expires_at', new Date().toISOString())
+      .eq('is_active', true)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -84,15 +88,21 @@ export class GuestSessionRepository {
     tenantId: string,
     sessionId: string,
     fingerprint: string,
-    existingFingerprints: string[]
+    existingData: Record<string, any>
   ): Promise<GuestSession> {
+    const existingFingerprints = existingData.device_fingerprints || [];
     const updatedFingerprints = Array.from(new Set([...existingFingerprints, fingerprint]));
     
+    const updatedData = {
+      ...existingData,
+      device_fingerprints: updatedFingerprints
+    };
+
     const { data, error } = await supabaseAdmin
       .from('guest_sessions')
       .update({
-        device_fingerprints: updatedFingerprints,
-        last_active_at: new Date().toISOString(),
+        session_data: updatedData,
+        last_activity_at: new Date().toISOString(),
       })
       .eq('tenant_id', tenantId)
       .eq('id', sessionId)
@@ -111,12 +121,14 @@ export class GuestSessionRepository {
     sessionId: string,
     status: 'ACTIVE' | 'EXPIRED' | 'COMPLETED' | 'ABANDONED' | 'CLOSED'
   ): Promise<GuestSession> {
+    const isActive = status === 'ACTIVE';
+    
     const { data, error } = await supabaseAdmin
       .from('guest_sessions')
       .update({
-        status,
-        last_active_at: new Date().toISOString(),
-        ...(status === 'CLOSED' ? { closed_at: new Date().toISOString() } : {}),
+        is_active: isActive,
+        last_activity_at: new Date().toISOString(),
+        ...(!isActive ? { ended_at: new Date().toISOString() } : {}),
       })
       .eq('tenant_id', tenantId)
       .eq('id', sessionId)
@@ -132,25 +144,26 @@ export class GuestSessionRepository {
 
   static async cleanupAbandonedSessions(): Promise<number> {
     const now = new Date().toISOString();
-    // Mark ACTIVE sessions that are past their expires_at as EXPIRED
+    // Mark ACTIVE sessions that are past their expires_at as inactive (EXPIRED)
+    // Note: Since expires_at is inside JSONB, we use the arrow operator.
     const { error: expireError, count: expiredCount } = await supabaseAdmin
       .from('guest_sessions')
-      .update({ status: 'EXPIRED' })
-      .eq('status', 'ACTIVE')
-      .lt('expires_at', now);
+      .update({ is_active: false, ended_at: now })
+      .eq('is_active', true)
+      .lt('session_data->>expires_at', now);
 
     if (expireError) {
       logger.error({ err: expireError }, 'cleanupAbandonedSessions failed during expiration marking');
       throw new Error(`[GuestSessionRepo] cleanupExpired failed: ${expireError.message}`);
     }
 
-    // Mark ACTIVE sessions that have no activity for 6 hours as ABANDONED
+    // Mark ACTIVE sessions that have no activity for 6 hours as inactive (ABANDONED)
     const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
     const { error: abandonError, count: abandonedCount } = await supabaseAdmin
       .from('guest_sessions')
-      .update({ status: 'ABANDONED' })
-      .eq('status', 'ACTIVE')
-      .lt('last_active_at', sixHoursAgo);
+      .update({ is_active: false, ended_at: now })
+      .eq('is_active', true)
+      .lt('last_activity_at', sixHoursAgo);
 
     if (abandonError) {
       logger.error({ err: abandonError }, 'cleanupAbandonedSessions failed during abandonment marking');

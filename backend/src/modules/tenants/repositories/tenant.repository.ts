@@ -11,13 +11,17 @@ export async function findTenantById(id: string): Promise<Tenant | null> {
     .from('tenants')
     .select('*')
     .eq('id', id)
-    // Allow trial, active, and suspended statuses — never filter by status here.
-    // Tenant gating (suspension, etc.) is handled at the middleware/controller layer.
-    .neq('status', 'deleted')
-    .is('deleted_at', null)
-    .single();
+    .maybeSingle();
 
-  if (error || !data) return null;
+  if (error) {
+    throw new Error(`Tenant lookup failed: ${error.message}`);
+  }
+
+  // Align with bootstrap: only hard-deleted tenants are invisible to the app.
+  if (!data || data.status === 'deleted') {
+    return null;
+  }
+
   return data as Tenant;
 }
 
@@ -72,17 +76,31 @@ export async function createBranch(req: CreateBranchRequest): Promise<Branch> {
   return data as Branch;
 }
 
-export async function updateBranch(tenantId: string, branchId: string, updates: Partial<Branch>): Promise<Branch> {
+export async function updateBranch(
+  tenantId: string,
+  branchId: string,
+  updates: Partial<Branch>
+): Promise<Branch | null> {
+  const safeUpdates: Record<string, unknown> = {};
+  if (updates.name !== undefined) safeUpdates.name = updates.name;
+  if (updates.timezone !== undefined) safeUpdates.timezone = updates.timezone;
+  if (updates.status !== undefined) safeUpdates.status = updates.status;
+  if (updates.address !== undefined) safeUpdates.address = updates.address;
+  if (updates.phone !== undefined) safeUpdates.phone = updates.phone;
+  if (updates.email !== undefined) safeUpdates.email = updates.email;
+  if (updates.region !== undefined) safeUpdates.region = updates.region;
+
   const { data, error } = await supabaseAdmin
     .from('branches')
-    .update(updates)
+    .update(safeUpdates)
     .eq('id', branchId)
     .eq('tenant_id', tenantId)
+    .neq('status', 'deleted')
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
-  return data as Branch;
+  return data as Branch | null;
 }
 
 export async function deleteBranch(tenantId: string, branchId: string): Promise<void> {
