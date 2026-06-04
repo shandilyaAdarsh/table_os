@@ -9,7 +9,8 @@ export const useRuntimeIdentityStore = create(
       deviceId: crypto.randomUUID(), // Generated once per installation
       terminalId: null,              // Backend-issued
       branchId: null,                // Selected branch
-      
+      runtimeToken: null,            // Backend-issued strict JWT
+
       // In-memory runtime session fields (re-generated on load)
       runtimeSessionId: crypto.randomUUID(),
       runtimeEpoch: Date.now(),
@@ -17,12 +18,14 @@ export const useRuntimeIdentityStore = create(
 
       setTerminalId: (terminalId) => set({ terminalId }),
       setBranchId: (branchId) => set({ branchId }),
+      setRuntimeToken: (runtimeToken) => set({ runtimeToken }),
       setStaffId: (staffId) => set({ staffId }),
 
       // Full reset (e.g. device deregistration)
       clearIdentity: () => set({
         terminalId: null,
         branchId: null,
+        runtimeToken: null,
         staffId: null,
         runtimeSessionId: crypto.randomUUID(),
         runtimeEpoch: Date.now(),
@@ -35,6 +38,7 @@ export const useRuntimeIdentityStore = create(
         deviceId: state.deviceId,
         terminalId: state.terminalId,
         branchId: state.branchId,
+        runtimeToken: state.runtimeToken,
       }), // Only persist these fields
     }
   )

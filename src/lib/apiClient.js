@@ -1,8 +1,12 @@
 import { useRuntimeIdentityStore } from '../store/runtimeIdentityStore';
+import { useRuntimeAuthStore } from '../store/runtimeAuthStore';
 import { useConnectivityStore } from '../store/connectivityStore';
 import { runtime } from '../runtime/index';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { resolveApiBaseUrl } from './resolveApiBaseUrl';
+export { resolveApiBaseUrl };
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 /**
  * Standard fetch wrapper that enforces Runtime Governance.
@@ -11,8 +15,9 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
  * MUST be used by all Repositories querying protected backend runtime routes.
  */
 export async function fetchWithRuntime(endpoint, options = {}) {
-  // Assuming runtime auth token is stored somewhere secure or provided by Supabase session
-  const token = localStorage.getItem('supabase.auth.token'); // Fallback placeholder
+  const auth = useRuntimeAuthStore.getState();
+  const identity = useRuntimeIdentityStore.getState();
+  const token = auth.runtimeToken;
   
   const headers = new Headers(options.headers || {});
   
@@ -31,11 +36,10 @@ export async function fetchWithRuntime(endpoint, options = {}) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const identity = useRuntimeIdentityStore.getState();
-  if (identity.branchId) {
+  if (identity && identity.branchId) {
     headers.set('X-Branch-Id', identity.branchId);
   }
-  if (identity.terminalId) {
+  if (identity && identity.terminalId) {
     headers.set('X-Terminal-Id', identity.terminalId);
   }
 
@@ -56,6 +60,46 @@ export async function fetchWithRuntime(endpoint, options = {}) {
     return response;
   } catch (error) {
     console.error(`[RuntimeApiClient] Network failure fetching ${endpoint}`, error);
+    useConnectivityStore.getState().recordApiTimeout();
+    throw error;
+  }
+}
+
+/**
+ * Executes a public API call (e.g. for QR resolution or bootstrap).
+ * Enforces API_BASE_URL routing but skips authentication headers.
+ */
+export async function fetchPublicApi(endpoint, options = {}) {
+  const headers = new Headers(options.headers || {});
+
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  headers.set('Accept', 'application/json');
+
+  try {
+    const finalUrl = `${API_BASE_URL}${endpoint}`;
+    
+    console.log('[QR]', 'base_url', API_BASE_URL);
+    console.log('[QR]', 'final_url', finalUrl);
+    
+    const response = await fetch(finalUrl, {
+      ...options,
+      headers
+    });
+
+    console.log('[QR]', 'status', response.status);
+    console.log('[QR]', 'content_type', response.headers.get('content-type'));
+
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('text/html')) {
+      throw new Error('QR API Misconfiguration:\nExpected JSON response but received HTML.\nRequest is being routed to frontend instead of backend.');
+    }
+
+    useConnectivityStore.getState().recordApiSuccess();
+    return response;
+  } catch (error) {
+    console.error(`[PublicApiClient] Network failure fetching ${endpoint}`, error);
     useConnectivityStore.getState().recordApiTimeout();
     throw error;
   }

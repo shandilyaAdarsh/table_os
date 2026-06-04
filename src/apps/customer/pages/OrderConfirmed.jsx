@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import confetti from 'canvas-confetti'
 import { fetchWithRuntime } from '../../../lib/apiClient'
 import { motion } from 'framer-motion'
+import { getQrSession } from '../utils/qrSession'
 
 export default function OrderConfirmed() {
   const { orderId } = useParams()
@@ -23,7 +24,11 @@ export default function OrderConfirmed() {
 
     const fetchOrder = async () => {
       try {
-        const res = await fetchWithRuntime(`/api/v1/customer/orders/${resolvedOrderId}`)
+        const { tenantId, tableId } = getQrSession()
+        const params = new URLSearchParams()
+        if (tenantId) params.set('tenantId', tenantId)
+        if (tableId) params.set('tableId', tableId)
+        const res = await fetchWithRuntime(`/api/v1/customer/orders/${resolvedOrderId}?${params.toString()}`)
         if (!res.ok) throw new Error('Not found')
         const { data } = await res.json()
         if (!data) throw new Error('Not found')

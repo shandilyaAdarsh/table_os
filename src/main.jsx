@@ -1,7 +1,9 @@
+import './polyfill.js' // MUST BE FIRST
 import React, { useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import './index.css'
+
 
 // Core
 import { supabase } from './lib/supabase.js'
@@ -15,6 +17,8 @@ import ProtectedRoute from './components/shared/ProtectedRoute.jsx'
 // KDS
 import KDSBoard from './apps/kds/pages/KDSBoard'
 import KDSSettings from './apps/kds/pages/KDSSettings'
+import { KDSLogin } from './apps/kds/pages/KDSLogin'
+import { KdsGate } from './apps/kds/components/KdsGate'
 
 // Customer Menu
 import { 
@@ -29,6 +33,7 @@ import {
   CartPage,
   CheckIn
 } from './apps/customer/index'
+import TableQrLanding from './apps/customer/pages/TableQrLanding.jsx'
 
 // Waiter / Staff App (Placeholder for real staff app)
 import { 
@@ -58,31 +63,53 @@ function AuthGate({ children }) {
   const isHydrated = useAuthStore(state => state.isHydrated)
   const resolveContext = useAuthStore(state => state.resolveContext)
   const logout = useAuthStore(state => state.logout)
+  const [healthStatus, setHealthStatus] = React.useState('checking') // checking, ok, degraded
 
   useEffect(() => {
-    // Listen for auth changes globally
-    if (supabase) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log(`[AuthGate] Event: ${event}`)
-        
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          // Reresolve context on login or token rotation
-          await resolveContext()
-        } else if (event === 'SIGNED_OUT') {
-          logout()
+    // 1. Pre-boot Health Check
+    const checkHealth = async () => {
+      try {
+        const { resolveApiBaseUrl } = await import('./lib/apiClient.js')
+        const url = resolveApiBaseUrl()
+        const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(5000) })
+        if (res.ok) {
+          setHealthStatus('ok')
+        } else {
+          setHealthStatus('degraded')
         }
-      })
-
-      return () => subscription.unsubscribe()
-    } else {
-      console.warn('[AuthGate] Supabase client is null. Bypassing auth listener.');
-      // Proceed with hydration anyway so the UI can load
-      resolveContext();
+      } catch (err) {
+        console.error('[AuthGate] Health check failed:', err)
+        setHealthStatus('degraded')
+      }
     }
+
+    checkHealth().then(() => {
+      // 2. Listen for auth changes globally
+      if (supabase) {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+          console.log(`[AuthGate] Event: ${event}`)
+          
+          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+            // Reresolve context on login or token rotation
+            await resolveContext()
+          } else if (event === 'SIGNED_OUT') {
+            logout()
+          }
+        })
+  
+        // 3. Resolve initial context
+        resolveContext();
+  
+        return () => subscription.unsubscribe()
+      } else {
+        console.warn('[AuthGate] Supabase client is null. Bypassing auth listener.');
+        resolveContext();
+      }
+    });
   }, [resolveContext, logout])
 
   // Hydration control: Prevent indeterminate UI states before state is reloaded
-  if (!isHydrated) {
+  if (!isHydrated || healthStatus === 'checking') {
     return (
       <div className="h-screen w-screen flex items-center justify-center bg-[#0a0a0a]">
         <div className="flex flex-col items-center gap-4">
@@ -95,78 +122,100 @@ function AuthGate({ children }) {
     )
   }
 
+  if (healthStatus === 'degraded') {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#0a0a0a] text-white p-6">
+        <h1 className="text-xl font-bold text-red-500 mb-2">Network Degraded</h1>
+        <p className="text-sm text-gray-400 text-center max-w-md">
+          We are unable to connect to the local runtime server. Please check your WiFi connection or ensure the POS system is online.
+        </p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="mt-6 px-4 py-2 bg-amber-500 text-black font-bold rounded-lg"
+        >
+          Retry Connection
+        </button>
+      </div>
+    )
+  }
+
   return children
 }
 
 function CheckInRoute() {
   const navigate = useNavigate()
-  return <CheckIn onComplete={() => navigate('/menu/browse')} />
+  return <CheckIn onComplete={() => navigate(`/menu/browse${window.location.search}`)} />
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <AuthGate>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Navigate to="/menu" replace />} />
+    <BrowserRouter>
+      <Routes>
+        {/* KDS App Surface (Independent from Customer AuthGate) */}
+        <Route path="/kds/*" element={<KdsGate />} />
 
-          {/* Customer Menu */}
-          <Route path="/menu" element={<MenuSplash />} />
-          <Route path="/menu/browse" element={<MenuHome />} />
-          <Route path="/menu/item/:id" element={<ItemDetail />} />
-          <Route path="/menu/confirmed/:id" element={<OrderConfirmation />} />
-          <Route path="/menu/track/:orderId" element={<OrderTracking />} />
-          <Route path="/menu/pay" element={<PaymentScreen />} />
-          <Route path="/menu/orders" element={<OrdersPage />} />
-          <Route path="/menu/profile" element={<ProfilePage />} />
-          <Route path="/menu/cart" element={<CartPage />} />
-          <Route path="/menu/checkin" element={<CheckInRoute />} />
+        {/* Customer & Staff App Surfaces (Requires AuthGate for Profile Resolution) */}
+        <Route path="*" element={
+          <AuthGate>
+            <Routes>
+              <Route path="/" element={<Navigate to="/menu" replace />} />
 
-          {/* Admin App is handled natively in Flutter, no web routes here */}
+              {/* Table QR scan entry (app.orderlli.com/t/{token}) */}
+              <Route path="/t/:token" element={<TableQrLanding />} />
 
-          {/* KDS */}
-          <Route path="/kds" element={<KDSBoard />} />
-          <Route path="/kds/settings" element={<KDSSettings />} />
+              {/* Customer Menu */}
+              <Route path="/menu" element={<MenuSplash />} />
+              <Route path="/menu/browse" element={<MenuHome />} />
+              <Route path="/menu/item/:id" element={<ItemDetail />} />
+              <Route path="/menu/confirmed/:id" element={<OrderConfirmation />} />
+              <Route path="/menu/track/:orderId" element={<OrderTracking />} />
+              <Route path="/menu/pay" element={<PaymentScreen />} />
+              <Route path="/menu/orders" element={<OrdersPage />} />
+              <Route path="/menu/profile" element={<ProfilePage />} />
+              <Route path="/menu/cart" element={<CartPage />} />
+              <Route path="/menu/checkin" element={<CheckInRoute />} />
 
-          {/* Staff Runtime */}
-          <Route path="/staff/login" element={<StaffLogin />} />
-          <Route path="/staff/tables" element={
-            <ProtectedRoute allowedRoles={['waiter', 'manager', 'owner']} redirectTo="/staff/login">
-              <StaffTables />
-            </ProtectedRoute>
-          } />
-          <Route path="/staff/table/:id" element={
-            <ProtectedRoute allowedRoles={['waiter', 'manager', 'owner']} redirectTo="/staff/login">
-              <StaffTableDetail />
-            </ProtectedRoute>
-          } />
+              {/* Admin App is handled natively in Flutter, no web routes here */}
 
-          {/* POS Runtime */}
-          <Route path="/pos/tables" element={
-            <ProtectedRoute allowedRoles={['waiter', 'manager', 'owner']} redirectTo="/staff/login">
-              <POSTableOverview />
-            </ProtectedRoute>
-          } />
-          <Route path="/pos/table/:id" element={
-            <ProtectedRoute allowedRoles={['waiter', 'manager', 'owner']} redirectTo="/staff/login">
-              <POSTableDetail />
-            </ProtectedRoute>
-          } />
+              {/* Staff Runtime */}
+              <Route path="/staff/login" element={<StaffLogin />} />
+              <Route path="/staff/tables" element={
+                <ProtectedRoute allowedRoles={['waiter', 'manager', 'owner']} redirectTo="/staff/login">
+                  <StaffTables />
+                </ProtectedRoute>
+              } />
+              <Route path="/staff/table/:id" element={
+                <ProtectedRoute allowedRoles={['waiter', 'manager', 'owner']} redirectTo="/staff/login">
+                  <StaffTableDetail />
+                </ProtectedRoute>
+              } />
 
-          {/* Runtime Observability — DEV / QA / INTERNAL_PILOT only */}
-          {import.meta.env.DEV && (
-            <>
-              <Route path="/runtime/panel" element={<RuntimeObservabilityPanel />} />
-              <Route path="/runtime/certify" element={<RuntimeCertificationPanel />} />
-            </>
-          )}
+              {/* POS Runtime */}
+              <Route path="/pos/tables" element={
+                <ProtectedRoute allowedRoles={['waiter', 'manager', 'owner']} redirectTo="/staff/login">
+                  <POSTableOverview />
+                </ProtectedRoute>
+              } />
+              <Route path="/pos/table/:id" element={
+                <ProtectedRoute allowedRoles={['waiter', 'manager', 'owner']} redirectTo="/staff/login">
+                  <POSTableDetail />
+                </ProtectedRoute>
+              } />
 
+              {/* Runtime Observability — DEV / QA / INTERNAL_PILOT only */}
+              {import.meta.env.DEV && (
+                <>
+                  <Route path="/runtime/panel" element={<RuntimeObservabilityPanel />} />
+                  <Route path="/runtime/certify" element={<RuntimeCertificationPanel />} />
+                </>
+              )}
 
-
-          <Route path="*" element={<Navigate to="/menu" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthGate>
+              <Route path="*" element={<Navigate to="/menu" replace />} />
+            </Routes>
+          </AuthGate>
+        } />
+      </Routes>
+    </BrowserRouter>
   </React.StrictMode>
 )
 

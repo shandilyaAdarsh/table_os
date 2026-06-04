@@ -5,6 +5,7 @@ import { runtime } from '../../../runtime'
 import { SupabaseTransportAdapter } from '../../../runtime/transport/SupabaseTransportAdapter'
 import { supabase } from '../../../lib/supabase'
 import { BottomNav } from '../components/BottomNav'
+import { getQrSession } from '../utils/qrSession'
 
 const TENANT_ID = '11111111-1111-1111-1111-111111111111'
 
@@ -15,11 +16,11 @@ const getSession = () => {
 
 export default function OrdersPage() {
   const session  = getSession()
-  const tableNum = session.tableNum
-    || new URLSearchParams(window.location.search).get('table')
-    || 'T03'
+  const { tenantId, tableId } = getQrSession()
+  const activeTenantId = tenantId || TENANT_ID
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
+  const [errorState, setErrorState] = useState(null)
 
   useEffect(() => {
     if (!session.name) {
@@ -31,32 +32,54 @@ export default function OrdersPage() {
       try {
         let query = supabase
           .from('orders')
-          .select(`*, order_items(
-            id, name, qty, unit_price,
-            is_rejected, status
-          )`)
-          .eq('tenant_id', TENANT_ID)
+          .select('*')
+          .eq('tenant_id', activeTenantId)
           .order('created_at', { ascending: false })
           .limit(20)
 
-        if (session.phone) {
-          query = query.eq('guest_phone', session.phone).eq('table_num', tableNum)
-        } else {
-          query = query
-            .eq('guest_name', session.name)
-            .eq('table_num', tableNum)
-          if (session.checkedInAt) {
-            query = query.gte('created_at', session.checkedInAt)
-          }
+        if (tableId) {
+          query = query.eq('table_id', tableId)
+        }
+        
+        if (session.checkedInAt) {
+          query = query.gte('created_at', session.checkedInAt)
         }
 
-        const { data, error } = await query
-        if (error) throw error
-        if (data && data.length > 0) {
-          setOrders(data)
+        const { data: fetchedOrders, error: ordersError } = await query
+        if (ordersError) throw ordersError
+
+        if (fetchedOrders && fetchedOrders.length > 0) {
+          const orderIds = fetchedOrders.map(o => o.id)
+          
+          // Fetch order_items separately to bypass PGRST200 missing FK relation
+          const { data: itemsData, error: itemsError } = await supabase
+            .from('order_items')
+            .select('id, order_id, name, qty, unit_price, is_rejected, status')
+            .in('order_id', orderIds)
+
+          if (itemsError) {
+            console.warn('[OrdersPage] Failed to fetch order items (table may not exist or RLS blocked):', itemsError.message)
+          }
+
+          // Merge items into orders
+          const itemsByOrderId = (itemsData || []).reduce((acc, item) => {
+            acc[item.order_id] = acc[item.order_id] || []
+            acc[item.order_id].push(item)
+            return acc
+          }, {})
+
+          const mergedOrders = fetchedOrders.map(order => ({
+            ...order,
+            order_items: itemsByOrderId[order.id] || []
+          }))
+
+          setOrders(mergedOrders)
+        } else {
+          setOrders([])
         }
       } catch (err) {
-        console.error('Error fetching orders:', err);
+        console.error('[OrdersPage] Runtime Failure:', err);
+        setErrorState(err.message || 'Failed to load your orders.')
       } finally {
         setLoading(false);
       }
@@ -80,7 +103,7 @@ export default function OrdersPage() {
       clearInterval(fallbackPoll)
       runtime.transport.suspend()
     }
-  }, [tableNum, session.phone, session.name, session.sessionId])
+  }, [tableId, activeTenantId, session.checkedInAt, session.name, session.sessionId])
 
   if (!session.name) {
     return (
@@ -105,7 +128,35 @@ export default function OrdersPage() {
            <div style={{ width: 24, height: 24, border: '3px solid #F3F4F6', borderTop: '3px solid #E31E24', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
            <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
         </div>
-      ) : orders.length === 0 ? (
+      ) : null}
+
+      {errorState && (
+        <div className="min-h-screen bg-gray-50 pb-20 font-sans">
+          <div className="bg-white p-4 shadow-sm mb-6 flex justify-between items-center sticky top-0 z-10">
+            <h1 className="text-xl font-bold tracking-tight text-red-600">Sync Error</h1>
+          </div>
+          <div className="flex flex-col items-center justify-center p-8 mt-12 text-center">
+            <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-6">
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold mb-2">We couldn't load your orders</h3>
+            <p className="text-gray-500 mb-6 text-sm">
+              {errorState}
+            </p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="bg-black text-white px-6 py-3 rounded-xl font-medium w-full shadow active:scale-95 transition-transform"
+            >
+              Try Again
+            </button>
+          </div>
+          <BottomNav active="orders" />
+        </div>
+      )}
+
+      {!errorState && !loading && orders.length === 0 && (
         <div style={{ padding: '80px 40px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#F3F4F6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 32, color: '#9CA3AF' }}>restaurant</span>
@@ -113,7 +164,9 @@ export default function OrdersPage() {
           <h3 style={{ fontSize: 18, fontWeight: 800, color: '#E31E24', margin: '0 0 8px' }}>No orders yet</h3>
           <p style={{ fontSize: 14, color: '#6C757D', lineHeight: 1.5 }}>Your delicious picks will appear here once you place them.</p>
         </div>
-      ) : (
+      )}
+
+      {!errorState && !loading && orders.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {orders.map(order => (
             <OrderCard key={order.id} order={order} />
@@ -145,7 +198,6 @@ function OrderCard({ order }) {
       '      A Rooftop Kitchen, Mumbai',
       '===================================',
       `Diner   : ${session.name || 'Guest'}`,
-      `Table   : ${order.table_num}`,
       `Order   : #${String(order.id).slice(-6).toUpperCase()}`,
       `Date    : ${new Date(order.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
       '-----------------------------------',

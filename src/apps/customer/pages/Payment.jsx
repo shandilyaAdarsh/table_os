@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { fetchWithRuntime, submitMutation } from '../../../lib/apiClient'
+import { getQrSession } from '../utils/qrSession'
 
 export default function PaymentScreen() {
   const { id } = useParams()
@@ -16,7 +17,11 @@ export default function PaymentScreen() {
   useEffect(() => {
     const fetchOrder = async () => {
       try {
-        const res = await fetchWithRuntime(`/api/v1/customer/orders/${id}`)
+        const { tenantId, tableId } = getQrSession()
+        const params = new URLSearchParams()
+        if (tenantId) params.set('tenantId', tenantId)
+        if (tableId) params.set('tableId', tableId)
+        const res = await fetchWithRuntime(`/api/v1/customer/orders/${id}?${params.toString()}`)
         if (!res.ok) throw new Error('Order not found')
         const { data } = await res.json()
         if (!data) throw new Error('Order not found')

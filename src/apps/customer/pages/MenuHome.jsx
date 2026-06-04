@@ -6,8 +6,8 @@
  */
 
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { fetchWithRuntime } from '../../../lib/apiClient'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { fetchPublicApi } from '../../../lib/apiClient'
 import { supabase } from '../../../lib/supabase'
 import { useMenuStore, useCartStore } from '../../../store/index'
 import { useAvailabilityStore } from '../../../store/availabilityStore'
@@ -19,8 +19,10 @@ import { SkeletonCard } from '../components/SkeletonCard'
 import CartDrawer from './CartDrawer'
 import { motion } from 'framer-motion'
 import { getTableNum } from '../utils/tableNum'
+import { getQrSession } from '../utils/qrSession'
 
-const TENANT_ID  = '11111111-1111-1111-1111-111111111111'
+const DEMO_TENANT_ID = '11111111-1111-1111-1111-111111111111'
+const DEMO_BRANCH_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 const STICKY_TRIGGER = 280
 const NAV_SCROLL_THRESHOLD = 8
 
@@ -232,19 +234,35 @@ function MenuItemCard({ item, idx, navigate, handleItemAdd }) {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function MenuHome() {
   const navigate    = useNavigate()
+  const [searchParams] = useSearchParams()
   const cartItems   = useCartStore(s => s.items)
 
-  // Hardcode Branch ID for testing purposes (since frontend demo isn't dynamically routing)
-  const BRANCH_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+  const {
+    tenantId: TENANT_ID,
+    branchId: BRANCH_ID,
+    tableId: TABLE_ID,
+    tableName,
+    restaurantName,
+  } = getQrSession(searchParams)
+
+  const resolvedTenantId = TENANT_ID || DEMO_TENANT_ID
+  const resolvedBranchId = BRANCH_ID || DEMO_BRANCH_ID
+  const tableHeaderLabel = tableName || getTableNum()
+  const hasQrContext = Boolean(TENANT_ID && BRANCH_ID)
 
   // Initialize availability polling
-  useAvailabilityPolling({ tenantId: TENANT_ID, branchId: BRANCH_ID, intervalMs: 15000 })
+  useAvailabilityPolling({
+    tenantId: resolvedTenantId,
+    branchId: resolvedBranchId,
+    intervalMs: 15000,
+  })
 
   // Read checked-in session for personalised header
   const session = (() => { try { return JSON.parse(localStorage.getItem('customerSession') || '{}') } catch { return {} } })()
 
   const [items,           setItems]           = useState(null)  // null = loading, [] = loaded
   const [itemsLoading,    setItemsLoading]    = useState(true)
+  const [menuError,       setMenuError]       = useState(null)
 
   const [searchQuery,     setSearchQuery]     = useState('')
   const [vegOnly,       setVegOnly]         = useState(false)
@@ -267,29 +285,66 @@ export default function MenuHome() {
 
   const recognitionRef = useRef(null)
 
-  // Direct Supabase fetch — bypasses store initialization guard
+  // Load branch-scoped menu from public API (set after QR scan)
   useEffect(() => {
-    const fetchItems = async () => {
+    if (!resolvedBranchId || !resolvedTenantId) return
+
+    const loadMenu = async () => {
       setItemsLoading(true)
+      setMenuError(null)
       try {
-        const { data, error } = await supabase
-          .from('menu_items')
-          .select('*')
-          .eq('tenant_id', TENANT_ID)
-          .order('sort_order', { ascending: true })
-        if (error || !data || data.length === 0) {
-          throw new Error('Fallback')
+        const qs = `tenantId=${encodeURIComponent(resolvedTenantId)}&branchId=${encodeURIComponent(resolvedBranchId)}`
+        const [catRes, itemsRes] = await Promise.all([
+          fetchPublicApi(`/api/v1/menu/categories?${qs}`),
+          fetchPublicApi(`/api/v1/menu/items?${qs}`),
+        ])
+
+        const catBody = await catRes.json()
+        const itemsBody = await itemsRes.json()
+
+        if (!catRes.ok || !itemsRes.ok) {
+          throw new Error(
+            itemsBody?.error?.message || catBody?.error?.message || 'Failed to load menu',
+          )
         }
-        console.log('Fetched items:', data?.length, data)
-        setItems(data || [])
-      } catch (error) {
-        console.error('Menu fetch error:', error)
+
+        const categoriesList = catBody.data ?? []
+        const categoryMap = new Map(
+          categoriesList.map((c) => [c.id, c.name]),
+        )
+
+        const rawItems = itemsBody.data ?? []
+        const mapped = rawItems
+          .filter((i) => i.is_available !== false)
+          .map((i) => {
+            const price = Number(i.effective_price ?? i.base_price ?? 0)
+            return {
+              id: i.id,
+              name: i.name,
+              description: i.description || i.short_description || '',
+              category: categoryMap.get(i.category_id) || 'Menu',
+              category_id: i.category_id,
+              base_price: price,
+              price,
+              unit_price: price,
+              is_veg: (i.dietary_tags || []).includes('vegetarian'),
+              image_url: i.image_url,
+              sort_order: i.sort_order ?? 0,
+            }
+          })
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+
+        setItems(mapped)
+      } catch (err) {
+        console.error('Menu fetch error:', err)
+        setMenuError(err.message || 'Failed to load menu')
         setItems([])
       }
       setItemsLoading(false)
     }
-    fetchItems()
-  }, [])
+
+    loadMenu()
+  }, [resolvedBranchId, resolvedTenantId])
 
   // Scroll tracking — hide/show nav + sticky overlay + search bar (Issues 5 & 6)
   useEffect(() => {
@@ -490,12 +545,32 @@ export default function MenuHome() {
       {/* Keyframe */}
       <style>{`@keyframes flyUp { to { transform: translateY(-40px); opacity: 0; } } @keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
+      {/* QR context banner */}
+      {hasQrContext && (restaurantName || tableName) && (
+        <div style={{ background: '#e74c3c', color: 'white', padding: '12px 16px', textAlign: 'center' }}>
+          {restaurantName && (
+            <div style={{ fontWeight: 600, fontSize: 16 }}>{restaurantName}</div>
+          )}
+          {tableName && (
+            <div style={{ fontSize: 13, opacity: 0.9 }}>{tableName}</div>
+          )}
+        </div>
+      )}
+
+      {menuError && (
+        <div style={{ padding: '12px 16px', background: '#FEE2E2', color: '#B91C1C', fontSize: 13 }}>
+          {menuError}
+        </div>
+      )}
+
       {/* ── HEADER ── */}
       <header data-sticky style={{ position: 'sticky', top: 0, zIndex: 30, backgroundColor: '#E31E24', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <div style={{ fontWeight: 800, fontSize: 18, color: 'white', lineHeight: 1.2, letterSpacing: '-0.02em' }}>The Grand Spice</div>
+          <div style={{ fontWeight: 800, fontSize: 18, color: 'white', lineHeight: 1.2, letterSpacing: '-0.02em' }}>
+            {restaurantName || 'Menu'}
+          </div>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 2 }}>
-            {session.name ? `Hi, ${session.name} · TABLE ${getTableNum()}` : 'Table 03 · Dine-in'}
+            {session.name ? `Hi, ${session.name} · ${tableHeaderLabel}` : tableHeaderLabel}
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
