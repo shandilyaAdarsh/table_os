@@ -16,7 +16,8 @@ export class GuestSessionService {
 
     if (activeSession) {
       // 2. Reconnect/continuity check: does the fingerprint match?
-      const isRecognizedDevice = activeSession.device_fingerprints.includes(dto.device_fingerprint);
+      const deviceFingerprints = activeSession.session_data?.device_fingerprints || [];
+      const isRecognizedDevice = deviceFingerprints.includes(dto.device_fingerprint);
 
       if (isRecognizedDevice) {
         logger.info(
@@ -35,7 +36,7 @@ export class GuestSessionService {
         dto.tenant_id,
         activeSession.id,
         dto.device_fingerprint,
-        activeSession.device_fingerprints
+        activeSession.session_data || {}
       );
     }
 
@@ -53,13 +54,16 @@ export class GuestSessionService {
     const session = await GuestSessionRepository.findSessionById(tenantId, sessionId);
     if (!session) return false;
     
-    const isExpired = new Date(session.expires_at).getTime() < Date.now();
-    if (isExpired || session.status !== 'ACTIVE') {
+    const expiresAt = session.session_data?.expires_at;
+    const isExpired = expiresAt ? new Date(expiresAt).getTime() < Date.now() : false;
+    
+    if (isExpired || !session.is_active) {
       return false;
     }
 
     // Ensure fingerprint is registered on this session
-    return session.device_fingerprints.includes(fingerprint);
+    const deviceFingerprints = session.session_data?.device_fingerprints || [];
+    return deviceFingerprints.includes(fingerprint);
   }
 
   static async completeSession(tenantId: string, sessionId: string): Promise<GuestSession> {

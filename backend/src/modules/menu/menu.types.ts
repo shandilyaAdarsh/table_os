@@ -222,3 +222,26 @@ export interface EffectiveMenuItem {
   sort_order:        number;           // override_sort ?? item sort_order
   modifier_groups:   ModifierGroupWithOptions[];
 }
+
+// ─── Recommendations ──────────────────────────────────────────
+
+export type RecommendationType = 'complementary' | 'variant' | 'beverage' | 'upsell' | 'popular_pair';
+
+export interface MenuItemRecommendation {
+  id:                       string;
+  tenant_id:                string;
+  branch_id:                string | null;
+  source_menu_item_id:      string;
+  recommended_menu_item_id: string;
+  recommendation_type:      RecommendationType;
+  priority:                 number;
+  is_active:                boolean;
+  deleted_at:               string | null;
+  created_at:               string;
+  updated_at:               string;
+}
+
+export interface EffectiveMenuItemRecommendation extends EffectiveMenuItem {
+  recommendation_type: RecommendationType;
+  currency: string; // ISO 4217 — avoids future breaking change
+}

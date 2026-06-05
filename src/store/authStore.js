@@ -17,33 +17,50 @@ export const useAuthStore = create(
       isHydrated: false, // Hydration control for Zustand
       error: null,
 
-      // ── Resolve Context (Edge Function) ───────────────────
+      // ── Resolve Context (Node.js Backend) ───────────────────
       resolveContext: async () => {
         // Clear previous errors but don't force loading on background refreshes
         set({ error: null })
         
         try {
-          // Add timeout or specific headers if necessary
-          const { data, error } = await supabase.functions.invoke('resolve-context-v2')
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+          if (sessionError || !session?.access_token) {
+            set({ error: 'No active session found.', isLoading: false })
+            return null
+          }
+
+          const { resolveApiBaseUrl } = await import('../lib/resolveApiBaseUrl')
+          const API_BASE_URL = resolveApiBaseUrl()
           
-          if (error) {
-            console.error('[AuthStore] resolve-context-v2 error:', error)
+          const res = await fetch(`${API_BASE_URL}/api/v1/context/bootstrap`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`
+            }
+          })
+          
+          if (!res.ok) {
+            console.error('[AuthStore] bootstrap error:', res.status, res.statusText)
             
-            // Error handling for edge function status codes
-            if (error.status === 401 || error.status === 403) {
+            // Error handling for backend status codes
+            if (res.status === 401 || res.status === 403) {
               set({ user: null, tenantId: null, tenant: null, onboarding: null, flags: null })
             }
             
-            set({ error: error.message || 'Failed to resolve account context.', isLoading: false })
+            set({ error: 'Failed to resolve account context.', isLoading: false })
             return null
           }
+
+          const responseData = await res.json()
+          const data = responseData.data
 
           if (!data) {
             set({ error: 'Empty response from context resolver.', isLoading: false })
             return null
           }
 
-          // Update store with data from resolve-context-v2
+          // Update store with data from bootstrap endpoint
           // We DO NOT assume profiles = staff sync; this is the platform auth context.
           set({
             user: data.user,

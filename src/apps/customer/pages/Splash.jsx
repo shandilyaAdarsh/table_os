@@ -1,14 +1,18 @@
 import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { getQrSession } from '../utils/qrSession'
 
 export default function Splash() {
   const navigate = useNavigate()
+  const location = window.location
+  const [searchParams] = useSearchParams()
+  const { restaurantName } = getQrSession(searchParams)
 
   useEffect(() => {
-    const timer = setTimeout(() => navigate('/menu/checkin'), 2000)
+    const timer = setTimeout(() => navigate(`/menu/checkin${location.search}`), 2000)
     return () => clearTimeout(timer)
-  }, [navigate])
+  }, [navigate, location.search])
 
   return (
     <div style={{ minHeight: '100vh', background: '#E31E24', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', px: 24, position: 'relative', fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
@@ -20,7 +24,9 @@ export default function Splash() {
         transition={{ duration: 0.6, ease: 'easeOut' }}
         style={{ width: 100, height: 100, background: '#FFFFFF', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 32, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}
       >
-        <span style={{ color: '#E31E24', fontSize: 44, fontWeight: 900 }}>G</span>
+        <span style={{ color: '#E31E24', fontSize: 44, fontWeight: 900 }}>
+          {(restaurantName || 'G')[0].toUpperCase()}
+        </span>
       </motion.div>
 
       {/* Restaurant name */}
@@ -30,7 +36,7 @@ export default function Splash() {
         transition={{ delay: 0.3, duration: 0.6 }}
         style={{ color: 'white', fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', textAlign: 'center', margin: 0 }}
       >
-        The Grand Spice
+        {restaurantName || 'Menu'}
       </motion.h1>
 
       {/* Tagline */}

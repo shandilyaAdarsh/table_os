@@ -5,7 +5,7 @@ const IS_DEV = import.meta.env.DEV ?? true;
 
 const LEADER_HEARTBEAT_INTERVAL = IS_DEV ? 3_000 : 20_000;
 const STALE_LEASE_TTL           = IS_DEV ? 8_000 : 45_000;
-const BROADCAST_CHANNEL_NAME    = 'orderlli-kds-leadership';
+const BROADCAST_CHANNEL_NAME    = 'orderlyy-kds-leadership';
 
 let _broadcastChannel = null;
 

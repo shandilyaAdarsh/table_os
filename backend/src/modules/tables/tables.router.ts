@@ -144,11 +144,22 @@ router.get('/:tableId/history', requireMinRole(ROLES.MANAGER), async (req: Reque
   } catch (err) { next(err); }
 });
 
+// POST /api/v1/admin/tables/:tableId/generate-qr
+router.post('/:tableId/generate-qr', requireMinRole(ROLES.MANAGER), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const table = await tableService.generateQrForTable(
+      req.context.tenantId!,
+      req.params.tableId as string,
+    );
+    res.status(200).json({ success: true, data: table });
+  } catch (err) { next(err); }
+});
+
 // GET /api/v1/admin/tables/:tableId/qr
 router.get('/:tableId/qr', requireMinRole(ROLES.MANAGER), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const token = await tableService.getQrToken(req.context.tenantId!, req.params.tableId as string);
-    res.status(200).json({ success: true, token });
+    const qr = await tableService.getQrToken(req.context.tenantId!, req.params.tableId as string);
+    res.status(200).json({ success: true, ...qr });
   } catch (err) { next(err); }
 });
 

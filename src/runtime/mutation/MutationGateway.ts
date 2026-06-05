@@ -1,4 +1,5 @@
 import { RuntimeObservabilityLayer } from '../observability/RuntimeObservabilityLayer';
+import { resolveApiBaseUrl } from '../../lib/resolveApiBaseUrl';
 import { RuntimeTransportManager } from '../transport/RuntimeTransportManager';
 
 export interface MutationRequest {
@@ -30,7 +31,7 @@ export class MutationGateway {
   private stuckTimers: Map<string, NodeJS.Timeout> = new Map();
   
   // E.g., API_BASE_URL
-  private apiBaseUrl: string = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  private apiBaseUrl: string = resolveApiBaseUrl();
 
   constructor(
     observability: RuntimeObservabilityLayer,

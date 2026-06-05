@@ -36,7 +36,7 @@ const getStatusConfig = (status, elapsed) => {
   if (status === 'cooking') return {
     accentColor:  '#2D5FA3',
     headerBg:     'rgba(45,95,163,0.04)',
-    timerColor:   '#554336',
+    timerColor:   '#6C757D',
     timerPulse:   false,
     showLate:     false,
     lateLabel:    '',
@@ -45,9 +45,9 @@ const getStatusConfig = (status, elapsed) => {
 
   // pending (default)
   return {
-    accentColor:  '#8D4B00',
+    accentColor:  '#E31E24',
     headerBg:     'rgba(141,75,0,0.04)',
-    timerColor:   '#554336',
+    timerColor:   '#6C757D',
     timerPulse:   false,
     showLate:     false,
     lateLabel:    '',
@@ -57,7 +57,7 @@ const getStatusConfig = (status, elapsed) => {
 
 /* ─── Station chip colour map ─── */
 const STATION_COLORS = {
-  GRILL: { bg: '#FFF4EC', color: '#8D4B00' },
+  GRILL: { bg: '#FEE2E2', color: '#E31E24' },
   FRY:   { bg: '#FEF3C7', color: '#92400E' },
   HOT:   { bg: '#FEE2E2', color: '#991B1B' },
   COLD:  { bg: '#EFF6FF', color: '#1E40AF' },
@@ -65,7 +65,7 @@ const STATION_COLORS = {
 };
 
 const chipStyle = (key) => {
-  const c = STATION_COLORS[key?.toUpperCase()] || { bg: '#F2F4F6', color: '#554336' };
+  const c = STATION_COLORS[key?.toUpperCase()] || { bg: '#F8F9FA', color: '#6C757D' };
   return {
     background:   c.bg,
     color:        c.color,
@@ -204,7 +204,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
           <div style={{
             fontSize:      '12px',
             fontWeight:    800,
-            color:         '#8D4B00',
+            color:         '#E31E24',
             textTransform: 'uppercase',
             letterSpacing: '0.05em',
             marginBottom:  '6px',
@@ -222,7 +222,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
             fontWeight:    900,
             letterSpacing: '-0.04em',
             lineHeight:    1,
-            color:         '#191C1E',
+            color:         '#1A1C1E',
           }}>
             Table {tableNum?.toString().replace(/^T/, '')}
           </h4>
@@ -233,7 +233,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
             fontWeight:    700,
             textTransform: 'uppercase',
             letterSpacing: '0.12em',
-            color:         '#887364',
+            color:         '#6C757D',
             marginTop:     '4px',
             display:       'flex',
             alignItems:    'center',
@@ -277,7 +277,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
           {!isHistory ? (
             <>
               <span style={{
-                fontFamily:         '"Inter", monospace',
+                fontFamily:         '"Plus Jakarta Sans", monospace',
                 fontVariantNumeric: 'tabular-nums',
                 fontSize:           '20px',
                 fontWeight:         700,
@@ -304,7 +304,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
             <div style={{ 
               fontSize: '10px', 
               fontWeight: 700, 
-              color: '#887364',
+              color: '#6C757D',
               textAlign: 'right',
               lineHeight: 1.4
             }}>
@@ -389,7 +389,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
                   className="material-symbols-outlined"
                   style={{
                     fontSize: '20px',
-                    color:    '#8D4B00',
+                    color:    '#E31E24',
                     flexShrink: 0,
                     fontVariationSettings: "'FILL' 1",
                   }}
@@ -413,12 +413,12 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
                     fontWeight:     700,
                     letterSpacing:  '-0.01em',
                     lineHeight:     1.3,
-                    color:          isItemDone && status !== 'cooking' ? '#887364' : '#191C1E',
+                    color:          isItemDone && status !== 'cooking' ? '#6C757D' : '#1A1C1E',
                     textDecoration: isItemDone && status === 'cooking' ? 'line-through' : 'none',
                     transition:     'color 0.2s cubic-bezier(0.2,0,0,1)',
                   }}>
                     {item.qty > 1 && (
-                      <span style={{ color: isRejected ? '#BA1A1A' : '#8D4B00', marginRight: '4px' }}>{item.qty}×</span>
+                      <span style={{ color: isRejected ? '#BA1A1A' : '#E31E24', marginRight: '4px' }}>{item.qty}×</span>
                     )}
                     <span style={{ textDecoration: isRejected ? 'line-through' : 'none' }}>
                       {item.name}
@@ -438,7 +438,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
 
                 {/* Modifications — "The Specs" body */}
                 {item.note && !isAllergy && (
-                  <p style={{ fontSize: '11px', color: '#887364', fontStyle: 'italic', marginTop: '4px' }}>
+                  <p style={{ fontSize: '11px', color: '#6C757D', fontStyle: 'italic', marginTop: '4px' }}>
                     • {item.note}
                   </p>
                 )}
@@ -466,7 +466,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
       {!isHistory && (
         <div style={{
           padding:    '8px',
-          background: '#F2F4F6',
+          background: '#F8F9FA',
           borderTop:  '1px solid rgba(219,194,176,0.3)',
           flexShrink: 0,
         }}>
@@ -502,9 +502,9 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
               style={{
                 flex: 2,
                 background: selectedItems.length > 0
-                  ? 'linear-gradient(15deg, #8D4B00, #B15F00)'
+                  ? 'linear-gradient(15deg, #E31E24, #B91C1C)'
                   : '#E6E8EA',
-                color: selectedItems.length > 0 ? '#FFFFFF' : '#887364',
+                color: selectedItems.length > 0 ? '#FFFFFF' : '#6C757D',
                 fontWeight: 900,
                 fontSize: '11px',
                 textTransform: 'uppercase',

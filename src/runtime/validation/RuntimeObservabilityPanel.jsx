@@ -520,7 +520,7 @@ export default function RuntimeObservabilityPanel() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: '0.2em', color: T.dim }}>
-              ORDERLLI · RUNTIME INFRASTRUCTURE
+              ORDERLYY · RUNTIME INFRASTRUCTURE
             </div>
             <h1 style={{ margin: '2px 0 0', fontSize: 16, fontWeight: 900, color: T.text, letterSpacing: '-0.02em' }}>
               Observability Panel

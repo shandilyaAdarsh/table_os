@@ -21,7 +21,10 @@ import type { Request, Response, NextFunction } from 'express';
 import { supabaseAdmin } from '../../config/supabase';
 import { findAdminProfileById } from '../auth/repositories/auth.repository';
 import { logger as log } from '../../shared/utils/logger';
-import { skippedTenantsFallback } from '../admin/onboarding/onboarding.admin.service';
+import {
+  skippedTenantsFallback,
+  resolveOnboardingStep,
+} from '../admin/onboarding/onboarding.admin.service';
 
 // ─── Response shape (mirrors AppContextDto in Flutter) ───────
 
@@ -45,6 +48,7 @@ interface BootstrapResponse {
       plan: string;
       status: string;
       is_active: boolean;
+      dismissed_qr_banner: boolean;
     } | null;
     branches: Array<{
       id: string;
@@ -69,7 +73,7 @@ interface BootstrapResponse {
 
 // Current bootstrap schema version.
 // Increment when the payload shape changes to invalidate stale client caches.
-const BOOTSTRAP_VERSION = 1;
+const BOOTSTRAP_VERSION = 2;
 
 // ─── Controller ───────────────────────────────────────────────
 
@@ -114,7 +118,7 @@ export async function bootstrap(
       // 2a. Load tenant
       const { data: tenantData, error: tenantError } = await supabaseAdmin
         .from('tenants')
-        .select('id, name, slug, status, created_at')
+        .select('id, name, slug, status, created_at, dismissed_qr_banner')
         .eq('id', tenantId)
         .maybeSingle();
 
@@ -131,6 +135,7 @@ export async function bootstrap(
           plan: 'standard', // Reserved for future billing integration
           status: tenantData.status,
           is_active: tenantData.status !== 'suspended' && tenantData.status !== 'deleted',
+          dismissed_qr_banner: tenantData.dismissed_qr_banner ?? false,
         };
         log.info({ userId, tenantId, name: tenantData.name }, '[Bootstrap] Tenant resolved');
       } else {
@@ -165,30 +170,26 @@ export async function bootstrap(
         .eq('tenant_id', tenantId)
         .maybeSingle();
 
-        if (onboardingError || !onboardingData) {
-          log.warn({ userId, tenantId, error: onboardingError }, '[Bootstrap] Onboarding lookup failed — defaulting to incomplete');
-          const isSkipped = tenantId ? skippedTenantsFallback.has(tenantId) : false;
-          onboarding = {
-            is_complete: false,
-            is_skipped: isSkipped,
-            step: 1,
-            steps_completed: [],
-          };
-        } else {
-          const stepsList = (onboardingData.steps_completed as string[]) ?? [];
-          let currentStep = 1;
-          if (stepsList.includes('restaurant_info')) currentStep = 2;
-          if (stepsList.includes('business_config')) currentStep = 3;
-          if (stepsList.includes('gst_legal')) currentStep = 4;
-          if (stepsList.includes('tables_hours')) currentStep = 5;
-
-          onboarding = {
-            is_complete: onboardingData.is_complete ?? false,
-            is_skipped: tenantId ? skippedTenantsFallback.has(tenantId) : false,
-            step: currentStep,
-            steps_completed: stepsList,
-          };
-        }
+      if (onboardingError || !onboardingData) {
+        log.warn({ userId, tenantId, error: onboardingError }, '[Bootstrap] Onboarding lookup failed — defaulting to incomplete');
+        const isSkipped = tenantId ? skippedTenantsFallback.has(tenantId) : false;
+        onboarding = {
+          is_complete: false,
+          is_skipped: isSkipped,
+          step: resolveOnboardingStep([], false, isSkipped),
+          steps_completed: [],
+        };
+      } else {
+        const stepsCompleted = (onboardingData.steps_completed as string[]) ?? [];
+        const isComplete = onboardingData.is_complete ?? false;
+        const isSkipped = skippedTenantsFallback.has(tenantId!);
+        onboarding = {
+          is_complete: isComplete,
+          is_skipped: isSkipped,
+          steps_completed: stepsCompleted,
+          step: resolveOnboardingStep(stepsCompleted, isComplete, isSkipped),
+        };
+      }
       log.info({ userId, tenantId, onboardingComplete: onboarding.is_complete, onboardingSkipped: onboarding.is_skipped }, '[Bootstrap] Onboarding state resolved');
     }
 

@@ -11,17 +11,12 @@ import { submitMutation } from '../../../lib/apiClient'
 import { supabase } from '../../../lib/supabase'
 import { AnimatePresence, motion } from 'framer-motion'
 import { getTableNum } from '../utils/tableNum'
+import { getQrSession } from '../utils/qrSession'
+import { useCartRecommendations } from '../hooks/useCartRecommendations'
+import { CustomerRecommendationService } from '../services/CustomerRecommendationService'
 
-// Hardcoded — env vars are NOT reliably set on Vercel for this demo build
-const TENANT_ID = import.meta.env.VITE_TENANT_ID || '11111111-1111-1111-1111-111111111111'
-const TABLE_ID  = import.meta.env.VITE_DEMO_TABLE_ID || null
-
-
-const UPSELL = [
-  { id: 'm14', name: 'Garlic Naan x2',  price: 160, image_url: 'https://images.unsplash.com/photo-1601050638917-3606f5095b4e?w=200&q=80' },
-  { id: 'm23', name: 'Fresh Lime Soda', price: 180, image_url: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=200&q=80' },
-  { id: 'm17', name: 'Masala Papad',    price: 80,  image_url: 'https://images.unsplash.com/photo-1626132644529-56e960c19cd2?w=200&q=80' },
-]
+const FALLBACK_TENANT_ID =
+  import.meta.env.VITE_TENANT_ID || '11111111-1111-1111-1111-111111111111'
 
 export default function CartDrawer({ open, onClose }) {
   const navigate   = useNavigate()
@@ -31,6 +26,7 @@ export default function CartDrawer({ open, onClose }) {
   const clear      = useCartStore(s => s.clear)
   const [isPlacing, setIsPlacing] = useState(false)
   const [note,      setNote]      = useState('')
+  const { recommendations, isLoading } = useCartRecommendations(cartItems)
 
   const subtotal   = cartItems.reduce((a, i) => a + ((i.unit_price || i.price || 0) * i.qty), 0)
   const totalQty   = cartItems.reduce((a, i) => a + i.qty, 0)
@@ -72,19 +68,32 @@ export default function CartDrawer({ open, onClose }) {
     if (cartItems.length === 0 || isPlacing) return
     setIsPlacing(true)
     try {
+      const { tenantId, branchId, tableId } = getQrSession()
       const resolvedTableNum = resolveTableNum()
-      console.log('[CartDrawer] resolvedTableNum:', resolvedTableNum)
-      console.log('[CartDrawer] window.location.search:', window.location.search)
-      console.log('[CartDrawer] localStorage tableNum:', localStorage.getItem('tableNum'))
-
-      // Read guest session saved by CheckIn screen
       const guestSession = JSON.parse(localStorage.getItem('customerSession') || '{}')
 
-      const { data: order, error } = await supabase.from('orders').insert({
-        tenant_id: TENANT_ID,
-        table_num: resolvedTableNum,
-        note: note || `Order by ${guestSession.name || 'Guest'} · Party of ${guestSession.guestCount || 1}`,
-      }).select().single()
+      const orderPayload = {
+        tenant_id: tenantId || FALLBACK_TENANT_ID,
+        order_number: `ORD-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`,
+        order_notes:
+          note ||
+          `Order by ${guestSession.name || 'Guest'} · Party of ${guestSession.guestCount || 1}`,
+      }
+      if (branchId) orderPayload.branch_id = branchId
+      if (tableId) orderPayload.table_id = tableId
+
+      console.log('[CartDrawer] place order context:', {
+        tenantId: orderPayload.tenant_id,
+        branchId,
+        tableId,
+        tableNum: resolvedTableNum,
+      })
+
+      const { data: order, error } = await supabase
+        .from('orders')
+        .insert(orderPayload)
+        .select()
+        .single()
 
       if (error) {
         throw error
@@ -192,21 +201,25 @@ export default function CartDrawer({ open, onClose }) {
 
                   <div style={{ height: 8, background: '#F9FAFB', margin: '8px 0' }} />
 
-                  <div style={{ padding: '16px 20px' }}>
-                    <h5 style={{ fontSize: 11, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px' }}>Complete your meal</h5>
-                    <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
-                      {UPSELL.filter(u => !cartItems.find(i => i.id === u.id)).map(rec => (
-                        <div key={rec.id} style={{ width: 130, flexShrink: 0, background: 'white', border: '1px solid #F3F4F6', borderRadius: 14, padding: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
-                          <img src={rec.image_url} alt={rec.name} style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 10, marginBottom: 8 }} />
-                          <p style={{ fontWeight: 700, fontSize: 12, color: '#E31E24', margin: '0 0 4px', lineHeight: 1.3, height: 32, overflow: 'hidden' }}>{rec.name}</p>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-                            <span style={{ fontWeight: 800, fontSize: 13, color: '#E31E24' }}>₹{rec.price}</span>
-                            <button onClick={() => addItem({ ...rec, qty: 1, unit_price: rec.price, modifiers: [], note: '' })} style={{ width: 28, height: 28, borderRadius: 8, background: '#E31E24', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>+</button>
+                  {recommendations.length > 0 && (
+                    <div style={{ padding: '16px 20px' }}>
+                      <h5 style={{ fontSize: 11, fontWeight: 800, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px' }}>Complete your meal</h5>
+                      <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+                        {recommendations.map(rec => (
+                          <div key={rec.id} style={{ width: 130, flexShrink: 0, background: 'white', border: '1px solid #F3F4F6', borderRadius: 14, padding: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+                            <div style={{ width: '100%', height: 80, background: '#F3F4F6', borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
+                              <img src={rec.image_url || `https://placehold.co/130x80?text=${rec.name[0]}`} alt={rec.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            </div>
+                            <p style={{ fontWeight: 700, fontSize: 12, color: '#E31E24', margin: '0 0 4px', lineHeight: 1.3, height: 32, overflow: 'hidden' }}>{rec.name}</p>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                              <span style={{ fontWeight: 800, fontSize: 13, color: '#E31E24' }}>₹{rec.effective_price || rec.price}</span>
+                              <button onClick={() => { CustomerRecommendationService.trackRecommendationClick(rec); addItem({ ...rec, qty: 1, unit_price: rec.effective_price || rec.price, modifiers: [], note: '' }); }} style={{ width: 28, height: 28, borderRadius: 8, background: '#E31E24', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>+</button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div style={{ padding: '16px 20px' }}>
                     <label style={{ fontSize: 11, fontWeight: 800, color: '#E31E24', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 10 }}>Special Instructions</label>

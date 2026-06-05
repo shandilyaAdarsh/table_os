@@ -1,11 +1,14 @@
-import { Router, Request, Response } from 'express';
+// ============================================================
+// src/modules/admin/dashboard/dashboard.admin.router.ts
+// ============================================================
 
-export const adminDashboardRouter = Router({ mergeParams: true });
+import { Router } from 'express';
+import { AdminDashboardController } from './dashboard.admin.controller';
 
-// Mock endpoint to dismiss QR banner to satisfy frontend dashboard load requirements
-adminDashboardRouter.patch('/dismiss-qr-banner', (_req: Request, res: Response) => {
-  res.status(200).json({
-    success: true,
-    message: 'QR banner dismissed successfully'
-  });
-});
+const router: Router = Router({ mergeParams: true });
+const dashboardController = new AdminDashboardController();
+
+// PATCH /api/v1/admin/dashboard/dismiss-qr-banner
+router.patch('/dismiss-qr-banner', dashboardController.dismissQrBanner);
+
+export { router as adminDashboardRouter };

@@ -370,4 +370,66 @@ router.get('/branch/:branchId/disablements',
   }
 );
 
+// ─── Recommendations Routes (Admin) ──────────────────────────────
+
+import { findRecommendationsForItems, upsertRecommendation, updateRecommendation, softDeleteRecommendation } from './repositories/menu-recommendation.repository';
+import { CreateRecommendationSchema, UpdateRecommendationSchema } from './menu.validators';
+
+/** GET /api/tenants/:tenantId/menu/items/:itemId/recommendations */
+router.get('/items/:itemId/recommendations',
+  requirePermissions('ANY', PERMISSIONS.MANAGE_MENU, PERMISSIONS.VIEW_MENU),
+  async (req: Request<{ tenantId: string; itemId: string }>, res, next) => {
+    try {
+      const tenantId = String(req.params.tenantId);
+      const itemId   = String(req.params.itemId);
+      const recs = await findRecommendationsForItems(tenantId, [itemId], 100);
+      res.json(formatSuccess(recs));
+    } catch (err) { next(err); }
+  }
+);
+
+/** POST /api/tenants/:tenantId/menu/items/:itemId/recommendations */
+router.post('/items/:itemId/recommendations',
+  requireMinRole(ROLES.MANAGER),
+  requirePermissions('ANY', PERMISSIONS.MANAGE_MENU),
+  async (req: Request<{ tenantId: string; itemId: string }>, res, next) => {
+    try {
+      const tenantId = String(req.params.tenantId);
+      const itemId   = String(req.params.itemId);
+      const dto      = validate(CreateRecommendationSchema, req.body);
+      const rec = await upsertRecommendation(tenantId, itemId, dto);
+      res.status(201).json(formatSuccess(rec));
+    } catch (err) { next(err); }
+  }
+);
+
+/** PATCH /api/tenants/:tenantId/menu/recommendations/:recId */
+router.patch('/recommendations/:recId',
+  requireMinRole(ROLES.MANAGER),
+  requirePermissions('ANY', PERMISSIONS.MANAGE_MENU),
+  async (req: Request<{ tenantId: string; recId: string }>, res, next) => {
+    try {
+      const tenantId = String(req.params.tenantId);
+      const recId    = String(req.params.recId);
+      const dto      = validate(UpdateRecommendationSchema, req.body);
+      const rec = await updateRecommendation(tenantId, recId, dto);
+      res.json(formatSuccess(rec));
+    } catch (err) { next(err); }
+  }
+);
+
+/** DELETE /api/tenants/:tenantId/menu/recommendations/:recId */
+router.delete('/recommendations/:recId',
+  requireMinRole(ROLES.MANAGER),
+  requirePermissions('ANY', PERMISSIONS.MANAGE_MENU),
+  async (req: Request<{ tenantId: string; recId: string }>, res, next) => {
+    try {
+      const tenantId = String(req.params.tenantId);
+      const recId    = String(req.params.recId);
+      await softDeleteRecommendation(tenantId, recId);
+      res.status(204).send();
+    } catch (err) { next(err); }
+  }
+);
+
 export { router as menuRouter };

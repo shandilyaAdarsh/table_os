@@ -11,6 +11,7 @@ import { authRouter } from './modules/auth/auth.router';
 import { tenantRouter } from './modules/tenants/tenant.router';
 import { rbacRouter } from './modules/rbac/rbac.router';
 import { menuRouter } from './modules/menu/menu.router';
+import { publicGuestMenuRouter } from './modules/menu/public-guest-menu.router';
 import pricingRouter from './modules/pricing/pricing.router';
 import { taxRouter } from './modules/tax/tax.router';
 import { modifierRouter } from './modules/modifier/modifier.router';
@@ -35,6 +36,7 @@ import { deploymentRouter } from './modules/projection/deployment.router';
 import { observabilityRouter } from './modules/observability/observability.router';
 import { analyticsRouter } from './modules/analytics/analytics.router';
 import { contextRouter } from './modules/context/context.router';
+import { customerRouter } from './modules/customer/customer.router';
 import { ObservabilityService } from './modules/infrastructure/observability.service';
 import { errorMiddleware } from './middleware/error.middleware';
 import { loggingMiddleware } from './middleware/logging.middleware';
@@ -50,7 +52,12 @@ export function createApp(): express.Application {
     cors({
       origin: (requestOrigin, callback) => {
         if (!requestOrigin) return callback(null, true);
-        if (requestOrigin.startsWith('http://localhost:') || requestOrigin.startsWith('http://127.0.0.1:')) {
+        if (
+          requestOrigin.startsWith('http://localhost:') ||
+          requestOrigin.startsWith('http://127.0.0.1:') ||
+          requestOrigin.startsWith('http://192.168.') ||
+          requestOrigin.startsWith('http://10.')
+        ) {
           return callback(null, true);
         }
         if (corsOrigins.includes(requestOrigin)) {
@@ -119,6 +126,10 @@ export function createApp(): express.Application {
   app.use('/tenants/:tenantId/menu', menuRouter);
   app.use('/api/v1/tenants/:tenantId/menu', menuRouter);
 
+  // Public Guest Menu API (QR flow)
+  app.use('/menu', publicGuestMenuRouter);
+  app.use('/api/v1/menu', publicGuestMenuRouter);
+
   app.use('/tenants/:tenantId/pricing', pricingRouter);
   app.use('/api/v1/tenants/:tenantId/pricing', pricingRouter);
 
@@ -170,14 +181,17 @@ export function createApp(): express.Application {
     app.use('/api/v1/infrastructure/chaos', chaosRouter);
   }
 
+  // ─── Customer API ───────────────────────────────────────────
+  app.use('/api/v1/customer', customerRouter);
+
+  // ─── Analytics API ──────────────────────────────────────────
+  app.use('/api/v1/analytics', analyticsRouter);
+
   // ─── Operational Runtime API ───────────────────────────────
   app.use('/api/v1/runtime', runtimeRouter);
   app.use('/api/v1/runtime/events', eventReplayRouter);
   app.use('/api/v1/runtime', deploymentRouter);
   app.use('/api/v1/runtime/observability', observabilityRouter);
-
-  // ─── Analytics API ──────────────────────────────────────────
-  app.use('/api/v1/analytics', analyticsRouter);
 
   // ─── Admin API (requires auth & tenant context) ──────────────
   // The authoritative operational interface for the dashboard/admin panel.
@@ -187,10 +201,6 @@ export function createApp(): express.Application {
   // ─── Context/Bootstrap API ────────────────────────────────────
   // Single-payload bootstrap for the admin app. Must resolve before routing.
   app.use('/api/v1/context', contextRouter);
-
-  // Future modules registered here:
-  // app.use('/tenants/:tenantId/staff', staffRouter);
-
   // ─── 404 handler ───────────────────────────────────────────
   app.use((_req, res) => {
     res.status(404).json({

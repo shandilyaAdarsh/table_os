@@ -22,9 +22,9 @@ router.put('/restaurant-info', onboardingController.updateRestaurantInfo);
 router.put('/business-config', onboardingController.updateBusinessConfig);
 
 // PUT /api/v1/admin/onboarding/gst-legal
-router.put('/gst-legal', onboardingController.updateGstLegal);
+router.put('/gst-legal', onboardingController.updateGstLegalConfig);
 
 // PUT /api/v1/admin/onboarding/tables-hours
-router.put('/tables-hours', onboardingController.updateTablesHours);
+router.put('/tables-hours', onboardingController.updateTablesAndHours);
 
 export { router as adminOnboardingRouter };

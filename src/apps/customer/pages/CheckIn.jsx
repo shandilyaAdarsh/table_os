@@ -9,6 +9,8 @@ import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { fetchWithRuntime, submitMutation } from '../../../lib/apiClient'
 import { getTableNum } from '../utils/tableNum'
+import { getQrSession } from '../utils/qrSession'
+import { useSearchParams } from 'react-router-dom'
 
 const TENANT_ID = import.meta.env.VITE_TENANT_ID || '11111111-1111-1111-1111-111111111111'
 
@@ -266,7 +268,7 @@ function ReturningScreen({ guest, T, lang, setLang, guestCount, setGuestCount, o
 
 // ── SCREEN B — New Guest (Warm Card) ─────────────────────────────────────────
 function NewGuestScreen({
-  T, lang, setLang, tableNum,
+  T, lang, setLang, tableNum, restaurantName,
   name, setName, phone, setPhone,
   guestCount, setGuestCount,
   error, isLoading, checkingPhone,
@@ -290,7 +292,7 @@ function NewGuestScreen({
       {/* Top navy section */}
       <div style={{ padding: '64px 24px 56px', textAlign: 'center' }}>
         <div style={{ color: 'white', fontSize: 24, fontStyle: 'italic', fontWeight: 500 }}>
-          The Grand Spice
+          {restaurantName || 'Menu'}
         </div>
         <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, marginTop: 4 }}>{T.tagline}</div>
         <div style={{ marginTop: 16, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(217,119,6,0.15)', border: '1px solid rgba(251,191,36,0.4)', borderRadius: 20, padding: '5px 14px' }}>
@@ -452,6 +454,9 @@ export default function CheckIn({ onComplete }) {
   const [returningGuest, setReturningGuest] = useState(null)
   // null = unknown | false = new guest | object = returning guest
 
+  const [searchParams] = useSearchParams()
+  const { restaurantName } = getQrSession(searchParams)
+
   const T = t[lang]
   const tableNum = getTableNum()
 
@@ -597,6 +602,7 @@ export default function CheckIn({ onComplete }) {
             lang={lang}
             setLang={setLang}
             tableNum={tableNum}
+            restaurantName={restaurantName}
             name={name}
             setName={setName}
             phone={phone}

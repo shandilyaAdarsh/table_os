@@ -21,6 +21,17 @@ export const useRuntimeAuthStore = create(
 
       // ── Actions ─────────────────────────────────────────────
       
+      setRuntimeSession: (token, payload) => {
+        set({
+          runtimeToken: token,
+          tenantId: payload.tenantId,
+          branchId: payload.branchId,
+          role: payload.role,
+          sub: payload.sub,
+          authStatus: 'AUTHENTICATED'
+        });
+      },
+
       /**
        * Exchanges platform credentials for a deterministic Runtime JWT
        * and parses it into the store.

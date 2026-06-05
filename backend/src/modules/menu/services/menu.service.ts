@@ -250,6 +250,11 @@ export async function createNewMenuItem(
   dto: CreateMenuItemDto,
   createdBy: string
 ): Promise<MenuItem> {
+  const category = await findCategoryById(tenantId, dto.category_id);
+  if (!category) {
+    throw new AppError('Category not found', 404, 'NOT_FOUND');
+  }
+
   // Guard: slug uniqueness
   const slugConflict = await findItemBySlug(tenantId, dto.slug);
   if (slugConflict) throw new AppError(`Item slug '${dto.slug}' already exists`, 409, 'CONFLICT');

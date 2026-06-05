@@ -6,6 +6,7 @@
 import crypto from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { GuestSessionService } from '../../guest-sessions/services/guest-session.service';
+import { logger } from '../../../shared/utils/logger';
 
 export interface QRTokenBootstrapPayload {
   tenant: any;
@@ -89,55 +90,126 @@ export class TableQRService {
     userAgent?: string,
     deviceFingerprint?: string
   ): Promise<QRTokenBootstrapPayload> {
-    // 1. Resolve active token -> table context
-    const { data: tokenData, error: tokenError } = await this.supabase
+    // 1. Resolve active token -> table context (legacy table_qr_tokens or permanent tables.qr_token)
+    let tokenData: { id?: string; tenant_id: string; table_id: string; access_count?: number } | null = null;
+
+    const { data: legacyToken, error: tokenError } = await this.supabase
       .from('table_qr_tokens')
       .select('id, tenant_id, table_id, access_count')
       .eq('public_token', publicToken)
       .eq('is_active', true)
-      .single();
+      .maybeSingle();
 
-    if (tokenError || !tokenData) {
-      // Intentionally obscure error for security against token enumeration
+    if (!tokenError && legacyToken) {
+      tokenData = legacyToken;
+    } else {
+      const { data: tableRow } = await this.supabase
+        .from('tables')
+        .select('id, tenant_id, qr_token')
+        .eq('qr_token', publicToken)
+        .is('deleted_at', null)
+        .maybeSingle();
+
+      if (tableRow?.qr_token) {
+        tokenData = {
+          tenant_id: tableRow.tenant_id,
+          table_id: tableRow.id,
+          access_count: 0,
+        };
+      }
+    }
+
+    if (!tokenData) {
+      logger.warn({ token: publicToken }, 'QR resolution failed: Token not found or expired');
       throw new Error('Invalid or expired QR code.');
     }
 
     const { tenant_id, table_id } = tokenData;
 
-    // 2. Resolve Table -> Branch -> Tenant context (Ensure it is NOT deleted/inactive)
+    logger.info({
+      token: publicToken,
+      decodedPayload: tokenData,
+      tableId: table_id,
+      tenantId: tenant_id,
+    }, 'QR token decoded, beginning context resolution');
+
+    // 2. Resolve Table context (Ensure it is NOT deleted/inactive)
     const { data: tableData, error: tableError } = await this.supabase
       .from('tables')
-      .select('id, branch_id, table_number, display_name, is_active, deleted_at, branches(status, active_published_snapshot_id), tenants(name, is_operational)')
+      .select('id, branch_id, table_number, display_name, is_active, deleted_at')
       .eq('id', tokenData.table_id)
       .eq('tenant_id', tokenData.tenant_id)
       .single();
 
-    if (tableError || !tableData || !tableData.is_active || tableData.deleted_at !== null) {
-      throw new Error('Table is currently unavailable.');
+    if (tableError || !tableData) {
+      logger.error({ tableId: table_id, error: tableError }, 'QR resolution failed: TABLE_RECORD_MISSING');
+      throw new Error('TABLE_RECORD_MISSING');
     }
 
-    const branchData = tableData.branches as any;
-    const tenantData = tableData.tenants as any;
+    if (tableData.deleted_at !== null) {
+      logger.warn({ tableId: table_id, deletedAt: tableData.deleted_at }, 'QR resolution failed: TABLE_SOFT_DELETED');
+      throw new Error('TABLE_SOFT_DELETED');
+    }
 
-    if (!tenantData?.is_operational) {
+    if (!tableData.is_active) {
+      logger.warn({ tableId: table_id }, 'QR resolution failed: TABLE_INACTIVE');
+      throw new Error('TABLE_INACTIVE');
+    }
+
+    // 3. Resolve Branch context
+    const { data: branchData, error: branchError } = await this.supabase
+      .from('branches')
+      .select('status, active_published_snapshot_id')
+      .eq('id', tableData.branch_id)
+      .single();
+
+    if (branchError || !branchData) {
+      logger.error({ tableId: table_id, branchId: tableData.branch_id, error: branchError }, 'QR resolution failed: BRANCH_MISSING');
+      throw new Error('BRANCH_MISSING');
+    }
+
+    // 4. Resolve Tenant context
+    const { data: tenantData, error: tenantError } = await this.supabase
+      .from('tenants')
+      .select('name, is_active')
+      .eq('id', tokenData.tenant_id)
+      .single();
+
+    if (tenantError || !tenantData) {
+      logger.error({ tableId: table_id, tenantId: tenant_id, error: tenantError }, 'QR resolution failed: TENANT_MISSING');
+      throw new Error('TENANT_MISSING');
+    }
+
+    if (!tenantData.is_active) {
+      logger.warn({ tenantId: tenant_id }, 'QR resolution failed: Tenant is not currently operational');
       throw new Error('Tenant is not currently operational.');
     }
 
-    if (branchData?.status === 'SUSPENDED') {
+    if (branchData.status === 'SUSPENDED') {
+      logger.warn({ branchId: tableData.branch_id }, 'QR resolution failed: Branch is suspended');
       throw new Error('Branch is suspended.');
     }
+
+    logger.info({
+      tableId: tableData.id,
+      branchId: tableData.branch_id,
+      tenantId: tenant_id,
+    }, 'QR context successfully resolved');
+
     
     // Increment telemetry
     const secret = process.env.SESSION_SECRET || 'fallback-secret-123';
     const ipHash = crypto.createHmac('sha256', secret).update(requestIp).digest('hex');
     const uaHash = userAgent ? crypto.createHmac('sha256', secret).update(userAgent).digest('hex') : null;
 
-    await this.supabase.from('table_qr_tokens').update({
-      access_count: (tokenData.access_count ?? 0) + 1,
-      last_accessed_at: new Date().toISOString(),
-      last_ip_hash: ipHash,
-      user_agent_hash: uaHash
-    }).eq('id', tokenData.id);
+    if (tokenData.id) {
+      await this.supabase.from('table_qr_tokens').update({
+        access_count: (tokenData.access_count ?? 0) + 1,
+        last_accessed_at: new Date().toISOString(),
+        last_ip_hash: ipHash,
+        user_agent_hash: uaHash,
+      }).eq('id', tokenData.id);
+    }
     
     // 3. Create or Rehydrate Guest Session via GuestSessionService
     const customerIdentityId = crypto.randomUUID(); // Anonymous identity generated for bootstrap

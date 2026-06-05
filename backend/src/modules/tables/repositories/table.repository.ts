@@ -148,6 +148,79 @@ export async function createTable(
   return data;
 }
 
+export async function updateTableQrFields(
+  tenantId: string,
+  tableId: string,
+  qrToken: string,
+  qrUrl: string,
+): Promise<Table> {
+  const { data, error } = await supabaseAdmin
+    .from('tables')
+    .update({ qr_token: qrToken, qr_url: qrUrl })
+    .eq('tenant_id', tenantId)
+    .eq('id', tableId)
+    .is('deleted_at', null)
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(`[TableRepo] updateTableQrFields: ${error.message}`);
+  }
+  return data;
+}
+
+export async function getTenantDisplayName(tenantId: string): Promise<string> {
+  const { data, error } = await supabaseAdmin
+    .from('tenants')
+    .select('name')
+    .eq('id', tenantId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`[TableRepo] getTenantDisplayName: ${error.message}`);
+  }
+  return data?.name ?? 'Restaurant';
+}
+
+export async function findTableByQrToken(qrToken: string): Promise<(Table & { tenants?: { name: string } | null }) | null> {
+  const { data, error } = await supabaseAdmin
+    .from('tables')
+    .select('*, tenants(name)')
+    .eq('qr_token', qrToken)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`[TableRepo] findTableByQrToken: ${error.message}`);
+  }
+  return data as (Table & { tenants?: { name: string } | null }) | null;
+}
+
+/** Keeps legacy table_qr_tokens in sync for /api/v1/public/table/:token scans. */
+export async function syncTableQrTokenRecord(
+  tenantId: string,
+  tableId: string,
+  publicToken: string,
+): Promise<void> {
+  await supabaseAdmin
+    .from('table_qr_tokens')
+    .update({ is_active: false, revoked_at: new Date().toISOString() })
+    .eq('tenant_id', tenantId)
+    .eq('table_id', tableId)
+    .eq('is_active', true);
+
+  const { error } = await supabaseAdmin.from('table_qr_tokens').insert({
+    tenant_id: tenantId,
+    table_id: tableId,
+    public_token: publicToken,
+    is_active: true,
+  });
+
+  if (error) {
+    logger.warn({ err: error, tenantId, tableId }, 'syncTableQrTokenRecord failed');
+  }
+}
+
 export async function updateTable(
   tenantId: string,
   tableId: string,

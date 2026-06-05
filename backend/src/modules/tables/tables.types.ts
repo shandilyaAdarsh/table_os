@@ -61,6 +61,8 @@ export interface Table {
   assigned_waiter_id: string | null;
   notes: string | null;
   is_active: boolean;
+  qr_token: string | null;
+  qr_url: string | null;
   version_num: number;
   created_by: string | null;
   updated_by: string | null;

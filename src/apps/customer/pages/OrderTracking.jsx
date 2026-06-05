@@ -8,6 +8,7 @@ import { motion } from 'framer-motion'
 import { playBeep } from '../../../utils/beep'
 import { BottomNav } from '../components/BottomNav'
 import { getTableNum } from '../utils/tableNum'
+import { getQrSession } from '../utils/qrSession'
 
 const TENANT_ID = import.meta.env.VITE_TENANT_ID || '11111111-1111-1111-1111-111111111111'
 
@@ -44,7 +45,11 @@ export default function OrderTracking() {
 
     const fetchOrder = async () => {
       try {
-        const res = await fetchWithRuntime(`/api/v1/customer/orders/${resolvedOrderId}`)
+        const { tenantId, tableId } = getQrSession()
+        const params = new URLSearchParams()
+        if (tenantId) params.set('tenantId', tenantId)
+        if (tableId) params.set('tableId', tableId)
+        const res = await fetchWithRuntime(`/api/v1/customer/orders/${resolvedOrderId}?${params.toString()}`)
         if (res.ok) {
           const { data } = await res.json()
           if (data) {

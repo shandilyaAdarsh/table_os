@@ -6,6 +6,11 @@
 
 import { AppError } from '../../../shared/errors/AppError';
 import * as tableRepo from '../repositories/table.repository';
+import {
+  buildTableQrUrl,
+  decodeAndVerifyTableToken,
+  generateTableToken,
+} from '../qr/table-qr-token.util';
 import * as floorRepo from '../repositories/table-floor.repository';
 import * as sectionRepo from '../repositories/table-section.repository';
 import type {
@@ -120,7 +125,64 @@ export async function createTable(
   }
 
   const table = await tableRepo.createTable(tenantId, dto as any, actorId);
-  return table;
+  return assignPermanentTableQr(tenantId, table);
+}
+
+async function assignPermanentTableQr(tenantId: string, table: Table): Promise<Table> {
+  if (table.qr_token && table.qr_url) {
+    return table;
+  }
+
+  const token = generateTableToken(table.id, tenantId, table.branch_id);
+  const qr_url = buildTableQrUrl(token);
+  const updated = await tableRepo.updateTableQrFields(tenantId, table.id, token, qr_url);
+  await tableRepo.syncTableQrTokenRecord(tenantId, table.id, token);
+  return updated;
+}
+
+export async function generateQrForTable(tenantId: string, tableId: string): Promise<Table> {
+  const table = await getTableById(tenantId, tableId);
+  return assignPermanentTableQr(tenantId, table);
+}
+
+export interface QrResolvePayload {
+  tenant_id: string;
+  branch_id: string;
+  table_id: string;
+  table_name: string;
+  restaurant_name: string;
+  qr_url: string;
+}
+
+export async function resolveQrTokenPublic(token: string): Promise<QrResolvePayload> {
+  let decoded: ReturnType<typeof decodeAndVerifyTableToken>;
+  try {
+    decoded = decodeAndVerifyTableToken(token);
+  } catch {
+    throw new AppError('Invalid QR token', 404, 'NOT_FOUND');
+  }
+
+  const table = await tableRepo.findTableById(decoded.tenantId, decoded.tableId);
+  if (!table || !table.is_active || table.deleted_at) {
+    throw new AppError('Table not found', 404, 'NOT_FOUND');
+  }
+  if (table.branch_id !== decoded.branchId) {
+    throw new AppError('Invalid QR token', 400, 'VALIDATION_ERROR');
+  }
+  if (table.qr_token && table.qr_token !== token) {
+    throw new AppError('Invalid QR token', 400, 'VALIDATION_ERROR');
+  }
+
+  const restaurantName = await tableRepo.getTenantDisplayName(decoded.tenantId);
+
+  return {
+    tenant_id: table.tenant_id,
+    branch_id: table.branch_id,
+    table_id: table.id,
+    table_name: table.display_name ?? table.table_number,
+    restaurant_name: restaurantName,
+    qr_url: table.qr_url ?? buildTableQrUrl(token),
+  };
 }
 
 export async function updateTable(
@@ -173,20 +235,28 @@ export async function getTableHistory(tenantId: string, tableId: string) {
 }
 
 export async function rotateQrToken(tenantId: string, tableId: string, actorId: string): Promise<string> {
-  const table = await tableRepo.findTableById(tenantId, tableId);
-  if (!table) throw new AppError('Table not found', 404, 'NOT_FOUND');
-  
-  const token = await tableRepo.rotateTableQrToken(tenantId, tableId);
-  
-  await tableRepo.appendTableStateHistory(tenantId, table.branch_id, tableId, actorId, 'Rotated QR Token');
-  return token;
+  const table = await getTableById(tenantId, tableId);
+  if (table.qr_token) {
+    return table.qr_token;
+  }
+  const updated = await assignPermanentTableQr(tenantId, table);
+  await tableRepo.appendTableStateHistory(
+    tenantId,
+    table.branch_id,
+    tableId,
+    actorId,
+    'Generated permanent QR token',
+  );
+  return updated.qr_token!;
 }
 
-export async function getQrToken(tenantId: string, tableId: string): Promise<string | null> {
-  const table = await tableRepo.findTableById(tenantId, tableId);
-  if (!table) throw new AppError('Table not found', 404, 'NOT_FOUND');
-  
-  return tableRepo.getActiveQrToken(tenantId, tableId);
+export async function getQrToken(tenantId: string, tableId: string): Promise<{ token: string | null; qr_url: string | null }> {
+  const table = await getTableById(tenantId, tableId);
+  if (table.qr_token) {
+    return { token: table.qr_token, qr_url: table.qr_url };
+  }
+  const legacy = await tableRepo.getActiveQrToken(tenantId, tableId);
+  return { token: legacy, qr_url: legacy ? buildTableQrUrl(legacy) : null };
 }
 
 // ─── Reservations ─────────────────────────────────────────────

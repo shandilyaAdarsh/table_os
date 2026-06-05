@@ -294,7 +294,6 @@ interface DbOrder {
   table_num: string;
   total_amount: number;
   guest_count: number | null;
-  guest_name: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -390,7 +389,7 @@ export async function GET() {
       metadata: {
         correlation_id: `corr_ord_${o.id.substring(0, 8)}`,
         timestamp: o.created_at,
-        actor_id: o.guest_name || 'guest_qr',
+        actor_id: 'guest_qr',
         actor_role: "CUSTOMER"
       },
       is_real_data: true

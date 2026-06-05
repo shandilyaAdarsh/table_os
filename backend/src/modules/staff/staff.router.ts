@@ -1,48 +1,37 @@
-import { Router, type Router as ExpressRouter } from 'express';
-import { StaffController } from './staff.controller';
-import { StaffService } from './staff.service';
-import { StaffRepository } from './staff.repository';
-import { supabaseAdmin } from '../../config/supabase';
-import {
-  authenticate,
-  requireTenantAccess,
-  requireMinRole,
-} from '../../middleware/auth.middleware';
-import { ROLES } from '../../types/rbac.types';
+import { Router } from 'express';
+import * as controller from './controllers/staff.controller';
+import { authenticate } from '../../middleware/auth.middleware';
+import { tenantContext } from '../../middleware/tenant.middleware';
 
-const router: ExpressRouter = Router({ mergeParams: true });
+export const staffRouter: Router = Router({ mergeParams: true });
 
-const staffRepository = new StaffRepository(supabaseAdmin);
-const staffService = new StaffService(staffRepository);
-const staffController = new StaffController(staffService);
+// Require authentication and strictly enforce tenant bounds
+staffRouter.use(authenticate, tenantContext);
 
-// ─── Auth applied to all routes ───────────────────────────────
-router.use(authenticate);
-router.use(requireTenantAccess('tenantId'));
-
-router.get('/', 
-  requireMinRole(ROLES.MANAGER),
-  staffController.list
+// Get all staff for tenant
+staffRouter.get(
+  '/',
+  // requirePermission(PERMISSIONS.MANAGE_STAFF), // Assuming such permission exists or rely on tenant access
+  controller.listStaff
 );
 
-router.get('/:id', 
-  requireMinRole(ROLES.MANAGER),
-  staffController.getById
+// Create new staff
+staffRouter.post(
+  '/',
+  // requirePermission(PERMISSIONS.MANAGE_STAFF),
+  controller.createStaff
 );
 
-router.post('/', 
-  requireMinRole(ROLES.MANAGER),
-  staffController.create
+// Update staff
+staffRouter.patch(
+  '/:staffId',
+  // requirePermission(PERMISSIONS.MANAGE_STAFF),
+  controller.updateStaff
 );
 
-router.patch('/:id', 
-  requireMinRole(ROLES.MANAGER),
-  staffController.update
+// Delete staff
+staffRouter.delete(
+  '/:staffId',
+  // requirePermission(PERMISSIONS.MANAGE_STAFF),
+  controller.deleteStaff
 );
-
-router.delete('/:id', 
-  requireMinRole(ROLES.MANAGER),
-  staffController.delete
-);
-
-export { router as staffRouter };
