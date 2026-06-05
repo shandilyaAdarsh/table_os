@@ -22,7 +22,9 @@ export const createStaff = async (req: Request, res: Response, next: NextFunctio
   try {
     const tenantId = req.params.tenantId as string;
     
+    console.log('Incoming create payload:', req.body);
     const payload = CreateStaffSchema.parse(req.body);
+    console.log('Parsed payload:', payload);
     
     const staff = await StaffService.createStaff(supabase, tenantId, payload);
     

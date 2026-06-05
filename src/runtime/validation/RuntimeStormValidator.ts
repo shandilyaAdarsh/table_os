@@ -1,7 +1,7 @@
 /**
  * RuntimeStormValidator
  *
- * Automated convergence certification harness for the Orderlli runtime infrastructure.
+ * Automated convergence certification harness for the Orderlyy runtime infrastructure.
  * Runs deterministic failure simulations and validates recovery invariants.
  *
  * This is NOT a unit test runner. It is an in-process runtime simulation harness
@@ -101,7 +101,7 @@ export class RuntimeStormValidator {
     const certified = failed === 0;
 
     const report: ValidationReport = {
-      suiteName: 'Orderlli Runtime Convergence Certification',
+      suiteName: 'Orderlyy Runtime Convergence Certification',
       timestamp: new Date().toISOString(),
       totalTests: results.length,
       passed,

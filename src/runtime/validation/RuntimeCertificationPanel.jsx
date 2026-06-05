@@ -285,7 +285,7 @@ export default function RuntimeCertificationPanel() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <div>
             <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.15em', color: C.muted, marginBottom: 4 }}>
-              ORDERLLI · RUNTIME INFRASTRUCTURE
+              ORDERLYY · RUNTIME INFRASTRUCTURE
             </div>
             <h1 style={{ fontSize: 22, fontWeight: 900, color: C.text, margin: 0, letterSpacing: '-0.02em' }}>
               Convergence Certification

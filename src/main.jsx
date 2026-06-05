@@ -160,7 +160,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Routes>
               <Route path="/" element={<Navigate to="/menu" replace />} />
 
-              {/* Table QR scan entry (app.orderlli.com/t/{token}) */}
+              {/* Table QR scan entry (app.orderlyy.com/t/{token}) */}
               <Route path="/t/:token" element={<TableQrLanding />} />
 
               {/* Customer Menu */}

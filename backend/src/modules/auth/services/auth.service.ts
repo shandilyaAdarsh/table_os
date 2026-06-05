@@ -220,7 +220,7 @@ export async function refreshAccessToken(
   ipAddress: string,
   userAgent: string,
   deviceSessionId: string
-): Promise<{ access_token: string; expires_in: number }> {
+): Promise<{ access_token: string; refresh_token: string; expires_in: number }> {
   // 1. Verify device session exists and fingerprint matches
   const deviceSession = await findActiveDeviceSession(deviceSessionId, request.device_fingerprint);
 
@@ -265,6 +265,7 @@ export async function refreshAccessToken(
 
   return {
     access_token: data.session.access_token,
+    refresh_token: data.session.refresh_token,
     expires_in: data.session.expires_in ?? env.AUTH_ACCESS_TOKEN_TTL,
   };
 }

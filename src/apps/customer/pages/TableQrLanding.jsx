@@ -52,7 +52,7 @@ export default function TableQrLanding() {
     switch (error) {
       case 'QR_NOT_FOUND':
         title = 'QR Code Invalid'
-        message = 'Please scan a valid Orderlli QR code on your table.'
+        message = 'Please scan a valid Orderlyy QR code on your table.'
         break
       case 'TABLE_NOT_FOUND':
         title = 'Table Not Available'

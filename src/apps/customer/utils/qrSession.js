@@ -16,7 +16,7 @@ export function setQrSession({
   if (restaurant_name) sessionStorage.setItem('qr_restaurant_name', restaurant_name);
 
   localStorage.setItem(
-    'orderlli_qr_context',
+    'orderlyy_qr_context',
     JSON.stringify({
       tenant_id,
       branch_id,
