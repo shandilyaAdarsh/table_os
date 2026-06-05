@@ -6,7 +6,7 @@ import { SupabaseTransportAdapter } from '../../../runtime/transport/SupabaseTra
 import { supabase } from '../../../lib/supabase'
 import { BottomNav } from '../components/BottomNav'
 
-const TENANT_ID = '11111111-1111-1111-1111-111111111111'
+const TENANT_ID = import.meta.env.VITE_TENANT_ID || '11111111-1111-1111-1111-111111111111'
 
 const getSession = () => {
   try { return JSON.parse(localStorage.getItem('customerSession') || '{}') }

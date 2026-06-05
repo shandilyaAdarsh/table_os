@@ -13,6 +13,7 @@ import { supabaseAdmin } from '../../config/supabase';
 import { allocateSequenceNumber } from './sequence-allocator.service';
 import { BranchMenuResolutionService } from '../overrides/services/branch-menu-resolution.service';
 import { ProjectionService } from '../projection/projection.service';
+import { WebSocketManager } from '../transport/websocket.manager';
 
 const VALID_TRANSITIONS: Record<ordersRepo.OrderStatus, ordersRepo.OrderStatus[]> = {
   pending: ['accepted', 'cancelled'],
@@ -152,7 +153,12 @@ export async function createOrderFromCart(params: {
     }
 
     const response = data as { order: ordersRepo.Order; invoice: any; kitchen_order_id: string };
-    return response.order;
+    const createdOrder = response.order;
+
+    // ── Dispatch ORDER_ASSIGNED realtime event ────────────────────────────
+    void _dispatchOrderAssignedEvent(createdOrder, cart.branch_id, tenantId, cartItems);
+
+    return createdOrder;
   } catch (err) {
     // Graceful rollback protection: Unlock the cart on failure
     const currentCart = await cartRepo.findCartById(tenantId, cartId);
@@ -160,6 +166,60 @@ export async function createOrderFromCart(params: {
       await cartRepo.updateCartStatus(tenantId, cartId, 'open', currentCart.version_num);
     }
     throw err;
+  }
+}
+
+// ── Internal: Dispatch ORDER_ASSIGNED after successful checkout ─────────────
+async function _dispatchOrderAssignedEvent(
+  order: ordersRepo.Order,
+  branchId: string,
+  tenantId: string,
+  cartItems: any[]
+): Promise<void> {
+  try {
+    // Fetch table to get assigned_waiter_id and table_number
+    const { data: tableData } = await supabaseAdmin
+      .from('tables')
+      .select('table_number, assigned_waiter_id')
+      .eq('id', order.table_id)
+      .maybeSingle();
+
+    const assignedStaffId = tableData?.assigned_waiter_id ?? null;
+    const tableNumber = tableData?.table_number ?? 'N/A';
+
+    // Calculate total from cart items
+    const totalAmountMinor = cartItems.reduce(
+      (sum, item) => sum + (item.unit_price_minor_snapshot ?? 0) * (item.quantity ?? 1),
+      0
+    );
+
+    const alertPayload = {
+      orderId: order.id,
+      orderNumber: order.order_number,
+      tableId: order.table_id,
+      tableNumber,
+      tenantId,
+      assignedStaffId,       // null = broadcast to all (manager fallback)
+      itemCount: cartItems.length,
+      totalAmountMinor,
+      orderTime: order.created_at,
+      versionNum: order.version_num,   // ← OCC version for accept action
+      items: cartItems.map(i => ({
+        name: i.item_name_snapshot,
+        quantity: i.quantity,
+      })),
+    };
+
+    WebSocketManager.getInstance().broadcastToBranch(
+      branchId,
+      'ORDERING',
+      'ALERT_STREAM',
+      'order_assigned',
+      alertPayload
+    );
+  } catch (err) {
+    // Non-fatal: order was created successfully, alert dispatch is best-effort
+    console.error('[OrderAlert] Failed to dispatch ORDER_ASSIGNED event:', err);
   }
 }
 
@@ -233,6 +293,40 @@ export async function transitionOrderStatus(params: {
     eventSource: 'ORDERING',
   });
 
+  // 6. Dispatch specific Realtime Events for Staff App
+  if (targetStatus === 'ready') {
+    let staffName = 'Unknown Staff';
+    if ((order as any).assigned_waiter_id) {
+      try {
+        const { data } = await supabaseAdmin
+          .from('staff')
+          .select('name')
+          .eq('id', (order as any).assigned_waiter_id)
+          .single();
+        if (data && data.name) staffName = data.name;
+      } catch (err) {
+        console.error('[OrderAlert] Failed to fetch staff name:', err);
+      }
+    }
+
+    WebSocketManager.getInstance().broadcastToBranch(
+      order.branch_id,
+      'SYSTEM',
+      'ORDER_ALERTS',
+      'ORDER_READY_FOR_PICKUP',
+      {
+        orderId: order.id,
+        orderNumber: (order as any).table_num || order.id,
+        tableNumber: (order as any).table_num,
+        assignedStaffId: (order as any).assigned_waiter_id,
+        assignedStaffName: staffName,
+        readyAt: new Date().toISOString(),
+        tenantId,
+        branchId: order.branch_id,
+      }
+    );
+  }
+
   return updatedOrder;
 }
 
@@ -250,6 +344,135 @@ export async function listBranchOrders(
   filters?: { status?: ordersRepo.OrderStatus }
 ): Promise<ordersRepo.Order[]> {
   return ordersRepo.listOrdersByBranch(tenantId, branchId, filters);
+}
+
+// ── Accept Order (staff self-accept alert) ────────────────────────────────
+export async function acceptOrder(params: {
+  tenantId: string;
+  orderId: string;
+  staffId: string;
+  versionNum: number;
+}): Promise<ordersRepo.Order> {
+  const { tenantId, orderId, staffId, versionNum } = params;
+  
+  const updatedOrder = await transitionOrderStatus({
+    tenantId,
+    orderId,
+    targetStatus: 'accepted',
+    versionNum,
+    userId: staffId,
+    reason: 'Order accepted by assigned staff.',
+  });
+
+  let staffName = 'Unknown Staff';
+  try {
+    const { data } = await supabaseAdmin
+      .from('staff')
+      .select('name')
+      .eq('id', staffId)
+      .single();
+    if (data && data.name) staffName = data.name;
+  } catch (err) {
+    console.error('[OrderAlert] Failed to fetch staff name:', err);
+  }
+
+  WebSocketManager.getInstance().broadcastToBranch(
+    updatedOrder.branch_id,
+    'SYSTEM',
+    'ORDER_ALERTS',
+    'ORDER_ACCEPTED',
+    {
+      orderId: updatedOrder.id,
+      orderNumber: (updatedOrder as any).table_num || updatedOrder.id,
+      acceptedByStaffId: staffId,
+      acceptedByStaffName: staffName,
+      acceptedAt: new Date().toISOString(),
+      tenantId: tenantId,
+      branchId: updatedOrder.branch_id,
+    }
+  );
+
+  return updatedOrder;
+}
+
+// ── Reassign Order (pass to another staff) ────────────────────────────────
+export async function reassignOrder(params: {
+  tenantId: string;
+  orderId: string;
+  fromStaffId: string;
+  toStaffId: string;
+  branchId: string;
+}): Promise<void> {
+  const { tenantId, orderId, fromStaffId, toStaffId, branchId } = params;
+
+  // Update the table's assigned_waiter_id to point to new staff if possible
+  // First fetch order to get tableId
+  const order = await ordersRepo.getOrderById(tenantId, orderId);
+  if (!order) throw new NotFoundError('Order');
+
+  // Fetch cart items for the alert payload
+  const { data: snapshotItems } = await supabaseAdmin
+    .from('order_snapshot_items')
+    .select('item_name_snapshot, quantity, unit_price_minor_snapshot')
+    .eq('order_snapshot_id', order.order_snapshot_id);
+
+  const cartItems = snapshotItems ?? [];
+  const totalAmountMinor = cartItems.reduce(
+    (sum: number, item: any) => sum + (item.unit_price_minor_snapshot ?? 0) * (item.quantity ?? 1),
+    0
+  );
+
+  const { data: tableData } = await supabaseAdmin
+    .from('tables')
+    .select('table_number')
+    .eq('id', order.table_id)
+    .maybeSingle();
+
+  // Broadcast ORDER_ASSIGNED to new staff member
+  const alertPayload = {
+    orderId,
+    orderNumber: order.order_number,
+    tableId: order.table_id,
+    tableNumber: tableData?.table_number ?? 'N/A',
+    tenantId,
+    assignedStaffId: toStaffId,
+    fromStaffId,
+    itemCount: cartItems.length,
+    totalAmountMinor,
+    orderTime: order.created_at,
+    items: cartItems.map((i: any) => ({
+      name: i.item_name_snapshot,
+      quantity: i.quantity,
+    })),
+    isReassignment: true,
+  };
+
+  WebSocketManager.getInstance().broadcastToBranch(
+    branchId,
+    'ORDERING',
+    'ALERT_STREAM',
+    'order_assigned',
+    alertPayload
+  );
+}
+
+// ── Get pending (unaccepted) orders for a staff member ────────────────────
+export async function getPendingOrdersForStaff(
+  tenantId: string,
+  branchId: string,
+  staffId: string
+): Promise<ordersRepo.Order[]> {
+  const { data, error } = await supabaseAdmin
+    .from('orders')
+    .select('*, tables!inner(assigned_waiter_id)')
+    .eq('tenant_id', tenantId)
+    .eq('branch_id', branchId)
+    .eq('status', 'pending')
+    .eq('tables.assigned_waiter_id', staffId)
+    .order('created_at', { ascending: true });
+
+  if (error) return [];
+  return (data ?? []) as ordersRepo.Order[];
 }
 
 

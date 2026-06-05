@@ -20,7 +20,7 @@ import CartDrawer from './CartDrawer'
 import { motion } from 'framer-motion'
 import { getTableNum } from '../utils/tableNum'
 
-const TENANT_ID  = '11111111-1111-1111-1111-111111111111'
+const TENANT_ID = import.meta.env.VITE_TENANT_ID || '11111111-1111-1111-1111-111111111111'
 const STICKY_TRIGGER = 280
 const NAV_SCROLL_THRESHOLD = 8
 
@@ -180,10 +180,7 @@ function MenuItemCard({ item, idx, navigate, handleItemAdd }) {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: Math.min(idx, 8) * 0.05 }}
+    <div
       onClick={() => navigate(`/menu/item/${mergedItem.id}`)}
       style={{
         display: 'flex', background: 'white', borderRadius: 16, padding: 14, gap: 12,
@@ -225,7 +222,7 @@ function MenuItemCard({ item, idx, navigate, handleItemAdd }) {
           </div>
         )}
       </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -235,7 +232,7 @@ export default function MenuHome() {
   const cartItems   = useCartStore(s => s.items)
 
   // Hardcode Branch ID for testing purposes (since frontend demo isn't dynamically routing)
-  const BRANCH_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+  const BRANCH_ID = '24b06752-edde-4983-86d6-b869481e968d'
 
   // Initialize availability polling
   useAvailabilityPolling({ tenantId: TENANT_ID, branchId: BRANCH_ID, intervalMs: 15000 })
@@ -245,6 +242,7 @@ export default function MenuHome() {
 
   const [items,           setItems]           = useState(null)  // null = loading, [] = loaded
   const [itemsLoading,    setItemsLoading]    = useState(true)
+  const [fetchError,      setFetchError]      = useState(null)
 
   const [searchQuery,     setSearchQuery]     = useState('')
   const [vegOnly,       setVegOnly]         = useState(false)
@@ -269,26 +267,85 @@ export default function MenuHome() {
 
   // Direct Supabase fetch — bypasses store initialization guard
   useEffect(() => {
-    const fetchItems = async () => {
-      setItemsLoading(true)
+    const fetchItems = async (showShimmer = true) => {
+      if (showShimmer) setItemsLoading(true)
+      setFetchError(null)
       try {
-        const { data, error } = await supabase
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Supabase request timed out after 15 seconds! (Network/Service worker latency?)')), 15000)
+        )
+        
+        const fetchItemsPromise = supabase
           .from('menu_items')
           .select('*')
           .eq('tenant_id', TENANT_ID)
           .order('sort_order', { ascending: true })
-        if (error || !data || data.length === 0) {
-          throw new Error('Fallback')
+
+        const fetchCatsPromise = supabase
+          .from('menu_categories')
+          .select('id, name')
+          .eq('tenant_id', TENANT_ID)
+
+        const [itemsRes, catsRes] = await Promise.all([
+          Promise.race([fetchItemsPromise, timeoutPromise]),
+          Promise.race([fetchCatsPromise, timeoutPromise])
+        ])
+        
+        if (itemsRes.error || !itemsRes.data) {
+          throw new Error(itemsRes.error?.message || 'Empty menu items data')
         }
-        console.log('Fetched items:', data?.length, data)
-        setItems(data || [])
+        
+        const catMap = {}
+        if (catsRes.data) {
+          catsRes.data.forEach(c => catMap[c.id] = c.name)
+        }
+
+        const transformedData = itemsRes.data.map(item => ({
+          ...item,
+          category: catMap[item.category_id] || 'Uncategorized',
+          is_veg: item.dietary_tags?.includes('vegetarian') || false,
+        }))
+        
+        console.log('Fetched items:', transformedData?.length, transformedData)
+        setItems(transformedData || [])
       } catch (error) {
         console.error('Menu fetch error:', error)
-        setItems([])
+        setFetchError(error.message)
+        if (showShimmer) setItems([])
       }
-      setItemsLoading(false)
+      if (showShimmer) setItemsLoading(false)
     }
-    fetchItems()
+    
+    fetchItems(true)
+
+    // Subscribe to realtime database changes for automatic sync when admin adds/edits items
+    const channel = supabase
+      .channel('customer_menu_sync')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'menu_items',
+        filter: `tenant_id=eq.${TENANT_ID}`,
+      }, (payload) => {
+        console.log('Realtime menu item update detected:', payload.eventType, payload.new, 'refetching...')
+        fetchItems(false)
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'menu_categories',
+        filter: `tenant_id=eq.${TENANT_ID}`,
+      }, (payload) => {
+        console.log('Realtime category update detected:', payload.eventType, payload.new, 'refetching...')
+        fetchItems(false)
+      })
+      .subscribe((status, err) => {
+        console.log(`[Realtime Sync] Channel status: ${status}`, err || '')
+      })
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   // Scroll tracking — hide/show nav + sticky overlay + search bar (Issues 5 & 6)
@@ -642,6 +699,7 @@ export default function MenuHome() {
 
       {/* ── ITEM LIST ── */}
       <main style={{ padding: '4px 16px 200px' }}>
+
         {itemsLoading || items === null ? (
           // Issue 8: inline shimmer skeleton
           <>
@@ -672,6 +730,19 @@ export default function MenuHome() {
               ))}
             </div>
           </>
+        ) : fetchError ? (
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <span style={{ fontSize: '48px' }}>⚠️</span>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#E31E24', marginTop: '16px' }}>Connection Issue</h3>
+            <p style={{ color: '#6C757D', fontSize: '14px', marginTop: '4px' }}>{fetchError}</p>
+            <button onClick={() => window.location.reload()} style={{ marginTop: '20px', background: '#E31E24', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}>Retry</button>
+          </div>
+        ) : items.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <span style={{ fontSize: '48px' }}>🍽️</span>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#E31E24', marginTop: '16px' }}>No Menu Available</h3>
+            <p style={{ color: '#6C757D', fontSize: '14px', marginTop: '4px' }}>There are currently no items on the menu for this branch.</p>
+          </div>
         ) : displayedItems.length === 0 && items.length > 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>
             <span style={{ fontSize: '48px' }}>🔍</span>

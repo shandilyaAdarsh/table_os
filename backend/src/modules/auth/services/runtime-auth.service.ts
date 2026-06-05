@@ -63,7 +63,7 @@ export class RuntimeAuthService {
     }
 
     // 2. Resolve granular permissions
-    const permissionsSet = await resolvePermissions(validation.user_id, effectiveTenantId);
+    const permissionsSet = await resolvePermissions(validation.user_id, effectiveTenantId ?? null);
     const permissions = Array.from(permissionsSet);
 
     // 3. Branch access governance
@@ -88,7 +88,7 @@ export class RuntimeAuthService {
     // 4. Construct strict envelope
     const payload: Omit<RuntimeJwtPayload, 'iat' | 'exp'> = {
       sub: validation.user_id,
-      tenant_id: effectiveTenantId,
+      tenant_id: effectiveTenantId ?? '',
       branch_id: branchId,
       role,
       permissions,

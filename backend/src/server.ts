@@ -4,6 +4,9 @@
 // Loads env validation first, then starts Express.
 // ============================================================
 
+import dns from 'node:dns';
+dns.setDefaultResultOrder('ipv4first');
+
 import { env } from './config/env'; // Must be first — validates env before anything else
 import { createApp } from './app';
 import { logger } from './shared/utils/logger';

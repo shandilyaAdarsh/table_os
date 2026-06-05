@@ -175,6 +175,7 @@ export async function createMenuItem(
       short_description: dto.short_description ?? null,
       sku:               dto.sku ?? null,
       base_price:        dto.base_price,
+      price:             dto.base_price,
       pricing_type:      dto.pricing_type ?? 'fixed',
       tax_group_id:      dto.tax_group_id ?? null,
       dietary_tags:      dto.dietary_tags ?? [],
@@ -184,6 +185,7 @@ export async function createMenuItem(
       is_featured:       dto.is_featured ?? false,
       image_url:         dto.image_url ?? null,
       thumbnail_url:     dto.thumbnail_url ?? null,
+      status:            dto.status ?? 'active',
       created_by:        createdBy,
     })
     .select()
@@ -205,13 +207,19 @@ export async function updateMenuItem(
 ): Promise<MenuItem> {
   const { version_num, ...updateData } = dto;
 
+  const updatePayload: any = {
+    ...updateData,
+    updated_by: updatedBy,
+    version_num: version_num + 1
+  };
+  
+  if (updateData.base_price !== undefined) {
+    updatePayload.price = updateData.base_price;
+  }
+
   const { data, error } = await supabaseAdmin
     .from('menu_items')
-    .update({
-      ...updateData,
-      updated_by: updatedBy,
-      version_num: version_num + 1
-    })
+    .update(updatePayload)
     .eq('tenant_id', tenantId)
     .is('deleted_at', null)
     .eq('id', itemId)

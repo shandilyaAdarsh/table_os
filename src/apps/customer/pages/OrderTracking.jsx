@@ -9,6 +9,8 @@ import { playBeep } from '../../../utils/beep'
 import { BottomNav } from '../components/BottomNav'
 import { getTableNum } from '../utils/tableNum'
 
+const TENANT_ID = import.meta.env.VITE_TENANT_ID || '11111111-1111-1111-1111-111111111111'
+
 const STATUS_MAP = {
   pending:  { step: 1 },
   cooking:  { step: 2 },
@@ -60,7 +62,6 @@ export default function OrderTracking() {
     fetchOrder()
 
     // Bootstrap formal runtime infrastructure for realtime event routing
-    const TENANT_ID = '11111111-1111-1111-1111-111111111111'
     const BRANCH_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
     const topic = `tenant:${TENANT_ID}:branch:${BRANCH_ID}:operational`;
     const adapter = new SupabaseTransportAdapter(supabase);
@@ -197,7 +198,7 @@ export default function OrderTracking() {
             payload: {
               order_id: resolvedOrderId,
               table_num: order?.table_num || getTableNum(),
-              tenant_id: '11111111-1111-1111-1111-111111111111',
+              tenant_id: TENANT_ID,
               payment_id: paymentId
             }
           })

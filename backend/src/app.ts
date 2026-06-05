@@ -33,6 +33,7 @@ import { runtimeRouter } from './modules/projection/runtime.router';
 import { eventReplayRouter } from './modules/projection/event-replay.router';
 import { deploymentRouter } from './modules/projection/deployment.router';
 import { observabilityRouter } from './modules/observability/observability.router';
+import { analyticsRouter } from './modules/analytics/analytics.router';
 import { contextRouter } from './modules/context/context.router';
 import { ObservabilityService } from './modules/infrastructure/observability.service';
 import { errorMiddleware } from './middleware/error.middleware';
@@ -174,6 +175,9 @@ export function createApp(): express.Application {
   app.use('/api/v1/runtime/events', eventReplayRouter);
   app.use('/api/v1/runtime', deploymentRouter);
   app.use('/api/v1/runtime/observability', observabilityRouter);
+
+  // ─── Analytics API ──────────────────────────────────────────
+  app.use('/api/v1/analytics', analyticsRouter);
 
   // ─── Admin API (requires auth & tenant context) ──────────────
   // The authoritative operational interface for the dashboard/admin panel.

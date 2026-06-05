@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { fetchWithRuntime, submitMutation } from '../../../lib/apiClient'
 import { getTableNum } from '../utils/tableNum'
 
-const TENANT_ID = '11111111-1111-1111-1111-111111111111'
+const TENANT_ID = import.meta.env.VITE_TENANT_ID || '11111111-1111-1111-1111-111111111111'
 
 // ── Translations ────────────────────────────────────────────────────────────
 const t = {

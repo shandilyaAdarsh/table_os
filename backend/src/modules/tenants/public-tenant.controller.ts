@@ -56,16 +56,22 @@ export async function getPublicStaff(req: Request, res: Response, next: NextFunc
 
     const { data, error } = await supabaseAdmin
       .from('staff')
-      .select('id, name, role, pin, is_active, employee_id')
+      .select('id, first_name, last_name, role, pin_code_hash as pin, status, employee_id, profile_completed, profile_completed_at, profile_setup_step, developer_mode_enabled')
       .eq('tenant_id', orgId)
       .eq('branch_id', branchId)
-      .eq('is_active', true);
+      .eq('status', 'active');
 
     if (error) {
       throw error;
     }
 
-    res.status(200).json(ResponseFormatter.success(data || []));
+    const formattedData = ((data as any[]) || []).map((staff: any) => ({
+      ...staff,
+      name: `${staff.first_name} ${staff.last_name}`.trim(),
+      is_active: staff.status === 'active'
+    }));
+
+    res.status(200).json(ResponseFormatter.success(formattedData));
   } catch (err) {
     next(err);
   }

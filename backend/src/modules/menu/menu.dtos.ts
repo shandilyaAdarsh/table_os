@@ -91,6 +91,7 @@ export interface CreateMenuItemDto {
   image_url?:            string | null;
   thumbnail_url?:        string | null;
   modifier_group_ids?:   string[] | null;  // Link existing groups at creation
+  status?:               MenuItemStatus;
 }
 
 export interface UpdateMenuItemDto {

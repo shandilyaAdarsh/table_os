@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/purity */
 /**
  * KitchenDisplay.jsx — Kitchen Display System (KDS)
  * Real-time order queue for kitchen staff.
@@ -8,7 +9,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../../../lib/supabase'
 
-const TENANT_ID = '11111111-1111-1111-1111-111111111111'
+const TENANT_ID = import.meta.env.VITE_TENANT_ID || '11111111-1111-1111-1111-111111111111'
 
 // ── Audio beep for new orders ────────────────────────────────────────────────
 function playNewOrderBeep() {
@@ -284,7 +285,15 @@ export default function KitchenDisplay() {
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [toast, setToast] = useState(null)
   const soundEnabledRef = useRef(true)
-  soundEnabledRef.current = soundEnabled
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled
+  }, [soundEnabled])
+
+  // ── Toast helper ──────────────────────────────────────────────────────────
+  const showToast = (msg) => {
+    setToast(msg)
+    setTimeout(() => setToast(null), 3000)
+  }
 
   // ── Initial fetch ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -376,11 +385,6 @@ export default function KitchenDisplay() {
     return () => supabase.removeChannel(channel)
   }, [])
 
-  // ── Toast helper ──────────────────────────────────────────────────────────
-  const showToast = (msg) => {
-    setToast(msg)
-    setTimeout(() => setToast(null), 3000)
-  }
 
   // ── Actions ───────────────────────────────────────────────────────────────
   const handleAccept = async (order) => {

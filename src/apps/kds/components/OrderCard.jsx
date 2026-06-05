@@ -251,6 +251,26 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
               </span>
             )}
           </p>
+          
+          {/* ASSIGNED STAFF */}
+          {(order.assignedStaffName || order.assignedStaffId) && (
+            <div style={{
+              fontSize: '10px',
+              fontWeight: 700,
+              color: '#1E40AF',
+              marginTop: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              background: '#EFF6FF',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              width: 'max-content'
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>badge</span>
+              Staff: {order.assignedStaffName || order.assignedStaffId}
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
