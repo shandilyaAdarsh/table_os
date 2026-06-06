@@ -66,6 +66,20 @@ export class GuestSessionRepository {
     return data;
   }
 
+  static async findSessionByPk(sessionId: string): Promise<GuestSession | null> {
+    const { data, error } = await supabaseAdmin
+      .from('guest_sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .maybeSingle();
+
+    if (error) {
+      logger.error({ err: error, sessionId }, 'findSessionByPk failed');
+      throw new Error(`[GuestSessionRepo] findSessionByPk: ${error.message}`);
+    }
+    return data;
+  }
+
   static async findActiveSessionByTable(tenantId: string, tableId: string): Promise<GuestSession | null> {
     const { data, error } = await supabaseAdmin
       .from('guest_sessions')

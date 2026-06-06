@@ -75,6 +75,9 @@ export function createApp(): express.Application {
         'X-Retry-Count',
         'x-request-id',
         'Idempotency-Key',
+        'X-Idempotency-Key',
+        'X-Branch-Id',
+        'X-Terminal-Id',
       ],
     })
   );

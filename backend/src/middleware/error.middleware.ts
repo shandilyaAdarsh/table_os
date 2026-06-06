@@ -36,6 +36,12 @@ export const errorMiddleware = (
       err: { message: err.message, code: err.code, stack: err.stack },
       req: { method: req.method, url: req.url }
     }, 'Unhandled Exception');
+    try {
+      require('fs').appendFileSync(
+        require('path').join(__dirname, '../../scratch/error.log'),
+        `[${new Date().toISOString()}] ${req.method} ${req.url}\n${err.stack}\n\n`
+      );
+    } catch (e) {}
   } else {
     logger.warn({ 
       err: { message, errorCode, details }, 

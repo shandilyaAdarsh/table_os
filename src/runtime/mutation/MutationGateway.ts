@@ -65,9 +65,10 @@ export class MutationGateway {
     const requestId = this.observability.generateRequestId();
     const idempotencyKey = request.idempotency_key || crypto.randomUUID();
 
+    const qrToken = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('qr_session_token') : null;
     const identity: MutationIdentity = {
       surface_id: surfaceId,
-      session_id: this.currentSessionId || 'anonymous_session',
+      session_id: this.currentSessionId || qrToken || 'anonymous_session',
       mutation_sequence: this.sequenceCounter,
       idempotency_key: idempotencyKey,
       request_id: requestId,
@@ -100,6 +101,10 @@ export class MutationGateway {
     const token = localStorage.getItem('supabase.auth.token');
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    if (qrToken) {
+      headers.set('x-qr-session-token', qrToken);
     }
 
     try {
@@ -144,7 +149,7 @@ export class MutationGateway {
    * Called internally to start the timeout escalation path
    */
   private startMutationTimeoutEscalation(idempotencyKey: string) {
-    // Escalate to STALLED after 10s
+    // Escalate to STALLED after 30s (increased for slow local environments)
     const timer = setTimeout(() => {
       const identity = this.mutationLedger.get(idempotencyKey);
       if (identity && identity.status === 'PENDING') {
@@ -164,11 +169,11 @@ export class MutationGateway {
                 identity.status = 'FAILED';
                 console.error(`[MutationGateway] Mutation ${idempotencyKey} FAILED after timeout escalation.`);
               }
-            }, 5000);
+            }, 15000);
           }
         }, 2000);
       }
-    }, 10000);
+    }, 30000);
 
     this.stuckTimers.set(idempotencyKey, timer);
   }

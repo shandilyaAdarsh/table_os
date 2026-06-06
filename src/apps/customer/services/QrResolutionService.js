@@ -58,6 +58,7 @@ export class QrResolutionService {
         table_id: data.table.id,
         table_name: data.table.display_name || data.table.table_number,
         restaurant_name: data.tenant.name,
+        guest_session_id: data.guestSession?.id,
       };
 
       // Record success telemetry

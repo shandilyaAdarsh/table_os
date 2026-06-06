@@ -66,7 +66,6 @@ function AuthGate({ children }) {
   const [healthStatus, setHealthStatus] = React.useState('checking') // checking, ok, degraded
 
   useEffect(() => {
-    // 1. Pre-boot Health Check
     const checkHealth = async () => {
       try {
         const { resolveApiBaseUrl } = await import('./lib/apiClient.js')
@@ -84,20 +83,26 @@ function AuthGate({ children }) {
     }
 
     checkHealth().then(() => {
-      // 2. Listen for auth changes globally
+      // Initialize formal runtime session for Customer QR users if they refresh
+      const qrToken = sessionStorage.getItem('qr_session_token');
+      const tableId = sessionStorage.getItem('qr_table_id');
+      if (qrToken && tableId) {
+        import('./runtime').then(({ runtime }) => {
+          runtime.bootstrap(`qr_table_${tableId}`, qrToken);
+        });
+      }
+
       if (supabase) {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
           console.log(`[AuthGate] Event: ${event}`)
           
           if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-            // Reresolve context on login or token rotation
             await resolveContext()
           } else if (event === 'SIGNED_OUT') {
             logout()
           }
         })
   
-        // 3. Resolve initial context
         resolveContext();
   
         return () => subscription.unsubscribe()

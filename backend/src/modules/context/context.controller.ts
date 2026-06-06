@@ -182,7 +182,7 @@ export async function bootstrap(
       } else {
         const stepsCompleted = (onboardingData.steps_completed as string[]) ?? [];
         const isComplete = onboardingData.is_complete ?? false;
-        const isSkipped = skippedTenantsFallback.has(tenantId);
+        const isSkipped = skippedTenantsFallback.has(tenantId as string);
         onboarding = {
           is_complete: isComplete,
           is_skipped: isSkipped,

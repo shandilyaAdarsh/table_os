@@ -9,6 +9,7 @@ import { AppError } from '../../shared/errors/AppError';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import * as ordersService from './orders.service';
 import type { OrderStatus } from './orders.repository';
+import { logger } from '../../shared/utils/logger';
 
 import { logMutationAudit, updateMutationAuditStatus } from '../idempotency/mutation-audit.repository';
 
@@ -73,7 +74,7 @@ export async function checkoutCart(req: any, res: Response, next: any): Promise<
     const { cartId, tableId, orderNotes } = parsed.data;
 
     // Determine context tenant_id, qr session
-    const tenantId = ctx.tenant_id;
+    const tenantId = ctx.tenant_id || req.headers['x-tenant-id'] || req.qrSession?.tenantId;
     if (!tenantId) {
       throw new AppError('Missing tenant identification header or session context.', 400, ErrorCode.BAD_REQUEST);
     }
@@ -98,79 +99,160 @@ export async function checkoutCart(req: any, res: Response, next: any): Promise<
     void updateMutationAuditStatus(ctx.mutation_id, 'ACKNOWLEDGED');
     formatMutationResponse(res, 201, { order }, ctx, ctx.expected_cart_revision);
   } catch (err: any) {
+    if (err instanceof AppError) {
+      void updateMutationAuditStatus(ctx.mutation_id, 'FAILED_RETRYABLE', err.message);
+    } else {
+      void updateMutationAuditStatus(ctx.mutation_id, 'FAILED_FATAL', 'Internal error');
+    }
+    next(err);
+  }
+}
+
+const directOrderSchema = z.object({
+  tableId: z.string().uuid(),
+  items: z.array(z.object({
+    menu_item_id: z.string().uuid(),
+    quantity: z.number().int().positive(),
+    modifiers: z.array(z.any()).optional(),
+    item_notes: z.string().optional(),
+  })).min(1),
+  orderNotes: z.string().max(1000).optional(),
+});
+
+export async function createDirectOrder(req: any, res: Response, next: any): Promise<void> {
+  const ctx = req.mutationContext!;
+  try {
+    const parsed = directOrderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError('Validation failed', 400, ErrorCode.VALIDATION_ERROR, true, parsed.error.format());
+    }
+
+    const { tableId, items, orderNotes } = parsed.data;
+
+    // Determine context tenant_id, qr session
+    const tenantId = ctx.tenant_id || req.headers['x-tenant-id'] || req.qrSession?.tenantId;
+    if (!tenantId) {
+      throw new AppError('Missing tenant identification header or session context.', 400, ErrorCode.BAD_REQUEST);
+    }
+
+    // QR sessions set source to 'qr_scan', staff app sets source to 'staff_pos'
+    const source = req.qrSession ? 'qr_scan' : 'staff_pos';
+    const branchId = req.qrSession?.branchId || req.user?.branch_id;
+    if (!branchId) {
+      throw new AppError('Missing branch context.', 400, ErrorCode.BAD_REQUEST);
+    }
+
+    void logMutationAudit({ ...ctx, mutation_type: 'orders.direct', status: 'IN_FLIGHT' });
+
+    logger.info({
+      stage: 'controller_entry_createDirectOrder',
+      tenantId,
+      branchId,
+      tableId,
+      sessionId: req.qrSession?.id || req.user?.id,
+      items,
+    });
+
+    const order = await ordersService.createDirectOrder({
+      tenantId,
+      branchId,
+      tableId,
+      sessionId: req.qrSession?.id || req.user?.id, // Use user ID as session for staff
+      items,
+      idempotencyKey: ctx.idempotency_key,
+      orderNotes,
+      source,
+      userId: req.user?.id,
+    });
+
+    void updateMutationAuditStatus(ctx.mutation_id, 'ACKNOWLEDGED');
+    formatMutationResponse(res, 201, { order }, ctx);
+  } catch (err: any) {
     void updateMutationAuditStatus(ctx.mutation_id, 'FAILED_FATAL', err.message);
     next(err);
   }
 }
 
-export async function getOrderDetails(req: any, res: Response): Promise<void> {
-  const { id } = req.params;
-  const tenantId = req.headers['x-tenant-id'] as string || req.qrSession?.tenant_id || req.user?.tenant_id;
+export async function getOrderDetails(req: any, res: Response, next: any): Promise<void> {
+  try {
+    const { id } = req.params;
+    const tenantId = req.headers['x-tenant-id'] as string || req.qrSession?.tenant_id || req.user?.tenant_id;
 
-  if (!tenantId) {
-    throw new AppError('Missing tenant identification context.', 400, ErrorCode.BAD_REQUEST);
+    if (!tenantId) {
+      throw new AppError('Missing tenant identification context.', 400, ErrorCode.BAD_REQUEST);
+    }
+
+    const order = await ordersService.getOrder(tenantId, id);
+
+    res.status(200).json({
+      status: 'success',
+      data: { order },
+    });
+  } catch (err) {
+    next(err);
   }
-
-  const order = await ordersService.getOrder(tenantId, id);
-
-  res.status(200).json({
-    status: 'success',
-    data: { order },
-  });
 }
 
-export async function transitionStatus(req: any, res: Response): Promise<void> {
-  const { id } = req.params;
-  const parsed = transitionStatusSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw new AppError('Validation failed', 400, ErrorCode.VALIDATION_ERROR, true, parsed.error.format());
+export async function transitionStatus(req: any, res: Response, next: any): Promise<void> {
+  try {
+    const { id } = req.params;
+    const parsed = transitionStatusSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError('Validation failed', 400, ErrorCode.VALIDATION_ERROR, true, parsed.error.format());
+    }
+
+    const tenantId = req.headers['x-tenant-id'] as string || req.user?.tenant_id;
+    if (!tenantId) {
+      throw new AppError('Missing tenant identification context.', 400, ErrorCode.BAD_REQUEST);
+    }
+
+    const { targetStatus, versionNum, reason, cancellationReason } = parsed.data;
+
+    const additionalFields: any = {};
+    if (targetStatus === 'cancelled') {
+      additionalFields.cancellation_reason = cancellationReason || 'Cancelled by staff/admin';
+    }
+
+    const order = await ordersService.transitionOrderStatus({
+      tenantId,
+      orderId: id,
+      targetStatus,
+      versionNum,
+      userId: req.user?.id,
+      reason,
+      additionalFields,
+    });
+
+    res.status(200).json({
+      status: 'success',
+      data: { order },
+    });
+  } catch (err) {
+    next(err);
   }
-
-  const tenantId = req.headers['x-tenant-id'] as string || req.user?.tenant_id;
-  if (!tenantId) {
-    throw new AppError('Missing tenant identification context.', 400, ErrorCode.BAD_REQUEST);
-  }
-
-  const { targetStatus, versionNum, reason, cancellationReason } = parsed.data;
-
-  const additionalFields: any = {};
-  if (targetStatus === 'cancelled') {
-    additionalFields.cancellation_reason = cancellationReason || 'Cancelled by staff/admin';
-  }
-
-  const order = await ordersService.transitionOrderStatus({
-    tenantId,
-    orderId: id,
-    targetStatus,
-    versionNum,
-    userId: req.user?.id,
-    reason,
-    additionalFields,
-  });
-
-  res.status(200).json({
-    status: 'success',
-    data: { order },
-  });
 }
 
-export async function listBranchOrders(req: any, res: Response): Promise<void> {
-  const parsed = listOrdersQuerySchema.safeParse(req.query);
-  if (!parsed.success) {
-    throw new AppError('Validation failed', 400, ErrorCode.VALIDATION_ERROR, true, parsed.error.format());
+export async function listBranchOrders(req: any, res: Response, next: any): Promise<void> {
+  try {
+    const parsed = listOrdersQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      throw new AppError('Validation failed', 400, ErrorCode.VALIDATION_ERROR, true, parsed.error.format());
+    }
+
+    const tenantId = req.headers['x-tenant-id'] as string || req.user?.tenant_id;
+    if (!tenantId) {
+      throw new AppError('Missing tenant identification context.', 400, ErrorCode.BAD_REQUEST);
+    }
+
+    const { branchId, status } = parsed.data;
+
+    const orders = await ordersService.listBranchOrders(tenantId, branchId, { status: status as OrderStatus });
+
+    res.status(200).json({
+      status: 'success',
+      data: { orders },
+    });
+  } catch (err) {
+    next(err);
   }
-
-  const tenantId = req.headers['x-tenant-id'] as string || req.user?.tenant_id;
-  if (!tenantId) {
-    throw new AppError('Missing tenant identification context.', 400, ErrorCode.BAD_REQUEST);
-  }
-
-  const { branchId, status } = parsed.data;
-
-  const orders = await ordersService.listBranchOrders(tenantId, branchId, { status: status as OrderStatus });
-
-  res.status(200).json({
-    status: 'success',
-    data: { orders },
-  });
 }

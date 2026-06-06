@@ -8,8 +8,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../../../lib/supabase'
 
-const TENANT_ID = '11111111-1111-1111-1111-111111111111'
-
 // ── Audio beep for new orders ────────────────────────────────────────────────
 function playNewOrderBeep() {
   try {
@@ -286,6 +284,9 @@ export default function KitchenDisplay() {
   const soundEnabledRef = useRef(true)
   soundEnabledRef.current = soundEnabled
 
+  const tenantId = localStorage.getItem('kds_tenant_id') || ''
+  const branchId = localStorage.getItem('kds_branch_id') || ''
+
   // ── Initial fetch ─────────────────────────────────────────────────────────
   useEffect(() => {
     const fetchOrders = async () => {
@@ -298,7 +299,8 @@ export default function KitchenDisplay() {
             menu_items ( name, is_veg )
           )
         `)
-        .eq('tenant_id', TENANT_ID)
+        .eq('tenant_id', tenantId)
+        .eq('branch_id', branchId)
         .in('status', ['pending', 'cooking', 'ready'])
         .order('created_at', { ascending: true })
 
@@ -324,14 +326,16 @@ export default function KitchenDisplay() {
     }
 
     const channel = supabase
-      .channel('kds_orders')
+      .channel(`kds_orders_${branchId}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'orders',
-        filter: `tenant_id=eq.${TENANT_ID}`,
+        filter: `tenant_id=eq.${tenantId},branch_id=eq.${branchId}`,
       }, async (payload) => {
         const { eventType, new: newRow, old } = payload
+
+        if (newRow && newRow.branch_id !== branchId) return;
 
         if (eventType === 'INSERT') {
           if (['pending', 'cooking', 'ready'].includes(newRow.status)) {

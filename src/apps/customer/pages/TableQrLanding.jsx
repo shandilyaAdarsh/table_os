@@ -29,6 +29,14 @@ export default function TableQrLanding() {
         console.log('[QR]', 'saving_session');
         setQrSession(normalizedSession)
         
+        // Boot up the formal runtime session for the customer surface
+        import('../../../runtime').then(({ runtime }) => {
+          runtime.bootstrap(
+            `qr_table_${normalizedSession.table_id}`, 
+            normalizedSession.guest_session_id || 'anonymous_session'
+          );
+        });
+
         console.log('[QR]', 'session_saved', getQrSession());
         console.log('[QR]', 'redirecting_to_menu');
         

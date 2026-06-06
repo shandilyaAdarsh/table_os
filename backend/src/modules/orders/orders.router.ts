@@ -8,7 +8,8 @@ import { requireQrSession } from '../tables/qr/qr.middleware';
 import { authenticate } from '../../middleware/auth.middleware';
 import { requestIdempotency } from '../../middleware/idempotency.middleware';
 import { requireMutationEnvelope } from '../../middleware/mutation.middleware';
-import { checkoutCart, getOrderDetails, transitionStatus, listBranchOrders } from './orders.controller';
+import { checkoutCart, getOrderDetails, transitionStatus, listBranchOrders, createDirectOrder } from './orders.controller';
+import { orderRateLimiter } from '../../middleware/rate-limit.middleware';
 import type { Request, Response, NextFunction } from 'express';
 
 const router: Router = Router({ mergeParams: true });
@@ -21,8 +22,16 @@ function requireQrOrStaffAuth(req: Request, res: Response, next: NextFunction) {
   return authenticate(req, res, next);
 }
 
-// Customers or staff can checkout a cart
+// Customers or staff can checkout an existing cart
 router.post('/checkout', requireQrOrStaffAuth, requireMutationEnvelope(), requestIdempotency(), checkoutCart);
+
+// Direct order without pre-existing cart (Customer QR / POS)
+router.post('/direct', requireQrOrStaffAuth, orderRateLimiter, requireMutationEnvelope(), requestIdempotency(), (req: Request, res: Response, next: NextFunction) => {
+  import('../../shared/utils/logger').then(({ logger }) => {
+    logger.info({ stage: 'router_entered', path: req.originalUrl, method: req.method });
+    next();
+  });
+}, createDirectOrder);
 
 // Fetch order details is allowed for either QR customers or staff
 router.get('/:id', requireQrOrStaffAuth, getOrderDetails);

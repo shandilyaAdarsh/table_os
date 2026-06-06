@@ -72,54 +72,44 @@ export default function CartDrawer({ open, onClose }) {
       const resolvedTableNum = resolveTableNum()
       const guestSession = JSON.parse(localStorage.getItem('customerSession') || '{}')
 
-      const orderPayload = {
-        tenant_id: tenantId || FALLBACK_TENANT_ID,
-        order_number: `ORD-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`,
-        order_notes:
-          note ||
-          `Order by ${guestSession.name || 'Guest'} · Party of ${guestSession.guestCount || 1}`,
-      }
-      if (branchId) orderPayload.branch_id = branchId
-      if (tableId) orderPayload.table_id = tableId
+      const items = cartItems.map(item => ({
+        menu_item_id: item.id,
+        quantity: item.qty,
+        item_notes: '',
+        modifiers: item.modifiers || [],
+      }))
 
-      console.log('[CartDrawer] place order context:', {
-        tenantId: orderPayload.tenant_id,
-        branchId,
-        tableId,
-        tableNum: resolvedTableNum,
+      const orderNotes = note || `Order by ${guestSession.name || 'Guest'} · Party of ${guestSession.guestCount || 1}`
+
+      const rawRes = await submitMutation('/api/v1/orders/direct', {
+        mutation_id: crypto.randomUUID(), // MUST be UUID for MutationAudit
+        idempotency_key: crypto.randomUUID(),
+        payload: {
+          tableId: tableId || '00000000-0000-0000-0000-000000000000', // fallback if needed
+          items,
+          orderNotes
+        }
       })
 
-      const { data: order, error } = await supabase
-        .from('orders')
-        .insert(orderPayload)
-        .select()
-        .single()
+      const res = await rawRes.json()
 
-      if (error) {
-        throw error
+      if (!res.success) {
+        throw new Error(res.error?.message || 'Failed to place order.')
       }
 
-      const { error: itemsError } = await supabase.from('order_items').insert(
-        cartItems.map(item => ({
-          order_id:     order.id,
-          name:         item.name,
-          qty:          item.qty,
-          unit_price:   item.unit_price || item.price || 0,
-        }))
-      )
-
-      if (itemsError) {
-        throw itemsError
+      // Important: Only clear the cart if the order was successfully created and an ID is returned
+      if (res.data?.order?.id) {
+        const newOrderId = res.data.order.id
+        clear()
+        onClose()
+        navigate(`/menu/confirmed/${newOrderId}`, { state: { orderId: newOrderId } })
+      } else {
+        throw new Error('Order placed but no ID returned.')
       }
 
-      const newOrderId = order.id
-      clear()
-      onClose()
-      navigate(`/menu/confirmed/${newOrderId}`, { state: { orderId: newOrderId } })
     } catch (err) {
-      console.error('[CartDrawer] placeOrder failed:', err.message)
-      setIsPlacing(false)
-      alert('Could not place order. Please try again.')
+      console.error('[CartDrawer] placeOrder failed:', err)
+      alert(err.message || 'Could not place order. Please try again.')
     } finally {
       setIsPlacing(false)
     }

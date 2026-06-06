@@ -9,7 +9,16 @@ export function KDSLogin() {
   const { setBranchId, setStaffId, deviceId } = useRuntimeIdentityStore();
   const { setRuntimeSession } = useRuntimeAuthStore();
 
-  const [mode, setMode] = useState('loading'); // 'welcome', 'deviceRegistration', 'branchSelection', 'employeeId', 'pin'
+  // Initialize mode based on localStorage ONCE when component mounts
+  const [mode, setMode] = useState(() => {
+    const registered = !!localStorage.getItem('kds_admin_access_token');
+    const branchSelected = !!localStorage.getItem('kds_branch_id');
+    
+    if (registered && branchSelected) return 'employeeId';
+    if (registered && !branchSelected) return 'needsReset'; // Handle corrupted state
+    return 'deviceRegistration';
+  });
+
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -21,12 +30,14 @@ export function KDSLogin() {
   // Staff Login State
   const [employeeId, setEmployeeId] = useState('');
   const [pin, setPin] = useState('');
-  
-  const isRegistered = !!localStorage.getItem('kds_admin_access_token');
+  const [matchedStaff, setMatchedStaff] = useState(null);
 
   useEffect(() => {
-    setMode(isRegistered ? 'employeeId' : 'deviceRegistration');
-  }, [isRegistered]);
+    if (mode === 'needsReset') {
+      // If they refreshed before selecting a branch, force re-registration
+      resetRegistration();
+    }
+  }, [mode]);
 
   const handleDeviceRegistration = async (e) => {
     e.preventDefault();
@@ -93,7 +104,13 @@ export function KDSLogin() {
     setMode('employeeId');
   };
 
-  const handleStaffLogin = async () => {
+  const handleEmployeeIdSubmit = async (e) => {
+    e.preventDefault();
+    if (!employeeId.trim()) {
+      setError('Please enter your Employee ID');
+      return;
+    }
+
     setError(null);
     setLoading(true);
 
@@ -101,9 +118,11 @@ export function KDSLogin() {
       let adminToken = localStorage.getItem('kds_admin_access_token');
       const deviceSessionId = localStorage.getItem('kds_device_session_id');
       const savedTenantId = localStorage.getItem('kds_tenant_id');
-      const savedBranchId = localStorage.getItem('kds_branch_id');
 
-      if (!adminToken) throw new Error('Device not registered');
+      if (!adminToken || !savedTenantId || !deviceSessionId) {
+        resetRegistration();
+        throw new Error('Device not properly registered. Please register again.');
+      }
 
       const baseUrl = resolveApiBaseUrl();
       const deviceFingerprint = useRuntimeIdentityStore.getState().deviceId;
@@ -135,7 +154,7 @@ export function KDSLogin() {
         const refreshData = await refreshReq.json();
         if (!refreshReq.ok) {
           resetRegistration();
-          throw new Error('Session expired. Please re-register this device.');
+          throw new Error(refreshData?.message || refreshData?.error?.message || 'Session expired. Please re-register this device.');
         }
         
         adminToken = refreshData.data.access_token;
@@ -156,15 +175,48 @@ export function KDSLogin() {
       if (!staffRes.ok) throw new Error('Failed to fetch staff list');
 
       const staffList = staffData.data || [];
-      const matchedStaff = staffList.find(s => 
-        (s.employee_id === employeeId || s.id === employeeId) && 
-        s.pin === pin
+      const foundStaff = staffList.find(s => 
+        s.employee_id === employeeId || s.id === employeeId
       );
 
-      if (!matchedStaff) {
-        setPin(''); // Reset PIN on failure
-        throw new Error('Invalid Employee ID or PIN');
+      if (!foundStaff) {
+        throw new Error('Invalid Employee ID');
       }
+
+      setMatchedStaff(foundStaff);
+      setPin('');
+      setMode('pin');
+    } catch (err) {
+      console.error('KDS Employee ID Validation Error:', err);
+      setError(err.message || 'Validation failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStaffLogin = async () => {
+    setError(null);
+    setLoading(true);
+
+    try {
+      if (!matchedStaff) throw new Error('Employee ID not verified');
+
+      if (matchedStaff.pin !== pin) {
+        setPin('');
+        throw new Error('Incorrect PIN');
+      }
+
+      let adminToken = localStorage.getItem('kds_admin_access_token');
+      const deviceSessionId = localStorage.getItem('kds_device_session_id');
+      const savedBranchId = localStorage.getItem('kds_branch_id');
+
+      if (!savedBranchId) {
+        resetRegistration();
+        throw new Error('Branch not selected. Please re-register device.');
+      }
+
+      const baseUrl = resolveApiBaseUrl();
+      const deviceFingerprint = useRuntimeIdentityStore.getState().deviceId;
 
       const exchangeRes = await fetch(`${baseUrl}/api/v1/auth/runtime/exchange`, {
         method: 'POST',
@@ -179,7 +231,7 @@ export function KDSLogin() {
       const exchangeData = await exchangeRes.json();
 
       if (!exchangeRes.ok) {
-        throw new Error(exchangeData?.message || 'Failed to initialize session');
+        throw new Error(exchangeData?.message || exchangeData?.error?.message || 'Failed to initialize session');
       }
 
       const { runtime_token } = exchangeData.data;
@@ -225,7 +277,7 @@ export function KDSLogin() {
     }
   }, [pin]);
 
-  if (mode === 'loading') {
+  if (mode === 'loading' || mode === 'needsReset') {
     return (
       <div className="min-h-screen bg-[#f8f9fa] flex items-center justify-center">
         <div className="w-12 h-12 border-4 border-[#e31e24] border-t-transparent rounded-full animate-spin" />
@@ -321,7 +373,7 @@ export function KDSLogin() {
             {/* Show Back arrow for PIN mode */}
             {mode === 'pin' && (
               <button 
-                onClick={() => { setError(null); setMode('employeeId'); }} 
+                onClick={() => { setError(null); setMatchedStaff(null); setMode('employeeId'); }} 
                 className="absolute -left-2 top-0 text-[#8c8d8f] hover:text-[#1a1a1a] hover:bg-gray-100 p-2 rounded-full transition-all"
               >
                 <span className="material-symbols-outlined">arrow_back</span>
@@ -445,7 +497,7 @@ export function KDSLogin() {
 
             {/* Mode: Employee ID */}
             {mode === 'employeeId' && (
-              <form onSubmit={(e) => { e.preventDefault(); setPin(''); setMode('pin'); }} className="space-y-6">
+              <form onSubmit={handleEmployeeIdSubmit} className="space-y-6">
                 <div>
                   <label className="block text-[13px] font-bold text-[#191c1d] mb-2 text-center">Employee ID</label>
                   <input 
@@ -460,9 +512,10 @@ export function KDSLogin() {
                 </div>
                 <button 
                   type="submit" 
-                  className="w-full bg-[#e31e24] hover:bg-[#ba0013] active:bg-[#a00010] text-white font-bold py-4 rounded-xl transition-colors mt-8 text-[15px] shadow-sm"
+                  disabled={loading}
+                  className="w-full bg-[#e31e24] hover:bg-[#ba0013] active:bg-[#a00010] disabled:opacity-50 text-white font-bold py-4 rounded-xl transition-colors mt-8 text-[15px] shadow-sm"
                 >
-                  Continue
+                  {loading ? 'Verifying...' : 'Continue'}
                 </button>
                 <div className="text-center mt-8 border-t border-[#f0f2f5] pt-6">
                   <button

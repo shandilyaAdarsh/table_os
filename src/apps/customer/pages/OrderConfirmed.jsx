@@ -121,10 +121,13 @@ export default function OrderConfirmed() {
       <p className="text-[14px] text-[#6C757D] text-center mb-5 mt-1">Your order is with the kitchen</p>
 
       {/* 4. ORDER NUMBER BOX */}
-      <div className="bg-[#F3F4F6] rounded-[12px] px-6 py-[10px] mb-5">
-        <span className="text-[18px] font-[700] text-[#E31E24] font-mono">
+      <div className="bg-[#F3F4F6] rounded-[12px] px-6 py-[10px] mb-5 text-center">
+        <div className="text-[18px] font-[700] text-[#E31E24] font-mono">
           ORDER #{order.id.substring(0, 8).toUpperCase()}
-        </span>
+        </div>
+        <div className="text-[14px] text-[#4B5563] font-medium mt-1">
+          Table {order.table_num || 'N/A'} • {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </div>
       </div>
 
       {/* 5. ITEM LIST CARD */}

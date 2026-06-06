@@ -10,13 +10,13 @@ import { ErrorCode } from '../shared/errors/error-codes';
 import crypto from 'crypto';
 
 export const MutationEnvelopeSchema = z.object({
-  mutation_id: z.string().uuid(),
+  mutation_id: z.string(), // Often an action name like 'create_direct_order'
   mutation_sequence: z.number().int().nonnegative(),
   runtime_version: z.number().int().nonnegative(),
-  session_id: z.string().uuid().optional(), // For QR runtime
-  tenant_id: z.string().uuid(),
-  branch_id: z.string().uuid(),
-  client_timestamp: z.string().datetime(),
+  session_id: z.string().optional(), // Can be UUID or string for anonymous
+  tenant_id: z.string().uuid().optional(),
+  branch_id: z.string().uuid().optional(),
+  client_timestamp: z.string().datetime().optional(),
   idempotency_key: z.string().uuid(),
   expected_cart_revision: z.number().int().nonnegative().optional(),
   payload: z.any(),
@@ -62,12 +62,12 @@ export function requireMutationEnvelope() {
       const envelope = parsed.data;
 
       // 1. Governance checks
-      const contextTenantId = req.headers['x-tenant-id'] as string || req.qrSession?.tenant_id || req.context?.tenantId;
-      if (contextTenantId && contextTenantId !== envelope.tenant_id) {
+      const contextTenantId = req.headers['x-tenant-id'] as string || req.qrSession?.tenantId || req.context?.tenantId;
+      if (envelope.tenant_id && contextTenantId && contextTenantId !== envelope.tenant_id) {
         throw new AppError('Tenant context mismatch in mutation envelope', 403, ErrorCode.FORBIDDEN);
       }
 
-      if (req.qrSession && req.qrSession.id !== envelope.session_id) {
+      if (envelope.session_id && req.qrSession && req.qrSession.id !== envelope.session_id) {
         throw new AppError('Session context mismatch in mutation envelope', 403, ErrorCode.FORBIDDEN);
       }
 
@@ -75,13 +75,14 @@ export function requireMutationEnvelope() {
       const payloadHash = crypto.createHash('sha256').update(JSON.stringify(envelope.payload)).digest('hex');
 
       // 2. Attach context for downstream idempotency and controllers
+      const branchId = envelope.branch_id || req.qrSession?.branchId || (req as any).user?.branch_id;
       req.mutationContext = {
         mutation_id: envelope.mutation_id,
         mutation_sequence: envelope.mutation_sequence,
         runtime_version: envelope.runtime_version,
         session_id: envelope.session_id,
-        tenant_id: envelope.tenant_id,
-        branch_id: envelope.branch_id,
+        tenant_id: envelope.tenant_id || contextTenantId,
+        branch_id: branchId,
         client_timestamp: envelope.client_timestamp,
         idempotency_key: envelope.idempotency_key,
         expected_cart_revision: envelope.expected_cart_revision,
