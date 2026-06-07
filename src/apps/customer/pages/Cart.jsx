@@ -13,11 +13,59 @@ const UPSELL = menuItems.filter(m => ['m13', 'm15'].includes(m.id))
 export default function Cart() {
   const navigate = useNavigate()
   const [cart, setCart] = useState(DEMO_CART)
+  const [submitting, setSubmitting] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('')
 
   const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0)
 
   const change = (id, delta) =>
     setCart(prev => prev.map(i => i.id === id ? { ...i, qty: Math.max(0, i.qty + delta) } : i).filter(i => i.qty > 0))
+
+  const submitOrder = async () => {
+    if (cart.length === 0) return;
+    setSubmitting(true);
+    setErrorMsg('');
+    try {
+      // Import dependencies inline or they must be at the top
+      // Assuming they are at the top, but we'll use dynamic imports if not
+      const { fetchWithRuntime, submitMutation } = await import('../../../lib/apiClient');
+      const { getQrSession } = await import('../utils/qrSession');
+      
+      const session = getQrSession();
+      if (!session.tenantId || !session.tableId) {
+        throw new Error('Missing session information. Please scan the QR code again.');
+      }
+
+      const items = cart.map(i => ({
+        menu_item_id: i.id,
+        quantity: i.qty,
+        item_notes: i.note,
+        // Map modifiers here if real data existed
+      }));
+
+      const res = await submitMutation('/api/v1/orders/direct', {
+        mutation_id: 'create_direct_order',
+        idempotency_key: crypto.randomUUID(),
+        payload: {
+          tableId: session.tableId,
+          items
+        }
+      });
+
+      if (!res.success) {
+        throw new Error(res.error?.message || 'Failed to place order.');
+      }
+
+      // Order created successfully
+      setCart([]);
+      navigate(`/menu/confirmed/${res.data.order.id}`);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg(err.message || 'An error occurred while placing your order. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div style={{ maxWidth: '430px', margin: '0 auto', minHeight: '100vh', background: '#E31E24', position: 'relative', display: 'flex', flexDirection: 'column', fontFamily: '"Plus Jakarta Sans", sans-serif', overflow: 'hidden' }}>
@@ -131,18 +179,24 @@ export default function Cart() {
 
         {/* Place Order CTA Sticky Footer */}
         <div style={{ position: 'absolute', bottom: 0, width: '100%', background: 'white', padding: '20px 24px 40px', boxSizing: 'border-box', borderTop: '1px solid #F3F4F6' }}>
+           {errorMsg && (
+             <div style={{ padding: '8px 12px', background: '#FEE2E2', color: '#EF4444', borderRadius: 8, fontSize: 13, marginBottom: 12, fontWeight: 600, textAlign: 'center' }}>
+               {errorMsg}
+             </div>
+           )}
            <button
-             onClick={() => navigate('/menu/pay')}
+             disabled={submitting}
+             onClick={submitOrder}
              style={{ 
-               width: '100%', background: '#E31E24', color: 'white', 
+               width: '100%', background: submitting ? '#FCA5A5' : '#E31E24', color: 'white', 
                padding: '18px 0', borderRadius: 16, border: 'none', 
-               fontWeight: 700, fontSize: 16, cursor: 'pointer', 
+               fontWeight: 700, fontSize: 16, cursor: submitting ? 'not-allowed' : 'pointer', 
                boxShadow: '0 10px 30px rgba(27,43,75,0.2)',
                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12
              }}
            >
-             Confirm Order
-             <span className="material-symbols-outlined" style={{ fontSize: 20 }}>arrow_forward</span>
+             {submitting ? 'Placing Order...' : 'Confirm Order'}
+             {!submitting && <span className="material-symbols-outlined" style={{ fontSize: 20 }}>arrow_forward</span>}
            </button>
         </div>
 

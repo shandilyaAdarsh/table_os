@@ -13,7 +13,68 @@ import { supabaseAdmin } from '../../config/supabase';
 import { allocateSequenceNumber } from './sequence-allocator.service';
 import { BranchMenuResolutionService } from '../overrides/services/branch-menu-resolution.service';
 import { ProjectionService } from '../projection/projection.service';
-import { WebSocketManager } from '../transport/websocket.manager';
+import * as cartService from '../cart/cart.service';
+import { logger } from '../../shared/utils/logger';
+
+export async function createDirectOrder(params: {
+  tenantId: string;
+  branchId: string;
+  tableId: string;
+  sessionId: string;
+  items: Array<{ menu_item_id: string; quantity: number; modifiers?: any[]; item_notes?: string }>;
+  idempotencyKey?: string;
+  orderNotes?: string;
+  source: ordersRepo.OrderSource;
+  userId?: string;
+}): Promise<ordersRepo.Order> {
+  logger.info({
+    stage: 'service_entry_createDirectOrder',
+    tenantId: params.tenantId,
+    branchId: params.branchId,
+    tableId: params.tableId,
+    sessionId: params.sessionId,
+  });
+
+  // 1. Get or create ephemeral cart
+  logger.info({ stage: 'before_cart_creation', tenantId: params.tenantId });
+  const cartDetail = await cartService.getOrCreateCart(
+    params.tenantId,
+    params.branchId,
+    params.tableId,
+    params.sessionId
+  );
+
+  const cartId = cartDetail.cart.id;
+  logger.info({ stage: 'after_cart_creation', cartId });
+
+  // 2. Add all items to the cart
+  logger.info({ stage: 'before_item_insertion', cartId, itemCount: params.items.length });
+  for (const item of params.items) {
+    await cartService.addCartItem(
+      params.tenantId,
+      params.sessionId,
+      {
+        menu_item_id: item.menu_item_id,
+        quantity: item.quantity,
+        modifiers: item.modifiers,
+        item_notes: item.item_notes,
+      }
+    );
+  }
+  logger.info({ stage: 'after_item_insertion', cartId });
+
+  // 3. Checkout the cart
+  return createOrderFromCart({
+    tenantId: params.tenantId,
+    cartId: cartId,
+    tableId: params.tableId,
+    sessionId: params.sessionId,
+    idempotencyKey: params.idempotencyKey,
+    orderNotes: params.orderNotes,
+    source: params.source,
+    userId: params.userId,
+  });
+}
 
 const VALID_TRANSITIONS: Record<ordersRepo.OrderStatus, ordersRepo.OrderStatus[]> = {
   pending: ['accepted', 'cancelled'],
@@ -132,6 +193,22 @@ export async function createOrderFromCart(params: {
     });
 
     // 6. Invoke the database-side atomic checkout transaction orchestrator
+    logger.info({
+      stage: 'before_checkout_rpc',
+      tenantId,
+      branchId: cart.branch_id,
+      cartId,
+      snapshotId,
+      orderId,
+      orderNumber,
+      invoiceId,
+      invoiceNumber,
+      tableId: params.tableId,
+      sessionId: params.sessionId || cart.session_id || null,
+      source: params.source,
+      idempotencyKey: idempotencyKey || null,
+    });
+
     const { data, error } = await supabaseAdmin.rpc('orchestrate_checkout_v1', {
       p_tenant_id: tenantId,
       p_cart_id: cartId,
@@ -146,6 +223,14 @@ export async function createOrderFromCart(params: {
       p_order_notes: params.orderNotes || null,
       p_user_id: params.userId || null,
       p_idempotency_key: idempotencyKey || null,
+    });
+
+    logger.info({
+      stage: 'after_checkout_rpc',
+      tenantId,
+      cartId,
+      error: error ? error.message : null,
+      dataAvailable: !!data,
     });
 
     if (error) {

@@ -18,6 +18,8 @@ import {
   getPendingAlerts,
   getAvailableStaff,
 } from './orders.controller';
+import { checkoutCart, getOrderDetails, transitionStatus, listBranchOrders, createDirectOrder } from './orders.controller';
+import { orderRateLimiter } from '../../middleware/rate-limit.middleware';
 import type { Request, Response, NextFunction } from 'express';
 
 const router: Router = Router({ mergeParams: true });
@@ -30,7 +32,7 @@ function requireQrOrStaffAuth(req: Request, res: Response, next: NextFunction) {
   return authenticate(req, res, next);
 }
 
-// Customers or staff can checkout a cart
+// Customers or staff can checkout an existing cart
 router.post('/checkout', requireQrOrStaffAuth, requireMutationEnvelope(), requestIdempotency(), checkoutCart);
 
 // ── Order Alert routes (P3-STAFF-01) ────────────────────────────────────────

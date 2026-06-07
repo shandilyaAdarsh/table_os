@@ -8,12 +8,14 @@ export function setQrSession({
   table_id,
   table_name,
   restaurant_name,
+  guest_session_id,
 }) {
   if (tenant_id) sessionStorage.setItem('qr_tenant_id', tenant_id);
   if (branch_id) sessionStorage.setItem('qr_branch_id', branch_id);
   if (table_id) sessionStorage.setItem('qr_table_id', table_id);
   if (table_name) sessionStorage.setItem('qr_table_name', table_name);
   if (restaurant_name) sessionStorage.setItem('qr_restaurant_name', restaurant_name);
+  if (guest_session_id) sessionStorage.setItem('qr_session_token', guest_session_id);
 
   localStorage.setItem(
     'orderlyy_qr_context',
@@ -23,6 +25,7 @@ export function setQrSession({
       table_id,
       table_name,
       restaurant_name,
+      guest_session_id,
     }),
   );
   if (table_name) {
@@ -40,6 +43,7 @@ export function getQrSession(searchParams) {
     searchParams?.get('tableId') || sessionStorage.getItem('qr_table_id');
   const tableName = sessionStorage.getItem('qr_table_name');
   const restaurantName = sessionStorage.getItem('qr_restaurant_name');
+  const sessionToken = sessionStorage.getItem('qr_session_token');
 
-  return { tenantId, branchId, tableId, tableName, restaurantName };
+  return { tenantId, branchId, tableId, tableName, restaurantName, sessionToken };
 }

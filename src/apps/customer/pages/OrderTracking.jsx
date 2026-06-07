@@ -9,6 +9,7 @@ import { playBeep } from '../../../utils/beep'
 import { BottomNav } from '../components/BottomNav'
 import { getTableNum } from '../utils/tableNum'
 import { getQrSession } from '../utils/qrSession'
+import { useOrderStore } from '../../../store/index'
 
 const TENANT_ID = import.meta.env.VITE_TENANT_ID || '11111111-1111-1111-1111-111111111111'
 
@@ -33,12 +34,15 @@ export default function OrderTracking() {
   const location = useLocation()
   const resolvedOrderId = orderId || location?.state?.orderId
   
-  const [order, setOrder] = useState(null)
+  const liveOrder = useOrderStore(state => state.liveOrders.find(o => o.id === resolvedOrderId))
   const [loading, setLoading] = useState(true)
-  const [orderStatus, setOrderStatus] = useState('pending')
   const [localElapsed, setLocalElapsed] = useState(0)
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [paymentDone, setPaymentDone] = useState(false)
+  
+  // Use liveOrder if available, otherwise fallback to local state (useful before store is populated)
+  const order = liveOrder || null
+  const orderStatus = order?.status || 'pending'
 
   useEffect(() => {
     if (!resolvedOrderId) return
@@ -53,8 +57,7 @@ export default function OrderTracking() {
         if (res.ok) {
           const { data } = await res.json()
           if (data) {
-            setOrder(data)
-            setOrderStatus(data.status || 'pending')
+            useOrderStore.getState().replaceOrderProjection(data)
           }
         }
       } catch (err) {
