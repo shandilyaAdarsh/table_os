@@ -200,7 +200,7 @@ router.get('/incidents', authenticate, internalEngineeringOrAbove, async (req: R
 // GET /api/v1/runtime/observability/incidents/:id
 router.get('/incidents/:id', authenticate, internalEngineeringOrAbove, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const incident = RuntimeIncidentRegistry.getIncident(req.params.id);
+    const incident = RuntimeIncidentRegistry.getIncident(String(req.params.id));
     if (!incident || incident.tenant_id !== req.context.tenantId) {
       res.status(404).json({ success: false, error: 'Incident not found' });
       return;
@@ -214,7 +214,7 @@ router.patch('/incidents/:id/state', authenticate, internalEngineeringOrAbove, a
   try {
     const { state, note } = req.body;
     const incident = RuntimeIncidentRegistry.updateIncidentState(
-      req.params.id, 
+      String(req.params.id), 
       state, 
       req.context.userId,
       note
@@ -227,7 +227,7 @@ router.patch('/incidents/:id/state', authenticate, internalEngineeringOrAbove, a
 router.patch('/incidents/:id/escalation', authenticate, internalEngineeringOrAbove, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { escalation_level, note } = req.body;
-    const incident = RuntimeIncidentRegistry.getIncident(req.params.id);
+    const incident = RuntimeIncidentRegistry.getIncident(String(req.params.id));
     if (!incident || incident.tenant_id !== req.context.tenantId) {
       res.status(404).json({ success: false, error: 'Incident not found' });
       return;
@@ -243,7 +243,7 @@ router.patch('/incidents/:id/escalation', authenticate, internalEngineeringOrAbo
 router.patch('/incidents/:id/owner', authenticate, internalEngineeringOrAbove, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { owner } = req.body;
-    const incident = RuntimeIncidentRegistry.getIncident(req.params.id);
+    const incident = RuntimeIncidentRegistry.getIncident(String(req.params.id));
     if (!incident || incident.tenant_id !== req.context.tenantId) {
       res.status(404).json({ success: false, error: 'Incident not found' });
       return;

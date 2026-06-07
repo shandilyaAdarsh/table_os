@@ -9,6 +9,7 @@ import { AppError } from '../../shared/errors/AppError';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import * as ordersService from './orders.service';
 import type { OrderStatus } from './orders.repository';
+import { supabaseAdmin } from '../../config/supabase';
 import { logger } from '../../shared/utils/logger';
 
 import { logMutationAudit, updateMutationAuditStatus } from '../idempotency/mutation-audit.repository';
@@ -93,7 +94,7 @@ export async function checkoutCart(req: any, res: Response, next: any): Promise<
       expectedCartRevision: ctx.expected_cart_revision,
       orderNotes,
       source,
-      userId: req.user?.id,
+      userId: req.context?.id,
     });
 
     void updateMutationAuditStatus(ctx.mutation_id, 'ACKNOWLEDGED');
@@ -193,6 +194,15 @@ export async function getOrderDetails(req: any, res: Response, next: any): Promi
   }
 }
 
+export async function getPendingAlerts(req: any, res: Response, next: any): Promise<void> {
+  try {
+    const { branchId } = z.object({ branchId: z.string().uuid() }).parse(req.query);
+    const tenantId = req.context?.tenant_id;
+    const staffId = req.context?.id;
+    if (!tenantId || !staffId) throw new AppError('Unauthorized', 401, ErrorCode.UNAUTHORIZED);
+
+    const orders = await ordersService.getPendingOrdersForStaff(tenantId, branchId, staffId);
+    res.status(200).json({ status: 'success', data: { orders } });
 export async function transitionStatus(req: any, res: Response, next: any): Promise<void> {
   try {
     const { id } = req.params;
@@ -231,6 +241,49 @@ export async function transitionStatus(req: any, res: Response, next: any): Prom
     next(err);
   }
 }
+
+export async function getAvailableStaff(req: any, res: Response, next: any): Promise<void> {
+  try {
+    const { branchId } = z.object({ branchId: z.string().uuid() }).parse(req.query);
+    const tenantId = req.context?.tenant_id;
+    if (!tenantId) throw new AppError('Unauthorized', 401, ErrorCode.UNAUTHORIZED);
+
+    // Fetch online/active staff members in this branch (those with active presence or recent activity)
+    const { data, error } = await supabaseAdmin
+      .from('staff')
+      .select('id, name, first_name, last_name, role')
+      .eq('tenant_id', tenantId)
+      .eq('branch_id', branchId)
+      .eq('is_active', true);
+
+    if (error) throw error;
+
+    // Get active order counts per staff
+    const staffIds = (data ?? []).map((s: any) => s.id);
+    let orderCounts: Record<string, number> = {};
+
+    if (staffIds.length > 0) {
+      const { data: orderData } = await supabaseAdmin
+        .from('orders')
+        .select('tables!inner(assigned_waiter_id)')
+        .eq('tenant_id', tenantId)
+        .eq('branch_id', branchId)
+        .in('status', ['pending', 'accepted', 'preparing']);
+
+      (orderData ?? []).forEach((o: any) => {
+        const wId = o.tables?.assigned_waiter_id;
+        if (wId) orderCounts[wId] = (orderCounts[wId] ?? 0) + 1;
+      });
+    }
+
+    const staffList = (data ?? []).map((s: any) => ({
+      id: s.id,
+      name: s.first_name ? `${s.first_name} ${s.last_name}`.trim() : s.name,
+      role: s.role,
+      activeOrderCount: orderCounts[s.id] ?? 0,
+    }));
+
+    res.status(200).json({ status: 'success', data: { staff: staffList } });
 
 export async function listBranchOrders(req: any, res: Response, next: any): Promise<void> {
   try {

@@ -381,6 +381,10 @@ export async function validateAccessToken(accessToken: string): Promise<TokenVal
     return { valid: false, error: 'Admin profile not found' };
   }
 
+  if (!profile.tenant_id && profile.role !== 'SUPER_ADMIN') {
+    return { valid: false, error: 'User has no tenant assigned. Contact support.' };
+  }
+
   if (!profile.is_active) {
     return { valid: false, error: 'Account is disabled' };
   }

@@ -4,7 +4,7 @@ import { authenticate, requirePermission } from '../../middleware/auth.middlewar
 import { tenantContext } from '../../middleware/tenant.middleware';
 import { PERMISSIONS } from '../../types/rbac.types';
 
-export const settingsRouter = Router({ mergeParams: true });
+export const settingsRouter: Router = Router({ mergeParams: true });
 
 settingsRouter.use(authenticate, tenantContext);
 

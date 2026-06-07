@@ -16,21 +16,16 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
 });
 
 async function run() {
-  const { data: adminProfiles, error: apErr } = await supabase
-    .from('admin_profiles')
-    .select('*');
+  const { data: staff, error } = await supabase
+    .from('staff')
+    .select('*')
+    .limit(1);
   
-  if (apErr) {
-    console.error("Error:", apErr.message);
+  if (error) {
+    console.error("Error:", error.message, error.details, error.hint);
   } else {
-    console.log("Admin Profiles:", JSON.stringify(adminProfiles, null, 2));
+    console.log("Staff columns:", Object.keys(staff[0] || {}));
   }
-
-  // Let's also check if there are other tables like tenant_members, staff, user_roles etc.
-  const { data: tenants, error: tenantsErr } = await supabase
-    .from('tenants')
-    .select('id, name');
-  console.log("Tenants:", tenants);
 }
 
 run().catch(console.error);

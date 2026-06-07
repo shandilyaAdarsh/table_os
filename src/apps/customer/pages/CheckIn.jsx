@@ -12,7 +12,7 @@ import { getTableNum } from '../utils/tableNum'
 import { getQrSession } from '../utils/qrSession'
 import { useSearchParams } from 'react-router-dom'
 
-const TENANT_ID = '11111111-1111-1111-1111-111111111111'
+const TENANT_ID = import.meta.env.VITE_TENANT_ID || '11111111-1111-1111-1111-111111111111'
 
 // ── Translations ────────────────────────────────────────────────────────────
 const t = {

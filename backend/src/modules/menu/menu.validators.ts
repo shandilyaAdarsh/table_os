@@ -100,6 +100,7 @@ export const CreateMenuItemSchema = z.object({
   image_url:          z.string().nullable().optional(),
   thumbnail_url:      z.string().nullable().optional(),
   modifier_group_ids: z.array(uuid).max(20).nullable().optional(),
+  status:             z.enum(ITEM_STATUSES).optional(),
 });
 
 export const UpdateMenuItemSchema = z.object({

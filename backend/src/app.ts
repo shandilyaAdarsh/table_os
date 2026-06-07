@@ -16,10 +16,12 @@ import pricingRouter from './modules/pricing/pricing.router';
 import { taxRouter } from './modules/tax/tax.router';
 import { modifierRouter } from './modules/modifier/modifier.router';
 import { availabilityRouter } from './modules/availability/availability.router';
+import { staffRouter } from './modules/staff/staff.router';
 import { snapshotRouter } from './modules/snapshot/snapshot.router';
 import { publicMenuRouter } from './modules/snapshot/public-menu.router';
 import { publicAvailabilityRouter } from './modules/availability/public-availability.router';
 import { settingsRouter } from './modules/settings/settings.router';
+import { publicTenantRouter } from './modules/tenants/public-tenant.router';
 import { adminRouter } from './modules/admin/admin.router';
 import { publicQrRouter } from './modules/tables/qr/table-qr.router';
 import { cartRouter } from './modules/cart/cart.router';
@@ -32,10 +34,9 @@ import { runtimeRouter } from './modules/projection/runtime.router';
 import { eventReplayRouter } from './modules/projection/event-replay.router';
 import { deploymentRouter } from './modules/projection/deployment.router';
 import { observabilityRouter } from './modules/observability/observability.router';
+import { analyticsRouter } from './modules/analytics/analytics.router';
 import { contextRouter } from './modules/context/context.router';
 import { customerRouter } from './modules/customer/customer.router';
-import { analyticsRouter } from './modules/analytics/analytics.router';
-import { staffRouter } from './modules/staff/staff.router';
 import { ObservabilityService } from './modules/infrastructure/observability.service';
 import { errorMiddleware } from './middleware/error.middleware';
 import { loggingMiddleware } from './middleware/logging.middleware';
@@ -53,6 +54,7 @@ export function createApp(): express.Application {
         if (!requestOrigin) return callback(null, true);
         if (
           requestOrigin.startsWith('http://localhost:') ||
+          requestOrigin.startsWith('http://127.0.0.1:') ||
           requestOrigin.startsWith('http://192.168.') ||
           requestOrigin.startsWith('http://10.')
         ) {
@@ -84,7 +86,7 @@ export function createApp(): express.Application {
 
   // ─── OPTIONS Preflight (must be before all routes) ─────────────────────
   // Required so browser preflights for credentialed cross-origin requests
-  // receive the correct CORS headers before touching any authenticated route.
+  // receive the-correct CORS headers before touching any authenticated route.
   app.options('*', cors());
 
   // ─── Observability Context Propagation ─────────────────────
@@ -143,6 +145,9 @@ export function createApp(): express.Application {
   app.use('/tenants/:tenantId/availability', availabilityRouter);
   app.use('/api/v1/tenants/:tenantId/availability', availabilityRouter);
 
+  app.use('/tenants/:tenantId/staff', staffRouter);
+  app.use('/api/v1/tenants/:tenantId/staff', staffRouter);
+
   // Settings
   app.use('/settings', settingsRouter);
   app.use('/api/v1/settings', settingsRouter);
@@ -154,6 +159,9 @@ export function createApp(): express.Application {
   app.use('/api/v1/public/branches', snapshotRouter);
   app.use('/api/v1/public/branches', publicAvailabilityRouter);
   app.use('/public', publicMenuRouter);
+  
+  // ─── Public Organizations API (no auth required) ────────────
+  app.use('/api/v1/public/organizations', publicTenantRouter);
 
   // ─── Public QR Runtime API (no auth required, rate limited) ──────────
   app.use('/api/v1/public/table', publicQrRouter);
@@ -196,10 +204,6 @@ export function createApp(): express.Application {
   // ─── Context/Bootstrap API ────────────────────────────────────
   // Single-payload bootstrap for the admin app. Must resolve before routing.
   app.use('/api/v1/context', contextRouter);
-
-  // Staff API (requires auth & tenant context)
-  app.use('/tenants/:tenantId/staff', staffRouter);
-  app.use('/api/v1/tenants/:tenantId/staff', staffRouter);
   // ─── 404 handler ───────────────────────────────────────────
   app.use((_req, res) => {
     res.status(404).json({

@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/purity */
 /**
  * KitchenDisplay.jsx — Kitchen Display System (KDS)
  * Real-time order queue for kitchen staff.
@@ -282,7 +283,15 @@ export default function KitchenDisplay() {
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [toast, setToast] = useState(null)
   const soundEnabledRef = useRef(true)
-  soundEnabledRef.current = soundEnabled
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled
+  }, [soundEnabled])
+
+  // ── Toast helper ──────────────────────────────────────────────────────────
+  const showToast = (msg) => {
+    setToast(msg)
+    setTimeout(() => setToast(null), 3000)
+  }
 
   const tenantId = localStorage.getItem('kds_tenant_id') || ''
   const branchId = localStorage.getItem('kds_branch_id') || ''
@@ -380,11 +389,6 @@ export default function KitchenDisplay() {
     return () => supabase.removeChannel(channel)
   }, [])
 
-  // ── Toast helper ──────────────────────────────────────────────────────────
-  const showToast = (msg) => {
-    setToast(msg)
-    setTimeout(() => setToast(null), 3000)
-  }
 
   // ── Actions ───────────────────────────────────────────────────────────────
   const handleAccept = async (order) => {

@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { fetchWithRuntime, submitMutation } from '../../../lib/apiClient'
 import { getQrSession } from '../utils/qrSession'
 
+const TENANT_ID = import.meta.env.VITE_TENANT_ID || '11111111-1111-1111-1111-111111111111'
+
 export default function PaymentScreen() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -47,7 +49,7 @@ export default function PaymentScreen() {
           payload: {
             order_id: id,
             table_num: order?.table_num || 'T03',
-            tenant_id: '11111111-1111-1111-1111-111111111111',
+            tenant_id: TENANT_ID,
             payment_id: `cash_${Date.now()}`
           }
         })

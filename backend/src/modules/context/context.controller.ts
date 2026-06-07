@@ -194,7 +194,10 @@ export async function bootstrap(
     }
 
     // ── 3. Compute flags ───────────────────────────────────────────────────
-    const requiresOnboarding = hasTenant ? (!onboarding.is_complete && !onboarding.is_skipped) : false;
+    // If the tenant is already active, we shouldn't force onboarding on them repeatedly
+    // This allows existing/legacy admins to bypass the setup wizard automatically
+    const requiresOnboarding = hasTenant ? 
+      (!onboarding.is_complete && !onboarding.is_skipped && tenant?.status !== 'active') : false;
     const subscriptionExpired = Boolean(tenant && tenant.status === 'suspended');
     const accountSuspended = !profile.is_active || profile.is_locked;
 

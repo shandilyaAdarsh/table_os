@@ -171,6 +171,28 @@ router.post('/:tableId/qr/rotate', requireMinRole(ROLES.MANAGER), async (req: Re
   } catch (err) { next(err); }
 });
 
+// POST /api/v1/admin/tables/:tableId/generate-qr
+router.post('/:tableId/generate-qr', requireMinRole(ROLES.MANAGER), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const tenantId = req.context.tenantId!;
+    const tableId = req.params.tableId as string;
+    const token = await tableService.rotateQrToken(tenantId, tableId, req.context.userId);
+    const table = await tableService.getTableById(tenantId, tableId);
+    
+    const baseUrl = process.env.CUSTOMER_APP_URL || 'http://localhost:5173';
+    const qr_url = `${baseUrl}?t=${token}`;
+    
+    res.status(200).json({ 
+      success: true, 
+      data: {
+        ...table,
+        qr_token: token,
+        qr_url: qr_url
+      }
+    });
+  } catch (err) { next(err); }
+});
+
 // ─── Reservations ─────────────────────────────────────────────
 
 router.get('/:tableId/reservations', requireMinRole(ROLES.STAFF), async (req: Request, res: Response, next: NextFunction) => {

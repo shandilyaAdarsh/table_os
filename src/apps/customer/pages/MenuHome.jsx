@@ -182,10 +182,7 @@ function MenuItemCard({ item, idx, navigate, handleItemAdd }) {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: Math.min(idx, 8) * 0.05 }}
+    <div
       onClick={() => navigate(`/menu/item/${mergedItem.id}`)}
       style={{
         display: 'flex', background: 'white', borderRadius: 16, padding: 14, gap: 12,
@@ -227,7 +224,7 @@ function MenuItemCard({ item, idx, navigate, handleItemAdd }) {
           </div>
         )}
       </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -289,8 +286,8 @@ export default function MenuHome() {
   useEffect(() => {
     if (!resolvedBranchId || !resolvedTenantId) return
 
-    const loadMenu = async () => {
-      setItemsLoading(true)
+    const loadMenu = async (showShimmer = true) => {
+      if (showShimmer) setItemsLoading(true)
       setMenuError(null)
       try {
         const qs = `tenantId=${encodeURIComponent(resolvedTenantId)}&branchId=${encodeURIComponent(resolvedBranchId)}`
@@ -340,10 +337,39 @@ export default function MenuHome() {
         setMenuError(err.message || 'Failed to load menu')
         setItems([])
       }
-      setItemsLoading(false)
+      if (showShimmer) setItemsLoading(false)
     }
 
-    loadMenu()
+    loadMenu(true)
+
+    // Subscribe to realtime database changes for automatic sync when admin adds/edits items
+    const channel = supabase
+      .channel('customer_menu_sync')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'menu_items',
+        filter: `tenant_id=eq.${resolvedTenantId}`,
+      }, (payload) => {
+        console.log('Realtime menu item update detected:', payload.eventType, payload.new, 'refetching...')
+        loadMenu(false)
+      })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'menu_categories',
+        filter: `tenant_id=eq.${resolvedTenantId}`,
+      }, (payload) => {
+        console.log('Realtime category update detected:', payload.eventType, payload.new, 'refetching...')
+        loadMenu(false)
+      })
+      .subscribe((status, err) => {
+        console.log(`[Realtime Sync] Channel status: ${status}`, err || '')
+      })
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [resolvedBranchId, resolvedTenantId])
 
   // Scroll tracking — hide/show nav + sticky overlay + search bar (Issues 5 & 6)
@@ -717,6 +743,7 @@ export default function MenuHome() {
 
       {/* ── ITEM LIST ── */}
       <main style={{ padding: '4px 16px 200px' }}>
+
         {itemsLoading || items === null ? (
           // Issue 8: inline shimmer skeleton
           <>
@@ -747,6 +774,19 @@ export default function MenuHome() {
               ))}
             </div>
           </>
+        ) : fetchError ? (
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <span style={{ fontSize: '48px' }}>⚠️</span>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#E31E24', marginTop: '16px' }}>Connection Issue</h3>
+            <p style={{ color: '#6C757D', fontSize: '14px', marginTop: '4px' }}>{fetchError}</p>
+            <button onClick={() => window.location.reload()} style={{ marginTop: '20px', background: '#E31E24', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}>Retry</button>
+          </div>
+        ) : items.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+            <span style={{ fontSize: '48px' }}>🍽️</span>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#E31E24', marginTop: '16px' }}>No Menu Available</h3>
+            <p style={{ color: '#6C757D', fontSize: '14px', marginTop: '4px' }}>There are currently no items on the menu for this branch.</p>
+          </div>
         ) : displayedItems.length === 0 && items.length > 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>
             <span style={{ fontSize: '48px' }}>🔍</span>

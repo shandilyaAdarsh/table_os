@@ -135,10 +135,10 @@ export async function resetPassword(
 
 export async function getSession(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const user = {
-      ...req.context,
-      permissions: Array.from(req.context.permissions),
-    };
+    const user = { ...req.context };
+    if (user.permissions instanceof Set) {
+      user.permissions = Array.from(user.permissions) as any;
+    }
     res.status(200).json(ResponseFormatter.success({ user }));
   } catch (err) {
     next(err);

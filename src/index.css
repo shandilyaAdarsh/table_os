@@ -16,22 +16,23 @@
   --color-on-background: #191c1e;
   --color-background: #f8fafc;
   
-  --color-primary: #f59e0b;
-  --color-primary-container: #b15f00;
+  /* Core Brand Colors from "The Elevated Heritage" */
+  --color-primary: #002045;
+  --color-primary-container: #E31E24;
   --color-primary-fixed: #ffdcc3;
   --color-primary-fixed-dim: #ffb77d;
   --color-on-primary: #ffffff;
-  --color-on-primary-container: #fffbff;
+  --color-on-primary-container: #ffffff;
   --color-on-primary-fixed: #2f1500;
   --color-on-primary-fixed-variant: #6e3900;
   --color-inverse-primary: #ffb77d;
   
-  --color-secondary: #505f76;
-  --color-secondary-container: #d0e1fb;
+  --color-secondary: #904D00;
+  --color-secondary-container: #E31E24;
   --color-secondary-fixed: #d3e4fe;
   --color-secondary-fixed-dim: #b7c8e1;
   --color-on-secondary: #ffffff;
-  --color-on-secondary-container: #54647a;
+  --color-on-secondary-container: #ffffff;
   --color-on-secondary-fixed: #0b1c30;
   --color-on-secondary-fixed-variant: #38485d;
   
@@ -53,7 +54,7 @@
   --color-outline-variant: #dbc2b0;
   --color-inverse-surface: #2d3133;
   --color-inverse-on-surface: #eff1f3;
-  --color-surface-tint: #f59e0b;
+  --color-surface-tint: #002045;
 
   /* Typography Scale */
   --font-headline: "Inter", sans-serif;
@@ -77,17 +78,6 @@
   --radius-lg: 8px;
   --radius-xl: 12px;
   --radius-full: 9999px;
-}
-
-:root {
-  /* Core Brand Colors from "The Elevated Heritage" */
-  --primary: #002045;
-  --primary-container: #E31E24;
-  --secondary: #904D00;
-  --secondary-container: #E31E24;
-  --surface: #F8F9FA;
-  --surface-container-low: #F3F4F5;
-  --surface-container-lowest: #FFFFFF;
 }
 
 *, *::before, *::after {

@@ -16,7 +16,7 @@ export async function listBranches(req: Request, res: Response, next: NextFuncti
   try {
     const tenantId = String(req.params.tenantId);
     const branches = await service.getTenantBranches(tenantId);
-    res.json(ResponseFormatter.success(branches));
+    res.status(200).json(ResponseFormatter.success(branches));
   } catch (err) {
     next(err);
   }

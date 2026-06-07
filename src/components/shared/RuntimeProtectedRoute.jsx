@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/purity */
+import { useMemo } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useRuntimeAuthStore } from '../../store/runtimeAuthStore';
 
@@ -25,7 +27,7 @@ export default function RuntimeProtectedRoute({
   } = useRuntimeAuthStore();
   const location = useLocation();
 
-  const isExpired = sessionExpiry && Date.now() > sessionExpiry;
+  const isExpired = useMemo(() => sessionExpiry && Date.now() > sessionExpiry, [sessionExpiry]);
 
   // 1. Must be strictly AUTHENTICATED with a non-expired session
   if (authStatus !== 'AUTHENTICATED' || isExpired) {

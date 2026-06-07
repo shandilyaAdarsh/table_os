@@ -30,7 +30,7 @@ export default function StaffLogin() {
           .from('staff')
           .select('id, name, role, pin_code')
           .eq('pin_code', newPin)
-          .eq('tenant_id', '11111111-1111-1111-1111-111111111111')
+          .eq('tenant_id', import.meta.env.VITE_TENANT_ID || '11111111-1111-1111-1111-111111111111')
           .eq('is_active', true)
           .single()
 

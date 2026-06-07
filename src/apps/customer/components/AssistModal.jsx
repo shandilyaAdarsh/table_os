@@ -3,6 +3,8 @@ import { useSessionStore } from '../../../store/index'
 import { submitMutation } from '../../../lib/apiClient'
 import { getTableNum } from '../utils/tableNum'
 
+const TENANT_ID = import.meta.env.VITE_TENANT_ID || '11111111-1111-1111-1111-111111111111'
+
 export default function AssistModal({ open, onClose }) {
   const { session_id, table_num } = useSessionStore()
   const [loading, setLoading] = useState(false)
@@ -29,7 +31,7 @@ export default function AssistModal({ open, onClose }) {
         mutation_id: 'create_assistance_request',
         idempotency_key: crypto.randomUUID(),
         payload: {
-          tenant_id: '11111111-1111-1111-1111-111111111111',
+          tenant_id: TENANT_ID,
           table_id: 'e719f4e5-b0f1-4c71-8e31-197041d71956',
           table_num: table_num || getTableNum(),
           table_session_id: session_id || '',

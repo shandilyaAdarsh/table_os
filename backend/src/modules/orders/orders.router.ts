@@ -8,6 +8,16 @@ import { requireQrSession } from '../tables/qr/qr.middleware';
 import { authenticate } from '../../middleware/auth.middleware';
 import { requestIdempotency } from '../../middleware/idempotency.middleware';
 import { requireMutationEnvelope } from '../../middleware/mutation.middleware';
+import {
+  checkoutCart,
+  getOrderDetails,
+  transitionStatus,
+  listBranchOrders,
+  acceptOrderAlert,
+  reassignOrderAlert,
+  getPendingAlerts,
+  getAvailableStaff,
+} from './orders.controller';
 import { checkoutCart, getOrderDetails, transitionStatus, listBranchOrders, createDirectOrder } from './orders.controller';
 import { orderRateLimiter } from '../../middleware/rate-limit.middleware';
 import type { Request, Response, NextFunction } from 'express';
@@ -25,19 +35,21 @@ function requireQrOrStaffAuth(req: Request, res: Response, next: NextFunction) {
 // Customers or staff can checkout an existing cart
 router.post('/checkout', requireQrOrStaffAuth, requireMutationEnvelope(), requestIdempotency(), checkoutCart);
 
-// Direct order without pre-existing cart (Customer QR / POS)
-router.post('/direct', requireQrOrStaffAuth, orderRateLimiter, requireMutationEnvelope(), requestIdempotency(), (req: Request, res: Response, next: NextFunction) => {
-  import('../../shared/utils/logger').then(({ logger }) => {
-    logger.info({ stage: 'router_entered', path: req.originalUrl, method: req.method });
-    next();
-  });
-}, createDirectOrder);
+// ── Order Alert routes (P3-STAFF-01) ────────────────────────────────────────
+// IMPORTANT: Static GET paths MUST be declared before /:id to avoid being
+// swallowed by the parameterised route (Express matches top-down).
+router.get('/alerts/pending', authenticate, getPendingAlerts);
+router.get('/alerts/staff-available', authenticate, getAvailableStaff);
+
+// Staff-only list of all active orders
+router.get('/', authenticate, listBranchOrders);
 
 // Fetch order details is allowed for either QR customers or staff
 router.get('/:id', requireQrOrStaffAuth, getOrderDetails);
 
-// Staff-only routes: managing order state transitions and listing all active orders
+// Staff-only routes: managing order state transitions
 router.patch('/:id/status', authenticate, requireMutationEnvelope(), transitionStatus);
-router.get('/', authenticate, listBranchOrders);
+router.patch('/:id/accept', authenticate, acceptOrderAlert);
+router.patch('/:id/reassign', authenticate, reassignOrderAlert);
 
 export { router as ordersRouter };
