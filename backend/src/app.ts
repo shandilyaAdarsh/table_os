@@ -27,6 +27,7 @@ import { publicQrRouter } from './modules/tables/qr/table-qr.router';
 import { cartRouter } from './modules/cart/cart.router';
 import { ordersRouter } from './modules/orders/orders.router';
 import { kitchenRouter } from './modules/kitchen/kitchen.router';
+import { mutationsRouter } from './modules/kitchen/mutations.router';
 import { billingRouter } from './modules/billing/billing.router';
 import { infrastructureRouter } from './modules/infrastructure/infrastructure.router';
 import { chaosRouter } from './modules/infrastructure/chaos.router';
@@ -174,6 +175,7 @@ export function createApp(): express.Application {
 
   // ─── Kitchen KDS API (requires Staff Auth) ──────────────────
   app.use('/api/v1/kitchen', kitchenRouter);
+  app.use('/api/v1/mutations', mutationsRouter);
 
   // ─── Billing/POS API (requires Staff Auth) ──────────────────
   app.use('/api/v1/billing', billingRouter);

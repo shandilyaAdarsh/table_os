@@ -25,6 +25,9 @@ export enum ErrorCode {
   // Validation
   VALIDATION_ERROR = 'VALIDATION_ERROR',
   
+  // Checkout
+  CART_ALREADY_CHECKED_OUT = 'CART_ALREADY_CHECKED_OUT',
+  
   // Idempotency
   IDEMPOTENCY_CONFLICT = 'IDEMPOTENCY_CONFLICT',
 }

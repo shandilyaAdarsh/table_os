@@ -343,6 +343,11 @@ export default function MenuHome() {
     loadMenu(true)
 
     // Subscribe to realtime database changes for automatic sync when admin adds/edits items
+    if (!supabase) {
+      console.warn('[MenuHome] Supabase client not initialized — realtime disabled');
+      return;
+    }
+    
     const channel = supabase
       .channel('customer_menu_sync')
       .on('postgres_changes', {
@@ -368,7 +373,7 @@ export default function MenuHome() {
       })
 
     return () => {
-      supabase.removeChannel(channel)
+      if (supabase) supabase.removeChannel(channel)
     }
   }, [resolvedBranchId, resolvedTenantId])
 
@@ -774,11 +779,11 @@ export default function MenuHome() {
               ))}
             </div>
           </>
-        ) : fetchError ? (
+        ) : menuError ? (
           <div style={{ textAlign: 'center', padding: '60px 20px' }}>
             <span style={{ fontSize: '48px' }}>⚠️</span>
             <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#E31E24', marginTop: '16px' }}>Connection Issue</h3>
-            <p style={{ color: '#6C757D', fontSize: '14px', marginTop: '4px' }}>{fetchError}</p>
+            <p style={{ color: '#6C757D', fontSize: '14px', marginTop: '4px' }}>{menuError}</p>
             <button onClick={() => window.location.reload()} style={{ marginTop: '20px', background: '#E31E24', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}>Retry</button>
           </div>
         ) : items.length === 0 ? (

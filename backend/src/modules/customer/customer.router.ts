@@ -47,10 +47,10 @@ router.get('/orders/:id', async (req: Request, res: Response, next: NextFunction
   try {
     const orderId = req.params.id;
     // Extract tenantId and tableId from query parameters
-    const tenantId = req.query.tenantId as string;
-    const tableId = req.query.tableId as string;
+    const tenantId = String(req.query.tenantId);
+    const tableId = String(req.query.tableId);
 
-    const order = await CustomerService.getGuestOrderConfirmation(orderId, tenantId, tableId);
+    const order = await CustomerService.getGuestOrderConfirmation(orderId as string, tenantId as string, tableId as string);
     
     res.json(formatSuccess(order));
   } catch (err) {

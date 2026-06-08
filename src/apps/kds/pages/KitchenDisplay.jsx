@@ -339,7 +339,7 @@ export default function KitchenDisplay() {
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
-        table: 'orders',
+        table: 'kitchen_orders',
         filter: `tenant_id=eq.${tenantId},branch_id=eq.${branchId}`,
       }, async (payload) => {
         const { eventType, new: newRow, old } = payload
@@ -348,24 +348,26 @@ export default function KitchenDisplay() {
 
         if (eventType === 'INSERT') {
           if (['pending', 'cooking', 'ready'].includes(newRow.status)) {
-            const full = await refetch(newRow.id)
+            const orderId = newRow.order_id || newRow.id;
+            const full = await refetch(orderId)
             if (full) {
               setOrders(prev => [...prev, full])
               if (soundEnabledRef.current) playNewOrderBeep()
-              showToast(`🆕 New order from Table ${newRow.table_num}!`)
+              showToast(`🆕 New order from Table ${full.table_num || 'Unknown'}!`)
             }
           }
         } else if (eventType === 'UPDATE') {
           if (['served', 'cancelled', 'paid'].includes(newRow.status)) {
-            setOrders(prev => prev.filter(o => o.id !== newRow.id))
+            setOrders(prev => prev.filter(o => o.id !== (newRow.order_id || newRow.id)))
           } else {
-            const full = await refetch(newRow.id)
+            const orderId = newRow.order_id || newRow.id;
+            const full = await refetch(orderId)
             if (full) {
               setOrders(prev => prev.map(o => o.id === full.id ? full : o))
             }
           }
         } else if (eventType === 'DELETE') {
-          setOrders(prev => prev.filter(o => o.id !== old.id))
+          setOrders(prev => prev.filter(o => o.id !== (old.order_id || old.id)))
         }
       })
       .on('postgres_changes', {

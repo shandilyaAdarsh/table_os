@@ -12,14 +12,19 @@ export const useKitchenOrdersProjection = create((set, get) => ({
 
     try {
       // Station-scoped projection filter applied via query param if stationId is present
-      const stationQuery = stationId ? `?station_id=${stationId}` : '';
-      const response = await fetchWithRuntime(`/api/v1/branches/${branchId}/kitchen/orders${stationQuery}`);
+      const stationQuery = stationId ? `&stationId=${stationId}` : '';
+      const response = await fetchWithRuntime(`/api/v1/kitchen?branchId=${branchId}${stationQuery}`);
       
       if (response.ok) {
         const data = await response.json();
+        console.log('[KDS Projection] raw data:', JSON.stringify(data));
+        
+        const rawData = data?.data ?? data ?? [];
+        // listKitchenQueue wraps the array in `{ queue: [...] }` usually, so check for `.queue`
+        const items = Array.isArray(rawData.queue) ? rawData.queue : (Array.isArray(rawData) ? rawData : Object.values(rawData));
         
         // Ensure deterministic ordering (stable sort): created_at, bump priority, etc.
-        const sortedOrders = (data.data || []).sort((a, b) => {
+        const sortedOrders = items.sort((a, b) => {
           // Priority 1: Expedite / Priority flag (if present)
           if (a.is_expedite && !b.is_expedite) return -1;
           if (!a.is_expedite && b.is_expedite) return 1;
@@ -71,7 +76,7 @@ export const useKitchenOrdersProjection = create((set, get) => ({
       if (order) {
         if (type === 'KITCHEN_MARK_PREPARING') {
           // Safe to instantly transition visually
-          order.status = 'cooking';
+          order.status = 'preparing';
           // Optionally mark specific items as preparing
           if (payload.itemIds) {
             order.items.forEach(it => {

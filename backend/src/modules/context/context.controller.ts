@@ -87,8 +87,13 @@ export async function bootstrap(
   log.info({ userId }, '[Bootstrap] Request received');
 
   try {
+    const startMs = Date.now();
+    log.info({ userId }, `[Bootstrap] Started at ${startMs}`);
+
     // ── 1. Load admin profile (already validated by authenticate) ──────────
     const profile = await findAdminProfileById(userId);
+    const profileMs = Date.now() - startMs;
+    log.info({ userId, elapsed: profileMs }, `[Bootstrap] Admin profile resolved: ${profileMs}ms`);
 
     if (!profile) {
       log.warn({ userId }, '[Bootstrap] No admin profile found — rejecting');
@@ -115,82 +120,77 @@ export async function bootstrap(
     };
 
     if (hasTenant) {
-      // 2a. Load tenant
-      const { data: tenantData, error: tenantError } = await supabaseAdmin
-        .from('tenants')
-        .select('id, name, slug, status, created_at, dismissed_qr_banner')
-        .eq('id', tenantId)
-        .maybeSingle();
+      const rpcStart = Date.now();
+      
+      const timeoutPromise = new Promise<{data: any, error: any}>((_, reject) => 
+        setTimeout(() => reject(new Error('Bootstrap context lookup timed out after 5000ms')), 5000)
+      );
 
-      if (tenantError) {
-        log.error({ userId, tenantId, error: tenantError }, '[Bootstrap] Tenant lookup failed');
-        throw new Error(`Tenant lookup failed: ${tenantError.message}`);
+      // 2a-c. Load tenant, branches, and onboarding state via single optimized RPC
+      const rpcPromise = supabaseAdmin
+        .rpc('get_bootstrap_context', { p_tenant_id: tenantId });
+        
+      try {
+        const { data: rpcData, error: rpcError } = await Promise.race([rpcPromise, timeoutPromise]);
+
+        if (rpcError) {
+          log.error({ userId, tenantId, error: rpcError }, '[Bootstrap] RPC lookup failed');
+          throw new Error(`Bootstrap context lookup failed: ${rpcError.message}`);
+        }
+
+        const ctx = rpcData as any;
+
+        if (ctx.tenant) {
+          tenant = {
+            id: ctx.tenant.id,
+            name: ctx.tenant.name,
+            slug: ctx.tenant.slug,
+            plan: 'standard', // Reserved for future billing integration
+            status: ctx.tenant.status,
+            is_active: ctx.tenant.status !== 'suspended' && ctx.tenant.status !== 'deleted',
+            dismissed_qr_banner: ctx.tenant.dismissed_qr_banner ?? false,
+          };
+          log.info({ userId, tenantId, name: ctx.tenant.name }, '[Bootstrap] Tenant resolved');
+        } else {
+          log.warn({ userId, tenantId }, '[Bootstrap] Tenant record not found — treating as hasTenant=false');
+        }
+
+        branches = (ctx.branches ?? []).map((b: any) => ({
+          id: b.id,
+          name: b.name,
+          timezone: b.timezone,
+          status: b.status,
+        }));
+        log.info({ userId, tenantId, branchCount: branches.length }, '[Bootstrap] Branches resolved');
+
+        const onboardingData = ctx.onboarding_state;
+        if (!onboardingData) {
+          log.warn({ userId, tenantId }, '[Bootstrap] Onboarding lookup failed — defaulting to incomplete');
+          const isSkipped = tenantId ? skippedTenantsFallback.has(tenantId) : false;
+          onboarding = {
+            is_complete: false,
+            is_skipped: isSkipped,
+            step: resolveOnboardingStep([], false, isSkipped),
+            steps_completed: [],
+          };
+        } else {
+          const stepsCompleted = (onboardingData.steps_completed as string[]) ?? [];
+          const isComplete = onboardingData.is_complete ?? false;
+          const isSkipped = skippedTenantsFallback.has(tenantId as string);
+          onboarding = {
+            is_complete: isComplete,
+            is_skipped: isSkipped,
+            steps_completed: stepsCompleted,
+            step: resolveOnboardingStep(stepsCompleted, isComplete, isSkipped),
+          };
+        }
+      } catch (err: any) {
+        log.error({ userId, tenantId, err }, '[Bootstrap] RPC or timeout error');
+        throw err;
       }
-
-      if (tenantData) {
-        tenant = {
-          id: tenantData.id,
-          name: tenantData.name,
-          slug: tenantData.slug,
-          plan: 'standard', // Reserved for future billing integration
-          status: tenantData.status,
-          is_active: tenantData.status !== 'suspended' && tenantData.status !== 'deleted',
-          dismissed_qr_banner: tenantData.dismissed_qr_banner ?? false,
-        };
-        log.info({ userId, tenantId, name: tenantData.name }, '[Bootstrap] Tenant resolved');
-      } else {
-        // Tenant record missing — treat as no-tenant (may have been deleted)
-        log.warn({ userId, tenantId }, '[Bootstrap] Tenant record not found — treating as hasTenant=false');
-      }
-
-      // 2b. Load branches
-      const { data: branchData, error: branchError } = await supabaseAdmin
-        .from('branches')
-        .select('id, name, timezone, status')
-        .eq('tenant_id', tenantId)
-        .neq('status', 'deleted');
-
-      if (branchError) {
-        log.error({ userId, tenantId, error: branchError }, '[Bootstrap] Branch lookup failed');
-        throw new Error(`Branch lookup failed: ${branchError.message}`);
-      }
-
-      branches = (branchData ?? []).map((b) => ({
-        id: b.id,
-        name: b.name,
-        timezone: b.timezone,
-        status: b.status,
-      }));
-      log.info({ userId, tenantId, branchCount: branches.length }, '[Bootstrap] Branches resolved');
-
-      // 2c. Load onboarding state
-      const { data: onboardingData, error: onboardingError } = await supabaseAdmin
-        .from('onboarding_state')
-        .select('is_complete, steps_completed')
-        .eq('tenant_id', tenantId)
-        .maybeSingle();
-
-      if (onboardingError || !onboardingData) {
-        log.warn({ userId, tenantId, error: onboardingError }, '[Bootstrap] Onboarding lookup failed — defaulting to incomplete');
-        const isSkipped = tenantId ? skippedTenantsFallback.has(tenantId) : false;
-        onboarding = {
-          is_complete: false,
-          is_skipped: isSkipped,
-          step: resolveOnboardingStep([], false, isSkipped),
-          steps_completed: [],
-        };
-      } else {
-        const stepsCompleted = (onboardingData.steps_completed as string[]) ?? [];
-        const isComplete = onboardingData.is_complete ?? false;
-        const isSkipped = skippedTenantsFallback.has(tenantId as string);
-        onboarding = {
-          is_complete: isComplete,
-          is_skipped: isSkipped,
-          steps_completed: stepsCompleted,
-          step: resolveOnboardingStep(stepsCompleted, isComplete, isSkipped),
-        };
-      }
-      log.info({ userId, tenantId, onboardingComplete: onboarding.is_complete, onboardingSkipped: onboarding.is_skipped }, '[Bootstrap] Onboarding state resolved');
+      
+      const rpcMs = Date.now() - rpcStart;
+      log.info({ userId, elapsed: rpcMs }, `[Bootstrap] RPC resolved: ${rpcMs}ms`);
     }
 
     // ── 3. Compute flags ───────────────────────────────────────────────────
@@ -233,6 +233,9 @@ export async function bootstrap(
       { userId, hasTenant: response.data.has_tenant, requiresOnboarding, flags },
       '[Bootstrap] Response sent'
     );
+
+    const totalMs = Date.now() - startMs;
+    log.info({ userId, elapsed: totalMs }, `[Bootstrap] Response sent: ${totalMs}ms`);
 
     res.status(200).json(response);
   } catch (err) {

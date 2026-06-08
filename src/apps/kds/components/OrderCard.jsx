@@ -13,7 +13,7 @@ export const formatTime = (s) =>
 /* ─── Status config: "Clinical Artisan" palette ─── */
 const getStatusConfig = (status, elapsed) => {
   // Late (over 11 min) — error state
-  if (status === 'cooking' && elapsed >= 660) return {
+  if ((status === 'preparing' || status === 'accepted') && elapsed >= 660) return {
     accentColor:  '#BA1A1A',
     headerBg:     'rgba(186,26,26,0.04)',
     timerColor:   '#BA1A1A',
@@ -33,7 +33,7 @@ const getStatusConfig = (status, elapsed) => {
     outlineColor: 'rgba(0,105,72,0.15)',
   };
 
-  if (status === 'cooking') return {
+  if (status === 'preparing' || status === 'accepted') return {
     accentColor:  '#2D5FA3',
     headerBg:     'rgba(45,95,163,0.04)',
     timerColor:   '#6C757D',
@@ -84,7 +84,9 @@ const chipStyle = (key) => {
    OrderCard
 ══════════════════════════════════════════════════ */
 const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
-  const { id, tableNum, items, status, createdAt, isPendingOperationalConfirmation } = order;
+  const { ticketId, orderId, tableNumber, items = [], status, createdAt, isPendingOperationalConfirmation } = order;
+  const id = ticketId || orderId || order.id || '';
+  const tableNum = tableNumber || order.tableNum || 'T0';
   const { markPreparing, markReady, bumpOrder, recallTicket } = useKitchenMutations();
 
   // Operational Resilience Checks (Mocking for now since we removed mutation coordinator UI exposure)
@@ -129,7 +131,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
     try {
       if (status === 'pending') {
         await markPreparing(order, selectedItems);
-      } else if (status === 'cooking') {
+      } else if (status === 'preparing' || status === 'accepted') {
         await markReady(order);
       } else if (status === 'ready') {
         await bumpOrder(order);
@@ -180,6 +182,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
         overflow:     'hidden',
         display:      'flex',
         flexDirection:'column',
+        flexShrink:   0,
         /* Ghost border — 15 % opacity as per spec */
         outline:      `1px solid ${cfg.outlineColor}`,
         /* Ambient shadow — marble-countertop diffuse */
@@ -324,6 +327,11 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
         flex: 1, 
         overflowY: 'auto' 
       }}>
+        {items.length === 0 && (
+          <p style={{ color: '#9CA3AF', fontSize: '13px', fontStyle: 'italic', textAlign: 'center', marginTop: '24px' }}>
+            No items in order
+          </p>
+        )}
         {items.map((item, idx) => {
           const isPending  = status === 'pending';
           const isSelected = selectedItems.includes(item.id);

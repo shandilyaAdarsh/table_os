@@ -15,6 +15,7 @@ import { BranchMenuResolutionService } from '../overrides/services/branch-menu-r
 import { ProjectionService } from '../projection/projection.service';
 import * as cartService from '../cart/cart.service';
 import { logger } from '../../shared/utils/logger';
+import { WebSocketManager } from '../transport/websocket.manager';
 
 export async function createDirectOrder(params: {
   tenantId: string;
@@ -209,6 +210,16 @@ export async function createOrderFromCart(params: {
       idempotencyKey: idempotencyKey || null,
     });
 
+    const latestCart = await cartRepo.findCartById(tenantId, cartId);
+
+    logger.info({
+      stage: 'DEBUG_CHECKOUT',
+      cartId,
+      cartStatus: latestCart?.status,
+      sessionId: params.sessionId,
+      tenantId,
+    });
+
     const { data, error } = await supabaseAdmin.rpc('orchestrate_checkout_v1', {
       p_tenant_id: tenantId,
       p_cart_id: cartId,
@@ -234,6 +245,13 @@ export async function createOrderFromCart(params: {
     });
 
     if (error) {
+      if (error.message.includes('Cart is already checked out or locked')) {
+        throw new AppError(
+          'Cart is already checked out or locked',
+          409,
+          ErrorCode.CART_ALREADY_CHECKED_OUT
+        );
+      }
       throw new AppError(`Atomic transaction failed: ${error.message}`, 500, ErrorCode.INTERNAL_SERVER_ERROR);
     }
 

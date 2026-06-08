@@ -41,7 +41,7 @@ export const orders = [
       { name: 'Wagyu Burger',    qty: 2, station: 'grill',   allergen: null,            note: '',              done: false },
       { name: 'Truffle Fries',   qty: 2, station: 'fryer',   allergen: null,            note: '',              done: false },
     ],
-    status: 'cooking', elapsed: 434, isNew: false, note: '',
+    status: 'preparing', elapsed: 434, isNew: false, note: '',
   },
   {
     id: '#1043', tableNum: 'T07',
@@ -49,7 +49,7 @@ export const orders = [
       { name: 'Grilled Salmon',  qty: 1, station: 'grill',   allergen: 'FISH ALLERGY', note: 'medium rare',   done: false },
       { name: 'Bruschetta',      qty: 1, station: 'cold',    allergen: null,            note: 'no garlic',     done: false },
     ],
-    status: 'cooking', elapsed: 262, isNew: false, note: 'guest has fish allergy',
+    status: 'preparing', elapsed: 262, isNew: false, note: 'guest has fish allergy',
   },
   {
     id: '#1044', tableNum: 'T01',
@@ -74,6 +74,6 @@ export const orders = [
       { name: 'Truffle Mushroom Pasta', qty: 1, station: 'grill',   allergen: null,     note: 'NO PARMESAN',   done: false },
       { name: 'Tiramisu',               qty: 1, station: 'dessert', allergen: null,     note: 'extra warm',    done: false },
     ],
-    status: 'cooking', elapsed: 510, isNew: false, note: 'no parmesan on pasta',
+    status: 'preparing', elapsed: 510, isNew: false, note: 'no parmesan on pasta',
   },
 ];

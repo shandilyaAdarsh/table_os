@@ -18,8 +18,6 @@ import {
   getPendingAlerts,
   getAvailableStaff,
 } from './orders.controller';
-import { checkoutCart, getOrderDetails, transitionStatus, listBranchOrders, createDirectOrder } from './orders.controller';
-import { orderRateLimiter } from '../../middleware/rate-limit.middleware';
 import type { Request, Response, NextFunction } from 'express';
 
 const router: Router = Router({ mergeParams: true });

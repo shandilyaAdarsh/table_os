@@ -15,6 +15,7 @@ import { OrderItemWorkflowService } from './order-item-workflow.service';
 import { OperationalReadModelService } from './operational-read-model.service';
 import { RealtimeReconciliationService } from './realtime-reconciliation.service';
 import { KitchenSLAService } from './kitchen-sla.service';
+import { KitchenQueueProjectionService } from './kitchen-queue-projection.service';
 
 const routeOrderSchema = z.object({
   orderId: z.string().uuid(),
@@ -306,6 +307,41 @@ export async function evaluateQueueSLA(req: any, res: Response, next: any): Prom
     res.status(200).json({
       status: 'success',
       data: { slaResults },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getOperationalMetrics(req: any, res: Response, next: any): Promise<void> {
+  try {
+    const schema = z.object({
+      branchId: z.string().uuid(),
+    });
+
+    const parsed = schema.safeParse(req.query);
+    if (!parsed.success) {
+      throw new AppError('Validation failed', 400, ErrorCode.VALIDATION_ERROR, true, parsed.error.format());
+    }
+
+    const tenantId = req.headers['x-tenant-id'] as string || req.context?.tenant_id;
+    if (!tenantId) {
+      throw new AppError('Missing tenant context.', 400, ErrorCode.BAD_REQUEST);
+    }
+
+    const metrics = await KitchenQueueProjectionService.aggregateOperationalMetrics(tenantId, parsed.data.branchId);
+
+    // Map to the format the frontend expects
+    const formattedMetrics = {
+      totalOrdersToday: metrics?.activeTickets || 0,
+      averagePrepTimeSeconds: metrics?.averageTurnaroundSeconds || 0,
+      delayedOrdersCount: metrics?.overdueTickets || 0,
+      activeTicketsCount: metrics?.activeTickets || 0,
+    };
+
+    res.status(200).json({
+      status: 'success',
+      data: formattedMetrics,
     });
   } catch (err) {
     next(err);

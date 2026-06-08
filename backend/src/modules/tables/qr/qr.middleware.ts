@@ -7,7 +7,6 @@ import type { Request, Response, NextFunction } from 'express';
 import { validateSessionToken, touchSession } from './qr.service';
 import { AppError } from '../../../shared/errors/AppError';
 import { ErrorCode } from '../../../shared/errors/error-codes';
-import type { QrSession } from './qr.types';
 import { GuestSessionRepository } from '../../guest-sessions/repositories/guest-session.repository';
 
 declare global {
@@ -52,6 +51,9 @@ export async function requireQrSession(req: Request, _res: Response, next: NextF
         tenantId: session.tenant_id,
         branchId: session.branch_id,
         tableId: session.table_id,
+        tenant_id: session.tenant_id,
+        branch_id: session.branch_id,
+        table_id: session.table_id,
       };
 
       // Update activity asynchronously

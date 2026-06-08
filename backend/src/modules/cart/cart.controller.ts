@@ -44,7 +44,7 @@ export async function addItem(req: Request, res: Response, next: NextFunction): 
   const ctx = req.mutationContext!;
   try {
     const session = req.qrSession!;
-    void logMutationAudit({ ...ctx, mutation_type: 'cart.add_item', status: 'IN_FLIGHT' });
+    void logMutationAudit({ ...ctx, tenant_id: ctx.tenant_id || session.tenant_id, branch_id: ctx.branch_id || session.branch_id, mutation_type: 'cart.add_item', status: 'IN_FLIGHT' });
 
     const dto = AddCartItemSchema.parse(req.body);
     const cartDetail = await cartService.addCartItem(session.tenant_id, session.id, dto, ctx.expected_cart_revision);
@@ -62,7 +62,7 @@ export async function updateItem(req: Request, res: Response, next: NextFunction
   try {
     const session = req.qrSession!;
     const itemId = req.params.itemId as string;
-    void logMutationAudit({ ...ctx, mutation_type: 'cart.update_item', status: 'IN_FLIGHT' });
+    void logMutationAudit({ ...ctx, tenant_id: ctx.tenant_id || session.tenant_id, branch_id: ctx.branch_id || session.branch_id, mutation_type: 'cart.update_item', status: 'IN_FLIGHT' });
 
     const dto = UpdateCartItemSchema.parse(req.body);
     const cartDetail = await cartService.updateCartItem(session.tenant_id, session.id, itemId, dto, ctx.expected_cart_revision);
@@ -80,7 +80,7 @@ export async function removeItem(req: Request, res: Response, next: NextFunction
   try {
     const session = req.qrSession!;
     const itemId = req.params.itemId as string;
-    void logMutationAudit({ ...ctx, mutation_type: 'cart.remove_item', status: 'IN_FLIGHT' });
+    void logMutationAudit({ ...ctx, tenant_id: ctx.tenant_id || session.tenant_id, branch_id: ctx.branch_id || session.branch_id, mutation_type: 'cart.remove_item', status: 'IN_FLIGHT' });
 
     const dto = RemoveCartItemSchema.parse(req.body);
     const cartDetail = await cartService.removeCartItem(session.tenant_id, session.id, itemId, dto.version_num, ctx.expected_cart_revision);
@@ -97,7 +97,7 @@ export async function updateNotes(req: Request, res: Response, next: NextFunctio
   const ctx = req.mutationContext!;
   try {
     const session = req.qrSession!;
-    void logMutationAudit({ ...ctx, mutation_type: 'cart.update_notes', status: 'IN_FLIGHT' });
+    void logMutationAudit({ ...ctx, tenant_id: ctx.tenant_id || session.tenant_id, branch_id: ctx.branch_id || session.branch_id, mutation_type: 'cart.update_notes', status: 'IN_FLIGHT' });
 
     const dto = UpdateCartNotesSchema.parse(req.body);
     const cartDetail = await cartService.updateCartNotes(session.tenant_id, session.id, dto, ctx.expected_cart_revision);
