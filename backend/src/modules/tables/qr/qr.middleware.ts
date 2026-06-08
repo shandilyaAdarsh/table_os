@@ -8,6 +8,7 @@ import { validateSessionToken, touchSession } from './qr.service';
 import { AppError } from '../../../shared/errors/AppError';
 import { ErrorCode } from '../../../shared/errors/error-codes';
 import { GuestSessionRepository } from '../../guest-sessions/repositories/guest-session.repository';
+import { logger } from '../../../shared/utils/logger';
 
 declare global {
   namespace Express {
@@ -67,7 +68,12 @@ export async function requireQrSession(req: Request, _res: Response, next: NextF
       // Legacy QR session token
       const session = await validateSessionToken(token);
       req.qrSession = session;
-      void touchSession(session.id).catch(() => {});
+      void touchSession(session.id).catch((err) => {
+        logger.error(
+          { err, sessionId: session.id },
+          'touchSession failed'
+        );
+      });
     }
 
     next();

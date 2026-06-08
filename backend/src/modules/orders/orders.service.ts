@@ -13,6 +13,7 @@ import { supabaseAdmin } from '../../config/supabase';
 import { allocateSequenceNumber } from './sequence-allocator.service';
 import { BranchMenuResolutionService } from '../overrides/services/branch-menu-resolution.service';
 import { ProjectionService } from '../projection/projection.service';
+import { WebSocketManager } from '../transport/websocket.manager';
 import * as cartService from '../cart/cart.service';
 import { logger } from '../../shared/utils/logger';
 import { WebSocketManager } from '../transport/websocket.manager';

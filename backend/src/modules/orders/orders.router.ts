@@ -13,8 +13,6 @@ import {
   getOrderDetails,
   transitionStatus,
   listBranchOrders,
-  acceptOrderAlert,
-  reassignOrderAlert,
   getPendingAlerts,
   getAvailableStaff,
 } from './orders.controller';
@@ -47,7 +45,7 @@ router.get('/:id', requireQrOrStaffAuth, getOrderDetails);
 
 // Staff-only routes: managing order state transitions
 router.patch('/:id/status', authenticate, requireMutationEnvelope(), transitionStatus);
-router.patch('/:id/accept', authenticate, acceptOrderAlert);
-router.patch('/:id/reassign', authenticate, reassignOrderAlert);
+router.patch('/:id/accept', authenticate, (_req: Request, res: Response) => res.status(501).json({ success: false, error: { code: 'NOT_IMPLEMENTED', message: 'Alert accept not implemented' } }));
+router.patch('/:id/reassign', authenticate, (_req: Request, res: Response) => res.status(501).json({ success: false, error: { code: 'NOT_IMPLEMENTED', message: 'Alert reassign not implemented' } }));
 
 export { router as ordersRouter };

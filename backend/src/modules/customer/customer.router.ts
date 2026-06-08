@@ -47,8 +47,8 @@ router.get('/orders/:id', async (req: Request, res: Response, next: NextFunction
   try {
     const orderId = req.params.id;
     // Extract tenantId and tableId from query parameters
-    const tenantId = String(req.query.tenantId);
-    const tableId = String(req.query.tableId);
+    const tenantId = typeof req.query.tenantId === 'string' ? req.query.tenantId : '';
+    const tableId = typeof req.query.tableId === 'string' ? req.query.tableId : '';
 
     const order = await CustomerService.getGuestOrderConfirmation(orderId as string, tenantId as string, tableId as string);
     

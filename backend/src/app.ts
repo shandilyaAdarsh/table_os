@@ -11,7 +11,6 @@ import { authRouter } from './modules/auth/auth.router';
 import { tenantRouter } from './modules/tenants/tenant.router';
 import { rbacRouter } from './modules/rbac/rbac.router';
 import { menuRouter } from './modules/menu/menu.router';
-import { publicGuestMenuRouter } from './modules/menu/public-guest-menu.router';
 import pricingRouter from './modules/pricing/pricing.router';
 import { taxRouter } from './modules/tax/tax.router';
 import { modifierRouter } from './modules/modifier/modifier.router';
@@ -130,10 +129,6 @@ export function createApp(): express.Application {
   app.use('/tenants/:tenantId/menu', menuRouter);
   app.use('/api/v1/tenants/:tenantId/menu', menuRouter);
 
-  // Public Guest Menu API (QR flow)
-  app.use('/menu', publicGuestMenuRouter);
-  app.use('/api/v1/menu', publicGuestMenuRouter);
-
   app.use('/tenants/:tenantId/pricing', pricingRouter);
   app.use('/api/v1/tenants/:tenantId/pricing', pricingRouter);
 
@@ -186,17 +181,17 @@ export function createApp(): express.Application {
     app.use('/api/v1/infrastructure/chaos', chaosRouter);
   }
 
-  // ─── Customer API ───────────────────────────────────────────
-  app.use('/api/v1/customer', customerRouter);
-
-  // ─── Analytics API ──────────────────────────────────────────
-  app.use('/api/v1/analytics', analyticsRouter);
-
   // ─── Operational Runtime API ───────────────────────────────
   app.use('/api/v1/runtime', runtimeRouter);
   app.use('/api/v1/runtime/events', eventReplayRouter);
   app.use('/api/v1/runtime', deploymentRouter);
   app.use('/api/v1/runtime/observability', observabilityRouter);
+
+  // ─── Customer API ───────────────────────────────────────────
+  app.use('/api/v1/customer', customerRouter);
+
+  // ─── Analytics API ──────────────────────────────────────────
+  app.use('/api/v1/analytics', analyticsRouter);
 
   // ─── Admin API (requires auth & tenant context) ──────────────
   // The authoritative operational interface for the dashboard/admin panel.
