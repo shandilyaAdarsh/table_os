@@ -203,6 +203,11 @@ export async function getPendingAlerts(req: any, res: Response, next: any): Prom
 
     const orders = await ordersService.getPendingOrdersForStaff(tenantId, branchId, staffId);
     res.status(200).json({ status: 'success', data: { orders } });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function transitionStatus(req: any, res: Response, next: any): Promise<void> {
   try {
     const { id } = req.params;
@@ -284,6 +289,10 @@ export async function getAvailableStaff(req: any, res: Response, next: any): Pro
     }));
 
     res.status(200).json({ status: 'success', data: { staff: staffList } });
+  } catch (err) {
+    next(err);
+  }
+}
 
 export async function listBranchOrders(req: any, res: Response, next: any): Promise<void> {
   try {

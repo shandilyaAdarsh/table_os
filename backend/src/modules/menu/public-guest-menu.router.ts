@@ -48,7 +48,6 @@ router.get('/items', async (req: Request, res: Response, next: NextFunction) => 
     const items = await getEffectiveMenuForBranch(tenantId, {
       branch_id: branchId,
       include_unavailable: false,
-      limit: 500,
     });
     res.json(formatSuccess(items));
   } catch (err) {
