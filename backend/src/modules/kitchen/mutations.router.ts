@@ -25,6 +25,16 @@ function formatMutationResponse(res: Response, status: number, data: any, ctx: a
 router.post('/', authenticate, requireMutationEnvelope(), async (req: any, res: Response, next: any) => {
   const ctx = req.mutationContext!;
   try {
+    // Debug logging
+    console.log('[Kitchen Mutations] Received mutation:', {
+      mutationId: ctx.mutation_id,
+      body: req.body,
+      headers: {
+        tenantId: req.headers['x-tenant-id'],
+        contextTenantId: req.context?.tenant_id
+      }
+    });
+
     const tenantId = req.headers['x-tenant-id'] as string || req.context?.tenant_id;
     if (!tenantId) {
       throw new AppError('Missing tenant context.', 400, ErrorCode.BAD_REQUEST);
@@ -32,6 +42,7 @@ router.post('/', authenticate, requireMutationEnvelope(), async (req: any, res: 
 
     const { type, orderId } = req.body;
     if (!orderId) {
+      console.error('[Kitchen Mutations] Missing orderId in payload:', req.body);
       throw new AppError('orderId is required in mutation payload', 400, ErrorCode.VALIDATION_ERROR);
     }
 

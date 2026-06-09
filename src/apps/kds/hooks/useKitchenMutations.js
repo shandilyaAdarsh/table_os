@@ -16,6 +16,9 @@ function isValidTransition(currentStatus, targetStatus) {
 }
 
 export function useKitchenMutations() {
+  // The kitchen projection uses ticketId/orderId, not order.id
+  const resolveId = (order) => order.ticketId || order.orderId || order.id || '';
+
   return {
     markPreparing: async (order) => {
       if (!isValidTransition(order.status?.toUpperCase(), 'PREPARING') && !order.isNew) {
@@ -23,13 +26,21 @@ export function useKitchenMutations() {
       }
       
       const { runtimeSessionId, kitchenDeviceId } = useKdsIdentityStore.getState();
+      const id = resolveId(order);
+      
+      console.log('[KDS] markPreparing called with:', {
+        orderId: id,
+        orderStatus: order.status,
+        runtimeSessionId,
+        kitchenDeviceId
+      });
       
       return submitMutation('/api/v1/mutations', {
-        mutation_id: `KITCHEN_MARK_PREPARING_${order.id}_${Date.now()}`,
-        idempotency_key: `KITCHEN_MARK_PREPARING_${order.id}`,
+        mutation_id: `KITCHEN_MARK_PREPARING_${id}_${Date.now()}`,
+        idempotency_key: `KITCHEN_MARK_PREPARING_${id}`,
         payload: {
           type: 'KITCHEN_MARK_PREPARING',
-          orderId: order.id,
+          orderId: id,
           runtimeSessionId,
           kitchenDeviceId
         }
@@ -42,13 +53,14 @@ export function useKitchenMutations() {
       }
       
       const { runtimeSessionId, kitchenDeviceId } = useKdsIdentityStore.getState();
+      const id = resolveId(order);
       
       return submitMutation('/api/v1/mutations', {
-        mutation_id: `KITCHEN_MARK_READY_${order.id}_${Date.now()}`,
-        idempotency_key: `KITCHEN_MARK_READY_${order.id}`,
+        mutation_id: `KITCHEN_MARK_READY_${id}_${Date.now()}`,
+        idempotency_key: `KITCHEN_MARK_READY_${id}`,
         payload: {
           type: 'KITCHEN_MARK_READY',
-          orderId: order.id,
+          orderId: id,
           runtimeSessionId,
           kitchenDeviceId
         }
@@ -57,13 +69,14 @@ export function useKitchenMutations() {
     
     bumpOrder: async (order) => {
       const { runtimeSessionId, kitchenDeviceId, stationId } = useKdsIdentityStore.getState();
+      const id = resolveId(order);
       
       return submitMutation('/api/v1/mutations', {
-        mutation_id: `KITCHEN_BUMP_TICKET_${order.id}_${stationId}_${Date.now()}`,
-        idempotency_key: `KITCHEN_BUMP_TICKET_${order.id}_${stationId}`,
+        mutation_id: `KITCHEN_BUMP_TICKET_${id}_${stationId}_${Date.now()}`,
+        idempotency_key: `KITCHEN_BUMP_TICKET_${id}_${stationId}`,
         payload: {
           type: 'KITCHEN_BUMP_TICKET',
-          orderId: order.id,
+          orderId: id,
           stationId,
           runtimeSessionId,
           kitchenDeviceId
@@ -73,13 +86,14 @@ export function useKitchenMutations() {
 
     recallTicket: async (order) => {
       const { runtimeSessionId, kitchenDeviceId } = useKdsIdentityStore.getState();
+      const id = resolveId(order);
       
       return submitMutation('/api/v1/mutations', {
-        mutation_id: `KITCHEN_RECALL_TICKET_${order.id}_${Date.now()}`,
-        idempotency_key: `KITCHEN_RECALL_TICKET_${order.id}`,
+        mutation_id: `KITCHEN_RECALL_TICKET_${id}_${Date.now()}`,
+        idempotency_key: `KITCHEN_RECALL_TICKET_${id}`,
         payload: {
           type: 'KITCHEN_RECALL_TICKET',
-          orderId: order.id,
+          orderId: id,
           runtimeSessionId,
           kitchenDeviceId
         }
