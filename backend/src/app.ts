@@ -18,6 +18,7 @@ import { availabilityRouter } from './modules/availability/availability.router';
 import { staffRouter } from './modules/staff/staff.router';
 import { snapshotRouter } from './modules/snapshot/snapshot.router';
 import { publicMenuRouter } from './modules/snapshot/public-menu.router';
+import { publicGuestMenuRouter } from './modules/menu/public-guest-menu.router';
 import { publicAvailabilityRouter } from './modules/availability/public-availability.router';
 import { settingsRouter } from './modules/settings/settings.router';
 import { publicTenantRouter } from './modules/tenants/public-tenant.router';
@@ -155,6 +156,10 @@ export function createApp(): express.Application {
   app.use('/api/v1/public/branches', snapshotRouter);
   app.use('/api/v1/public/branches', publicAvailabilityRouter);
   app.use('/public', publicMenuRouter);
+  
+  // Public Guest Menu API
+  app.use('/api/v1/menu', publicGuestMenuRouter);
+  app.use('/api/v1/public/menu', publicGuestMenuRouter);
   
   // ─── Public Organizations API (no auth required) ────────────
   app.use('/api/v1/public/organizations', publicTenantRouter);
