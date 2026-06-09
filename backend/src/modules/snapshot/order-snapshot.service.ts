@@ -16,9 +16,9 @@ export async function createOrderSnapshot(
   cartId: string,
   versionNum: number,
 ): Promise<string> {
-  // 1. Lock the cart to prevent further mutations during validation & checkout
-  const lockedCart = await cartRepo.updateCartStatus(tenantId, cartId, 'locked', versionNum);
-  if (!lockedCart) {
+  // 1. Fetch the cart to ensure it hasn't been modified
+  const currentCart = await cartRepo.findCartById(tenantId, cartId);
+  if (!currentCart || currentCart.version_num !== versionNum) {
     throw new AppError('Cart was modified by another request. Reload and retry.', 409, ErrorCode.CONFLICT);
   }
 
@@ -36,7 +36,7 @@ export async function createOrderSnapshot(
     const resolutionService = new BranchMenuResolutionService(supabaseAdmin);
     const effectiveMenu = await resolutionService.resolveEffectiveMenu({
       tenantId,
-      branchId: lockedCart.branch_id,
+      branchId: currentCart.branch_id,
       timestamp: new Date().toISOString(),
     });
 
@@ -222,7 +222,7 @@ export async function createOrderSnapshot(
       .from('order_snapshots')
       .insert({
         tenant_id: tenantId,
-        branch_id: lockedCart.branch_id,
+        branch_id: currentCart.branch_id,
         subtotal_minor: calculatedSubtotal,
         tax_total_minor: calculatedTaxTotal,
         discount_total_minor: 0,
@@ -314,8 +314,6 @@ export async function createOrderSnapshot(
 
     return snapshotId;
   } catch (err) {
-    // If anything fails, revert the cart back to 'open' status to allow customer to adjust
-    await cartRepo.updateCartStatus(tenantId, cartId, 'open', versionNum + 1);
     throw err;
   }
 }
