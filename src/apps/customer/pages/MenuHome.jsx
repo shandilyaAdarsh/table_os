@@ -292,8 +292,8 @@ export default function MenuHome() {
       try {
         const qs = `tenantId=${encodeURIComponent(resolvedTenantId)}&branchId=${encodeURIComponent(resolvedBranchId)}`
         const [catRes, itemsRes] = await Promise.all([
-          fetchPublicApi(`/api/v1/menu/categories?${qs}`),
-          fetchPublicApi(`/api/v1/menu/items?${qs}`),
+          fetchPublicApi(`/api/v1/public/menu/categories?${qs}`),
+          fetchPublicApi(`/api/v1/public/menu/items?${qs}`),
         ])
 
         const catBody = await catRes.json()

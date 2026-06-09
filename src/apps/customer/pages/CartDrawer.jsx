@@ -110,15 +110,24 @@ export default function CartDrawer({ open, onClose }) {
         throw error
       }
 
-      // Important: Only clear the cart if the order was successfully created and an ID is returned
-      const orderId = res?.order?.id || res?.data?.order?.id || res?.id || res?.data?.id;
-
-      if (orderId) {
+      if (res?.success === true) {
         clear()
         onClose()
-        navigate(`/menu/confirmed/${orderId}`, { state: { orderId } })
-      } else {
-        throw new Error('Order placed but no ID returned.')
+        const orderData = res?.order || res?.data?.order || res?.data || res;
+        const orderId = orderData?.id || res?.id;
+        navigate(orderId ? `/menu/confirmed/${orderId}` : '/menu/orders', {
+          state: orderId ? {
+            orderId,
+            orderNumber: orderData?.order_number,
+            tableId: orderData?.table_id,
+            tableName: resolvedTableNum,
+            subtotal: subtotal,
+            tax: 0,
+            total: subtotal,
+            items: cartItems,
+          } : undefined
+        })
+        return;
       }
 
     } catch (err) {

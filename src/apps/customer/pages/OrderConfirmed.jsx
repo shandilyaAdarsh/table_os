@@ -11,8 +11,8 @@ export default function OrderConfirmed() {
   const location = useLocation()
   const resolvedOrderId = orderId || location?.state?.orderId
   
-  const [order, setOrder] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [order, setOrder] = useState(location?.state?.order || null)
+  const [loading, setLoading] = useState(!location?.state)
   const [error, setError] = useState(false)
   const [showCheck, setShowCheck] = useState(false)
 
@@ -23,6 +23,21 @@ export default function OrderConfirmed() {
     }
 
     const fetchOrder = async () => {
+      // Option B: Skip fetch if we already have the order from state
+      if (location?.state) {
+        setLoading(false)
+        setTimeout(() => setShowCheck(true), 100)
+        setTimeout(() => {
+          confetti({
+            particleCount: 120,
+            spread: 70,
+            colors: ['#E31E24', '#E31E24', '#ffffff'],
+            origin: { y: 0.6 }
+          })
+        }, 800)
+        return
+      }
+
       try {
         const { tenantId, tableId } = getQrSession()
         const params = new URLSearchParams()
@@ -57,7 +72,7 @@ export default function OrderConfirmed() {
     }
 
     fetchOrder()
-  }, [resolvedOrderId])
+  }, [resolvedOrderId, location?.state?.order])
 
   if (loading) {
     return (
@@ -67,7 +82,7 @@ export default function OrderConfirmed() {
     )
   }
 
-  if (error || !order) {
+  if (error || (!order && !location?.state)) {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center">
         <h1 className="text-2xl font-bold text-[#E31E24] mb-2">Order Not Found</h1>
@@ -123,21 +138,21 @@ export default function OrderConfirmed() {
       {/* 4. ORDER NUMBER BOX */}
       <div className="bg-[#F3F4F6] rounded-[12px] px-6 py-[10px] mb-5 text-center">
         <div className="text-[18px] font-[700] text-[#E31E24] font-mono">
-          ORDER #{order.id.substring(0, 8).toUpperCase()}
+          ORDER #{location?.state?.orderNumber ? String(location.state.orderNumber).substring(0, 8).toUpperCase() : (order?.id || resolvedOrderId || '...').substring(0, 8).toUpperCase()}
         </div>
         <div className="text-[14px] text-[#4B5563] font-medium mt-1">
-          Table {order.table_num || 'N/A'} • {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          Table {location?.state?.tableName || order?.table_num || 'N/A'} • {new Date(order?.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </div>
       </div>
 
       {/* 5. ITEM LIST CARD */}
       <div className="w-full bg-white rounded-[16px] p-4 mb-4" style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
         {(() => {
-          const orderItems = order.order_items || []
-          const subtotal = orderItems.reduce((sum, item) =>
-            sum + ((item.unit_price || 0) * (item.qty || 0)), 0)
-          const tax = order.tax_amount || 0
-          const total = order.total_amount || (subtotal + tax)
+          const orderItems = location?.state?.items || order?.order_items || []
+          const subtotal = location?.state?.subtotal ?? orderItems.reduce((sum, item) =>
+            sum + ((item.unit_price || item.price || 0) * (item.qty || 1)), 0)
+          const tax = location?.state?.tax ?? (order?.tax_amount || 0)
+          const total = location?.state?.total ?? (order?.total_amount || (subtotal + tax))
           return (
             <>
               {/* Item list */}
@@ -150,10 +165,10 @@ export default function OrderConfirmed() {
                   }}>
                     <span style={{ fontSize: '14px', color: '#374151', fontWeight: '400' }}>
                       {item.name}
-                      <span style={{ color: '#9CA3AF', fontSize: '13px' }}> x{item.qty}</span>
+                      <span style={{ color: '#9CA3AF', fontSize: '13px' }}> x{item.qty || 1}</span>
                     </span>
                     <span style={{ fontSize: '14px', color: '#D97706', fontWeight: '500' }}>
-                      ₹{item.unit_price * item.qty}
+                      ₹{(item.unit_price || item.price || 0) * (item.qty || 1)}
                     </span>
                   </div>
                 ))}
