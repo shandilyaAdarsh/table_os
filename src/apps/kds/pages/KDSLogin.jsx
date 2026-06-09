@@ -236,9 +236,25 @@ export function KDSLogin() {
 
       const { runtime_token } = exchangeData.data;
 
-      setRuntimeSession(runtime_token, matchedStaff);
+      console.log('[KDSLogin] Runtime exchange response:', {
+        hasToken: !!runtime_token,
+        tokenPreview: runtime_token ? `${runtime_token.substring(0, 20)}...` : 'none'
+      });
+
+      // Decode token to see what's in it
+      try {
+        const decoded = JSON.parse(atob(runtime_token.split('.')[1]));
+        console.log('[KDSLogin] Decoded JWT:', decoded);
+      } catch (err) {
+        console.error('[KDSLogin] Failed to decode JWT:', err);
+      }
+
+      // setRuntimeSession will decode JWT automatically - no need for second param
+      setRuntimeSession(runtime_token);
       setBranchId(savedBranchId);
       setStaffId(matchedStaff.id);
+      
+      console.log('[KDSLogin] After setRuntimeSession, auth store:', useRuntimeAuthStore.getState());
       localStorage.setItem('kds_staff_name', `${matchedStaff.first_name || ''} ${matchedStaff.last_name || ''}`.trim());
       localStorage.setItem('kds_staff_role', matchedStaff.role || 'Kitchen Staff');
       

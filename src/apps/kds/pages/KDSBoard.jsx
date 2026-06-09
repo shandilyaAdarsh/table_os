@@ -77,8 +77,21 @@ const KDSBoard = () => {
   useEffect(() => {
     if (!effectiveTenantId || !branchId) return;
     
-    // Initialize MutationGateway for replay isolation
-    runtime.mutation.initializeSession(runtimeSessionId || 'kds_session_default', 'kds_board');
+    // Debug: Check if we have auth before initializing
+    const authState = useRuntimeAuthStore.getState();
+    console.log('[KDSBoard] Initialization check:', {
+      hasRuntimeToken: !!authState.runtimeToken,
+      hasSessionId: !!authState.sessionId,
+      sessionId: authState.sessionId,
+      runtimeSessionId: runtimeSessionId || 'kds_session_default',
+      branchId,
+      tenantId: effectiveTenantId
+    });
+    
+    // Initialize MutationGateway for replay isolation using session_id from JWT
+    const sessionId = authState.sessionId || runtimeSessionId || 'kds_session_default';
+    runtime.mutation.initializeSession(sessionId, 'kds_board');
+    console.log('[KDSBoard] MutationGateway session initialized:', sessionId);
 
     // Attempt lock acquisition on mount or station change removed
 
@@ -157,7 +170,7 @@ const KDSBoard = () => {
   /* ── Column definitions ─────────────────────────── */
   const columns = [
     { status: ['pending'], title: 'PENDING ORDERS',    count: pendingCount, badgeBg: '#E31E24', emptyIcon: 'hourglass_empty' },
-    { status: ['accepted', 'preparing'], title: 'CURRENTLY COOKING', count: preparingCount, badgeBg: '#2D5FA3', emptyIcon: 'whatshot'        },
+    { status: ['accepted', 'preparing'], title: 'CURRENTLY PREPARING', count: preparingCount, badgeBg: '#2D5FA3', emptyIcon: 'whatshot'        },
     { status: ['ready'],   title: 'READY TO SERVE',    count: readyCount,   badgeBg: '#006948', emptyIcon: 'check_circle'    },
   ];
 

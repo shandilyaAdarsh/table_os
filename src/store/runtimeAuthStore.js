@@ -22,12 +22,56 @@ export const useRuntimeAuthStore = create(
       // ── Actions ─────────────────────────────────────────────
       
       setRuntimeSession: (token, payload) => {
+        // Always decode from JWT as the source of truth
+        let tenantId = null;
+        let branchId = null;
+        let role = null;
+        let sub = null;
+        let sessionId = null;
+        let permissions = [];
+        let sessionExpiry = null;
+        
+        try {
+          const payloadBase64 = token.split('.')[1];
+          const decoded = JSON.parse(atob(payloadBase64));
+          
+          tenantId = decoded.tenant_id;
+          branchId = decoded.branch_id;
+          role = decoded.role;
+          sub = decoded.sub;
+          sessionId = decoded.session_id;
+          permissions = decoded.permissions || [];
+          sessionExpiry = decoded.exp ? decoded.exp * 1000 : null;
+          
+          console.log('[RuntimeAuth] Decoded JWT claims:', {
+            tenant_id: tenantId,
+            branch_id: branchId,
+            role,
+            sub,
+            session_id: sessionId
+          });
+        } catch (err) {
+          console.error('[RuntimeAuth] Failed to decode JWT:', err);
+          
+          // Fallback to localStorage for KDS (set during device registration)
+          tenantId = localStorage.getItem('kds_tenant_id') || null;
+          branchId = localStorage.getItem('kds_branch_id') || null;
+          
+          console.warn('[RuntimeAuth] Using localStorage fallback:', {
+            tenantId,
+            branchId
+          });
+        }
+        
         set({
           runtimeToken: token,
-          tenantId: payload.tenantId,
-          branchId: payload.branchId,
-          role: payload.role,
-          sub: payload.sub,
+          tenantId,
+          branchId,
+          role,
+          sub,
+          sessionId,
+          permissions,
+          sessionExpiry,
           authStatus: 'AUTHENTICATED'
         });
       },
