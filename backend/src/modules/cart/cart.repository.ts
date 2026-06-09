@@ -8,6 +8,7 @@ import { AppError } from '../../shared/errors/AppError';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import type { Cart, CartItem, CartItemModifier, CartStatus } from './cart.types';
 import type { UpdateCartItemDto, UpdateCartNotesDto } from './cart.dtos';
+import { logger } from '../../shared/utils/logger';
 
 export async function findCartById(tenantId: string, cartId: string): Promise<Cart | null> {
   const { data, error } = await supabaseAdmin
@@ -84,6 +85,9 @@ export async function updateCartStatus(
   versionNum: number,
   extra: Record<string, unknown> = {},
 ): Promise<Cart | null> {
+  const previousCart = await findCartById(tenantId, cartId);
+  const previousStatus = previousCart?.status || 'unknown';
+
   const { data, error } = await supabaseAdmin
     .from('carts')
     .update({ status, updated_at: new Date().toISOString(), ...extra })
@@ -94,6 +98,16 @@ export async function updateCartStatus(
     .maybeSingle();
 
   if (error) throw new AppError('Failed to update cart status', 500, ErrorCode.INTERNAL_SERVER_ERROR, true, { error });
+
+  if (data) {
+    logger.info({
+      cartId,
+      previousStatus,
+      nextStatus: status,
+      stage: 'CART_STATUS_TRANSITION'
+    });
+  }
+
   return data as Cart | null;
 }
 

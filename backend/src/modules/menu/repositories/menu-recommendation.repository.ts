@@ -23,7 +23,8 @@ export async function findRecommendationsForItems(
     .eq('is_active', true)
     .is('deleted_at', null)
     .order('priority', { ascending: false })
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: true })
+    .limit(limit);
 
   if (error) {
     logger.error({ error, tenantId, itemIds }, 'Error finding recommendations for items');

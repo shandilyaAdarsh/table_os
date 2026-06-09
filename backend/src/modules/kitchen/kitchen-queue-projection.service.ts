@@ -33,7 +33,7 @@ export class KitchenQueueProjectionService {
         `)
         .eq('tenant_id', tenantId)
         .eq('branch_id', branchId)
-        .neq('status', 'delivered')
+        .in('status', ['pending', 'accepted', 'preparing', 'ready'])
         .order('created_at', { ascending: true });
 
       if (ticketError) {
@@ -76,21 +76,47 @@ export class KitchenQueueProjectionService {
           continue;
         }
 
-        // 4. Map to DTO format
-        const items: ActiveItemPrepProjection[] = targetPreps.map((p) => ({
-          preparationId: p.id,
-          itemId: p.kitchen_order_item_id,
-          name: p.kitchen_order_items?.item_name || 'UNKNOWN',
-          quantity: p.quantity,
-          completedQuantity: p.completed_quantity,
-          status: p.status,
-          notes: p.kitchen_order_items?.item_notes || null,
-          modifiers: p.kitchen_order_items?.modifier_summary || null,
-          stationId: p.station_id,
-          stationName: p.kitchen_stations?.name || null,
-          preparedAt: p.prepared_at,
-          completedAt: p.completed_at,
-        }));
+        // 4. Map to DTO format (with fallback for legacy test data)
+        let items: ActiveItemPrepProjection[] = [];
+        if (targetPreps.length === 0 && !stationId) {
+          const { data: rawItems } = await supabaseAdmin
+            .from('kitchen_order_items')
+            .select('*')
+            .eq('tenant_id', tenantId)
+            .eq('kitchen_order_id', ticket.id);
+            
+          if (rawItems && rawItems.length > 0) {
+            items = rawItems.map((r: any) => ({
+              preparationId: r.id,
+              itemId: r.id,
+              name: r.item_name || 'UNKNOWN',
+              quantity: r.quantity,
+              completedQuantity: 0,
+              status: 'pending',
+              notes: r.item_notes || null,
+              modifiers: r.modifier_summary || null,
+              stationId: null,
+              stationName: null,
+              preparedAt: null,
+              completedAt: null,
+            }));
+          }
+        } else {
+          items = targetPreps.map((p) => ({
+            preparationId: p.id,
+            itemId: p.kitchen_order_item_id,
+            name: p.kitchen_order_items?.item_name || 'UNKNOWN',
+            quantity: p.quantity,
+            completedQuantity: p.completed_quantity,
+            status: p.status,
+            notes: p.kitchen_order_items?.item_notes || null,
+            modifiers: p.kitchen_order_items?.modifier_summary || null,
+            stationId: p.station_id,
+            stationName: p.kitchen_stations?.name || null,
+            preparedAt: p.prepared_at,
+            completedAt: p.completed_at,
+          }));
+        }
 
         // Compute wait time metrics
         const createdAtTime = new Date(ticket.created_at).getTime();

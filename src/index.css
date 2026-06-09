@@ -132,7 +132,8 @@ h1, h2, h3, h4, h5, h6 {
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 .order-card {
-  height: 480px;
+  min-height: 320px;
+  max-height: 600px;
   display: flex;
   flex-direction: column;
   transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.2s cubic-bezier(0.2, 0, 0, 1);

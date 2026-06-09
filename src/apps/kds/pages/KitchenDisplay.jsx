@@ -2,8 +2,8 @@
 /**
  * KitchenDisplay.jsx — Kitchen Display System (KDS)
  * Real-time order queue for kitchen staff.
- * Connects to Supabase, shows pending/cooking orders as Kanban-style cards.
- * Kitchen can: Accept order → Cooking, mark items done, push Ready, Reject items.
+ * Connects to Supabase, shows pending/preparing orders as Kanban-style cards.
+ * Kitchen can: Accept order → Preparing, mark items done, push Ready, Reject items.
  */
 
 import { useEffect, useState, useRef } from 'react'
@@ -48,7 +48,7 @@ function useElapsed(createdAt) {
 function OrderCard({ order, onAccept, onMarkReady, onReject, onToggleItem }) {
   const elapsed = useElapsed(order.created_at)
   const isNew = order.status === 'pending'
-  const isCooking = order.status === 'cooking'
+  const isCooking = order.status === 'preparing'
   const isReady = order.status === 'ready'
 
   const urgentMins = Math.floor(
@@ -56,10 +56,11 @@ function OrderCard({ order, onAccept, onMarkReady, onReject, onToggleItem }) {
   )
   const isUrgent = urgentMins >= 15 && !isReady
 
-  const allItemsDone = (order.order_items || []).every(
-    item => item.done || item.is_rejected
+  const itemsArray = order.order_items || order.items || order.preparations || []
+  const allItemsDone = itemsArray.every(
+    item => item.done || item.is_rejected || (item.completedQuantity > 0)
   )
-  const hasItems = (order.order_items || []).length > 0
+  const hasItems = itemsArray.length > 0
 
   // Border colour by status
   const borderColor = isNew
@@ -127,7 +128,7 @@ function OrderCard({ order, onAccept, onMarkReady, onReject, onToggleItem }) {
             textTransform: 'uppercase',
             letterSpacing: '0.06em',
           }}>
-            {isNew ? '● NEW' : isCooking ? '● COOKING' : '● READY'}
+            {isNew ? '● NEW' : isCooking ? '● PREPARING' : '● READY'}
           </span>
         </div>
       </div>
@@ -135,8 +136,8 @@ function OrderCard({ order, onAccept, onMarkReady, onReject, onToggleItem }) {
       {/* Items list */}
       <div style={{ padding: '12px 14px', flex: 1 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {(order.order_items || []).map(item => (
-            <div key={item.id} style={{
+          {(order.order_items || order.items || order.preparations || []).map(item => (
+            <div key={item.id || item.preparationId || item.itemId} style={{
               display: 'flex',
               alignItems: 'center',
               gap: 10,
@@ -172,11 +173,11 @@ function OrderCard({ order, onAccept, onMarkReady, onReject, onToggleItem }) {
                   fontSize: 13, fontWeight: 600, color: 'white',
                   textDecoration: item.is_rejected ? 'line-through' : 'none',
                 }}>
-                  {item.qty}× {item.name || item.menu_items?.name || '—'}
+                  {(item.qty ?? item.quantity ?? 1)}× {item.name || item.menu_items?.name || '—'}
                 </span>
-                {item.note && (
+                {(item.note || item.notes) && (
                   <p style={{ fontSize: 11, color: '#E3B341', margin: '2px 0 0', fontStyle: 'italic' }}>
-                    Note: {item.note}
+                    Note: {item.note || item.notes}
                   </p>
                 )}
               </div>
@@ -279,7 +280,7 @@ function OrderCard({ order, onAccept, onMarkReady, onReject, onToggleItem }) {
 export default function KitchenDisplay() {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('all')   // all | pending | cooking | ready
+  const [filter, setFilter] = useState('all')   // all | pending | preparing | ready
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [toast, setToast] = useState(null)
   const soundEnabledRef = useRef(true)
@@ -310,7 +311,7 @@ export default function KitchenDisplay() {
         `)
         .eq('tenant_id', tenantId)
         .eq('branch_id', branchId)
-        .in('status', ['pending', 'cooking', 'ready'])
+        .in('status', ['pending', 'preparing', 'ready'])
         .order('created_at', { ascending: true })
 
       if (!error && data) setOrders(data)
@@ -340,32 +341,34 @@ export default function KitchenDisplay() {
         event: '*',
         schema: 'public',
         table: 'orders',
-        filter: `tenant_id=eq.${tenantId},branch_id=eq.${branchId}`,
+        filter: `branch_id=eq.${branchId}`,
       }, async (payload) => {
         const { eventType, new: newRow, old } = payload
 
         if (newRow && newRow.branch_id !== branchId) return;
 
         if (eventType === 'INSERT') {
-          if (['pending', 'cooking', 'ready'].includes(newRow.status)) {
-            const full = await refetch(newRow.id)
+          if (['pending', 'preparing', 'ready'].includes(newRow.status)) {
+            const orderId = newRow.order_id || newRow.id;
+            const full = await refetch(orderId)
             if (full) {
               setOrders(prev => [...prev, full])
               if (soundEnabledRef.current) playNewOrderBeep()
-              showToast(`🆕 New order from Table ${newRow.table_num}!`)
+              showToast(`🆕 New order from Table ${full.table_num || 'Unknown'}!`)
             }
           }
         } else if (eventType === 'UPDATE') {
           if (['served', 'cancelled', 'paid'].includes(newRow.status)) {
-            setOrders(prev => prev.filter(o => o.id !== newRow.id))
+            setOrders(prev => prev.filter(o => o.id !== (newRow.order_id || newRow.id)))
           } else {
-            const full = await refetch(newRow.id)
+            const orderId = newRow.order_id || newRow.id;
+            const full = await refetch(orderId)
             if (full) {
               setOrders(prev => prev.map(o => o.id === full.id ? full : o))
             }
           }
         } else if (eventType === 'DELETE') {
-          setOrders(prev => prev.filter(o => o.id !== old.id))
+          setOrders(prev => prev.filter(o => o.id !== (old.order_id || old.id)))
         }
       })
       .on('postgres_changes', {
@@ -392,13 +395,24 @@ export default function KitchenDisplay() {
 
   // ── Actions ───────────────────────────────────────────────────────────────
   const handleAccept = async (order) => {
-    await supabase
-      .from('orders')
-      .update({ status: 'cooking' })
-      .eq('id', order.id)
-    // Optimistic update
-    setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'cooking' } : o))
-    showToast(`👨‍🍳 Order ${order.id.slice(0, 6).toUpperCase()} accepted`)
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .update({ status: 'preparing' })
+        .eq('id', order.id)
+        
+      console.log('[KDS] Update result:', { data, error })
+        
+      if (error) {
+        console.error('[KDS] Accept failed:', error)
+        return
+      }
+      // Optimistic update
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'preparing' } : o))
+      showToast(`👨‍🍳 Order ${order.id.slice(0, 6).toUpperCase()} accepted`)
+    } catch (err) {
+      console.error('[KDS] Accept exception:', err)
+    }
   }
 
   const handleMarkReady = async (order) => {
@@ -441,7 +455,7 @@ export default function KitchenDisplay() {
   }
 
   // ── Filtered + sorted orders ──────────────────────────────────────────────
-  const STATUS_ORDER = { pending: 0, cooking: 1, ready: 2 }
+  const STATUS_ORDER = { pending: 0, preparing: 1, ready: 2 }
   const filtered = orders
     .filter(o => filter === 'all' || o.status === filter)
     .sort((a, b) => {
@@ -452,7 +466,7 @@ export default function KitchenDisplay() {
 
   const counts = {
     pending: orders.filter(o => o.status === 'pending').length,
-    cooking: orders.filter(o => o.status === 'cooking').length,
+    preparing: orders.filter(o => o.status === 'preparing').length,
     ready:   orders.filter(o => o.status === 'ready').length,
   }
 
@@ -580,9 +594,9 @@ export default function KitchenDisplay() {
         overflowX: 'auto',
       }}>
         {[
-          { key: 'all',     label: 'All',     count: counts.pending + counts.cooking + counts.ready, color: '#8B949E' },
+          { key: 'all',     label: 'All',     count: counts.pending + counts.preparing + counts.ready, color: '#8B949E' },
           { key: 'pending', label: '● New',   count: counts.pending, color: '#E3B341' },
-          { key: 'cooking', label: '● Cooking',count: counts.cooking, color: '#F0883E' },
+          { key: 'preparing', label: '● Preparing',count: counts.preparing, color: '#F0883E' },
           { key: 'ready',   label: '● Ready', count: counts.ready,   color: '#3FB950' },
         ].map(tab => (
           <button

@@ -30,53 +30,40 @@ export default function OrdersPage() {
 
     const fetchOrders = async () => {
       try {
-        let query = supabase
+        // Step 1: fetch orders without join to bypass PGRST200
+        const { data: fetchedOrders, error: ordersError } = await supabase
           .from('orders')
           .select('*')
           .eq('tenant_id', activeTenantId)
+          .eq('table_id', tableId)
+          .in('status', ['pending', 'accepted', 'preparing', 'ready', 'delivered'])
           .order('created_at', { ascending: false })
-          .limit(20)
+          .limit(20);
 
-        if (tableId) {
-          query = query.eq('table_id', tableId)
+        if (ordersError) throw ordersError;
+
+        if (!fetchedOrders || fetchedOrders.length === 0) {
+          setOrders([]);
+          setLoading(false);
+          return;
         }
-        
-        if (session.checkedInAt) {
-          query = query.gte('created_at', session.checkedInAt)
-        }
 
-        const { data: fetchedOrders, error: ordersError } = await query
-        if (ordersError) throw ordersError
+        // Step 2: fetch items for those orders
+        const orderIds = fetchedOrders.map(o => o.id);
+        const { data: items, error: itemsError } = await supabase
+          .from('order_items')
+          .select('*')
+          .in('order_id', orderIds);
 
-        if (fetchedOrders && fetchedOrders.length > 0) {
-          const orderIds = fetchedOrders.map(o => o.id)
-          
-          // Fetch order_items separately to bypass PGRST200 missing FK relation
-          const { data: itemsData, error: itemsError } = await supabase
-            .from('order_items')
-            .select('id, order_id, name, qty, unit_price, is_rejected, status')
-            .in('order_id', orderIds)
+        if (itemsError) throw itemsError;
 
-          if (itemsError) {
-            console.warn('[OrdersPage] Failed to fetch order items (table may not exist or RLS blocked):', itemsError.message)
-          }
+        // Step 3: manual merge
+        const ordersWithItems = fetchedOrders.map(order => ({
+          ...order,
+          order_items: (items || []).filter(i => i.order_id === order.id)
+        }));
 
-          // Merge items into orders
-          const itemsByOrderId = (itemsData || []).reduce((acc, item) => {
-            acc[item.order_id] = acc[item.order_id] || []
-            acc[item.order_id].push(item)
-            return acc
-          }, {})
-
-          const mergedOrders = fetchedOrders.map(order => ({
-            ...order,
-            order_items: itemsByOrderId[order.id] || []
-          }))
-
-          setOrders(mergedOrders)
-        } else {
-          setOrders([])
-        }
+        setOrders(ordersWithItems);
       } catch (err) {
         console.error('[OrdersPage] Runtime Failure:', err);
         setErrorState(err.message || 'Failed to load your orders.')
@@ -182,7 +169,7 @@ export default function OrdersPage() {
 function OrderCard({ order }) {
   const navigate = useNavigate()
   const [timeRemaining, setTimeRemaining] = useState('')
-  const isActive = ['pending', 'cooking', 'ready'].includes(order.status)
+  const isActive = ['pending', 'accepted', 'preparing', 'ready'].includes(order.status)
 
   // Issue 10: download invoice as plain-text
   const downloadInvoice = () => {
@@ -248,11 +235,14 @@ function OrderCard({ order }) {
 
   const statusMap = {
     pending:  { bg: 'rgba(27,43,75,0.05)', color: '#E31E24', label: 'Placed', icon: 'check_circle' },
-    cooking:  { bg: 'rgba(249,115,22,0.1)', color: '#E31E24', label: 'Preparing', icon: 'skillet' },
+    accepted: { bg: 'rgba(27,43,75,0.05)', color: '#E31E24', label: 'Accepted', icon: 'thumb_up' },
+    preparing:{ bg: 'rgba(249,115,22,0.1)', color: '#E31E24', label: 'Preparing', icon: 'skillet' },
     ready:    { bg: 'rgba(34,197,94,0.1)', color: '#16A34A', label: 'Ready!', icon: 'shopping_bag' },
-    served:   { bg: '#F3F4F6', color: '#6C757D', label: 'Served', icon: 'done_all' },
+    delivered:{ bg: '#F3F4F6', color: '#6C757D', label: 'Served', icon: 'done_all' },
+    completed:{ bg: '#F3F4F6', color: '#6C757D', label: 'Completed', icon: 'done_all' },
     cancelled:{ bg: '#FEF2F2', color: '#EF4444', label: 'Cancelled', icon: 'cancel' },
-    rejected: { bg: '#FEE2E2', color: '#EF4444', label: 'Rejected', icon: 'cancel' }
+    rejected: { bg: '#FEE2E2', color: '#EF4444', label: 'Rejected', icon: 'cancel' },
+    sync_conflict: { bg: '#FEF2F2', color: '#EF4444', label: 'Sync Conflict', icon: 'error' }
   }
 
   const s = statusMap[order.status] || statusMap.pending

@@ -6,7 +6,8 @@
 
 const VARIANT_STYLES = {
   pending:         'bg-yellow-500/20 text-yellow-300 border border-yellow-500/40',
-  cooking:         'bg-orange-500/20 text-orange-300 border border-orange-500/40',
+  accepted:        'bg-orange-500/20 text-orange-300 border border-orange-500/40',
+  preparing:       'bg-orange-500/20 text-orange-300 border border-orange-500/40',
   ready:           'bg-green-500/20 text-green-300 border border-green-500/40',
   done:            'bg-slate-500/20 text-slate-300 border border-slate-500/40',
   vacant:          'bg-slate-600/20 text-slate-400 border border-slate-600/40',

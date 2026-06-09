@@ -64,8 +64,8 @@ export async function createPublicOrder(params: {
       session_id: sessionId,
     });
   } else {
-    // If the cart is already locked or submitted, reject modification
-    if (cart.status !== 'open') {
+    // If the cart is already submitted, reject modification
+    if (!['open', 'locked'].includes(cart.status)) {
       throw new AppError(`Cannot checkout a cart in '${cart.status}' status.`, 400, ErrorCode.VALIDATION_ERROR);
     }
     // Flush any previous cart items to represent the current checkout request exclusively

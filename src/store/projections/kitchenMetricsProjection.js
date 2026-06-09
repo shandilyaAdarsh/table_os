@@ -16,8 +16,8 @@ export const useKitchenMetricsProjection = create((set, get) => ({
     set({ isRebuilding: true, error: null });
 
     try {
-      const stationQuery = stationId ? `?station_id=${stationId}` : '';
-      const response = await fetchWithRuntime(`/api/v1/branches/${branchId}/kitchen/metrics${stationQuery}`);
+      const stationQuery = stationId ? `&stationId=${stationId}` : '';
+      const response = await fetchWithRuntime(`/api/v1/kitchen/metrics?branchId=${branchId}${stationQuery}`);
       
       if (response.ok) {
         const data = await response.json();

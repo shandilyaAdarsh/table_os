@@ -19,6 +19,15 @@ export const supabaseAdmin: SupabaseClient = createClient(
   env.SUPABASE_URL,
   env.SUPABASE_SERVICE_ROLE_KEY,
   {
+    global: {
+      // Explicitly pin the service_role key in the Authorization header.
+      // This prevents the Supabase JS client's internal auth session state
+      // from ever overriding the service_role header after admin operations
+      // like auth.admin.updateUserById() mutate the singleton's session state.
+      headers: {
+        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+    },
     auth: {
       autoRefreshToken: false,
       persistSession: false,

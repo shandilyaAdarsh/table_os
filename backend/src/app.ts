@@ -11,7 +11,6 @@ import { authRouter } from './modules/auth/auth.router';
 import { tenantRouter } from './modules/tenants/tenant.router';
 import { rbacRouter } from './modules/rbac/rbac.router';
 import { menuRouter } from './modules/menu/menu.router';
-import { publicGuestMenuRouter } from './modules/menu/public-guest-menu.router';
 import pricingRouter from './modules/pricing/pricing.router';
 import { taxRouter } from './modules/tax/tax.router';
 import { modifierRouter } from './modules/modifier/modifier.router';
@@ -19,6 +18,7 @@ import { availabilityRouter } from './modules/availability/availability.router';
 import { staffRouter } from './modules/staff/staff.router';
 import { snapshotRouter } from './modules/snapshot/snapshot.router';
 import { publicMenuRouter } from './modules/snapshot/public-menu.router';
+import { publicGuestMenuRouter } from './modules/menu/public-guest-menu.router';
 import { publicAvailabilityRouter } from './modules/availability/public-availability.router';
 import { settingsRouter } from './modules/settings/settings.router';
 import { publicTenantRouter } from './modules/tenants/public-tenant.router';
@@ -27,6 +27,7 @@ import { publicQrRouter } from './modules/tables/qr/table-qr.router';
 import { cartRouter } from './modules/cart/cart.router';
 import { ordersRouter } from './modules/orders/orders.router';
 import { kitchenRouter } from './modules/kitchen/kitchen.router';
+import { mutationsRouter } from './modules/kitchen/mutations.router';
 import { billingRouter } from './modules/billing/billing.router';
 import { infrastructureRouter } from './modules/infrastructure/infrastructure.router';
 import { chaosRouter } from './modules/infrastructure/chaos.router';
@@ -129,10 +130,6 @@ export function createApp(): express.Application {
   app.use('/tenants/:tenantId/menu', menuRouter);
   app.use('/api/v1/tenants/:tenantId/menu', menuRouter);
 
-  // Public Guest Menu API (QR flow)
-  app.use('/menu', publicGuestMenuRouter);
-  app.use('/api/v1/menu', publicGuestMenuRouter);
-
   app.use('/tenants/:tenantId/pricing', pricingRouter);
   app.use('/api/v1/tenants/:tenantId/pricing', pricingRouter);
 
@@ -160,6 +157,10 @@ export function createApp(): express.Application {
   app.use('/api/v1/public/branches', publicAvailabilityRouter);
   app.use('/public', publicMenuRouter);
   
+  // Public Guest Menu API
+  app.use('/api/v1/menu', publicGuestMenuRouter);
+  app.use('/api/v1/public/menu', publicGuestMenuRouter);
+  
   // ─── Public Organizations API (no auth required) ────────────
   app.use('/api/v1/public/organizations', publicTenantRouter);
 
@@ -174,6 +175,7 @@ export function createApp(): express.Application {
 
   // ─── Kitchen KDS API (requires Staff Auth) ──────────────────
   app.use('/api/v1/kitchen', kitchenRouter);
+  app.use('/api/v1/mutations', mutationsRouter);
 
   // ─── Billing/POS API (requires Staff Auth) ──────────────────
   app.use('/api/v1/billing', billingRouter);
@@ -184,17 +186,17 @@ export function createApp(): express.Application {
     app.use('/api/v1/infrastructure/chaos', chaosRouter);
   }
 
-  // ─── Customer API ───────────────────────────────────────────
-  app.use('/api/v1/customer', customerRouter);
-
-  // ─── Analytics API ──────────────────────────────────────────
-  app.use('/api/v1/analytics', analyticsRouter);
-
   // ─── Operational Runtime API ───────────────────────────────
   app.use('/api/v1/runtime', runtimeRouter);
   app.use('/api/v1/runtime/events', eventReplayRouter);
   app.use('/api/v1/runtime', deploymentRouter);
   app.use('/api/v1/runtime/observability', observabilityRouter);
+
+  // ─── Customer API ───────────────────────────────────────────
+  app.use('/api/v1/customer', customerRouter);
+
+  // ─── Analytics API ──────────────────────────────────────────
+  app.use('/api/v1/analytics', analyticsRouter);
 
   // ─── Admin API (requires auth & tenant context) ──────────────
   // The authoritative operational interface for the dashboard/admin panel.

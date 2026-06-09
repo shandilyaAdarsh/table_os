@@ -244,7 +244,7 @@ export class TableQRService {
         display_name: tableData.display_name
       },
       guestSession,
-      customer_identity_id: guestSession.customer_identity_id ?? customerIdentityId,
+      customer_identity_id: guestSession.guest_identifier ?? customerIdentityId,
       snapshot_version: branchData?.active_published_snapshot_id ?? null,
       runtime_version: '1.0.0',
       runtimeConfig: {

@@ -13,6 +13,7 @@ import { supabaseAdmin } from '../../config/supabase';
 import { allocateSequenceNumber } from './sequence-allocator.service';
 import { BranchMenuResolutionService } from '../overrides/services/branch-menu-resolution.service';
 import { ProjectionService } from '../projection/projection.service';
+import { WebSocketManager } from '../transport/websocket.manager';
 import * as cartService from '../cart/cart.service';
 import { logger } from '../../shared/utils/logger';
 
@@ -114,7 +115,7 @@ export async function createOrderFromCart(params: {
     throw new NotFoundError('Cart');
   }
 
-  if (cart.status !== 'open') {
+  if (!['open', 'locked'].includes(cart.status)) {
     throw new AppError(`Cannot checkout a cart in '${cart.status}' status.`, 400, ErrorCode.VALIDATION_ERROR);
   }
 
@@ -168,11 +169,10 @@ export async function createOrderFromCart(params: {
     }
   }
 
-  // 4. Create immutable order snapshots (locks cart, runs database-level snapshot inserts)
+  // 4. Create immutable order snapshots (reads cart, runs database-level snapshot inserts)
   const snapshotId = await createOrderSnapshot(tenantId, cartId, cart.version_num);
 
-  try {
-    // 4. Generate client side UUIDs for the transaction
+  // 4. Generate client side UUIDs for the transaction
     const orderId = crypto.randomUUID();
     const invoiceId = crypto.randomUUID();
 
@@ -209,6 +209,16 @@ export async function createOrderFromCart(params: {
       idempotencyKey: idempotencyKey || null,
     });
 
+    const latestCart = await cartRepo.findCartById(tenantId, cartId);
+
+    logger.info({
+      stage: 'DEBUG_CHECKOUT',
+      cartId,
+      cartStatus: latestCart?.status,
+      sessionId: params.sessionId,
+      tenantId,
+    });
+
     const { data, error } = await supabaseAdmin.rpc('orchestrate_checkout_v1', {
       p_tenant_id: tenantId,
       p_cart_id: cartId,
@@ -234,24 +244,33 @@ export async function createOrderFromCart(params: {
     });
 
     if (error) {
+      if (error.message.includes('Cart is already checked out or locked')) {
+        throw new AppError(
+          'Cart is already checked out or locked',
+          409,
+          ErrorCode.CART_ALREADY_CHECKED_OUT
+        );
+      }
       throw new AppError(`Atomic transaction failed: ${error.message}`, 500, ErrorCode.INTERNAL_SERVER_ERROR);
     }
 
-    const response = data as { order: ordersRepo.Order; invoice: any; kitchen_order_id: string };
-    const createdOrder = response.order;
+    const response = data as any;
+    
+    // Construct or extract the order object so downstream logic (and the frontend) gets the ID
+    const createdOrder = response?.order || {
+      id: response?.order_id || orderId,
+      order_number: orderNumber,
+      table_id: params.tableId,
+      branch_id: cart.branch_id,
+      created_at: new Date().toISOString(),
+      version_num: 1
+    };
 
     // ── Dispatch ORDER_ASSIGNED realtime event ────────────────────────────
     void _dispatchOrderAssignedEvent(createdOrder, cart.branch_id, tenantId, cartItems);
 
-    return createdOrder;
-  } catch (err) {
-    // Graceful rollback protection: Unlock the cart on failure
-    const currentCart = await cartRepo.findCartById(tenantId, cartId);
-    if (currentCart && (currentCart.status === 'locked' || currentCart.status === 'submitted')) {
-      await cartRepo.updateCartStatus(tenantId, cartId, 'open', currentCart.version_num);
-    }
-    throw err;
-  }
+    // Pass through the raw RPC response fields as well so the frontend gets everything
+    return { ...createdOrder, ...response };
 }
 
 // ── Internal: Dispatch ORDER_ASSIGNED after successful checkout ─────────────

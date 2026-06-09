@@ -13,7 +13,7 @@ export const formatTime = (s) =>
 /* ─── Status config: "Clinical Artisan" palette ─── */
 const getStatusConfig = (status, elapsed) => {
   // Late (over 11 min) — error state
-  if (status === 'cooking' && elapsed >= 660) return {
+  if ((status === 'preparing' || status === 'accepted') && elapsed >= 660) return {
     accentColor:  '#BA1A1A',
     headerBg:     'rgba(186,26,26,0.04)',
     timerColor:   '#BA1A1A',
@@ -33,7 +33,7 @@ const getStatusConfig = (status, elapsed) => {
     outlineColor: 'rgba(0,105,72,0.15)',
   };
 
-  if (status === 'cooking') return {
+  if (status === 'preparing' || status === 'accepted') return {
     accentColor:  '#2D5FA3',
     headerBg:     'rgba(45,95,163,0.04)',
     timerColor:   '#6C757D',
@@ -84,7 +84,9 @@ const chipStyle = (key) => {
    OrderCard
 ══════════════════════════════════════════════════ */
 const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
-  const { id, tableNum, items, status, createdAt, isPendingOperationalConfirmation } = order;
+  const { ticketId, orderId, tableNumber, items = [], status, createdAt, isPendingOperationalConfirmation } = order;
+  const id = order.id || ticketId || orderId || '';
+  const tableNum = tableNumber || order.tableNum || 'T0';
   const { markPreparing, markReady, bumpOrder, recallTicket } = useKitchenMutations();
 
   // Operational Resilience Checks (Mocking for now since we removed mutation coordinator UI exposure)
@@ -92,8 +94,8 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
   const isStuck = false;
 
   const { isHealthy, isRecovering, isDegraded } = useRuntimeStore();
-  const isTransportDegraded = isDegraded || isRecovering || !isHealthy;
-  const isLocked = isPendingOperationalConfirmation || isTransportDegraded;
+  const isTransportDegraded = isDegraded || isRecovering;
+  const isLocked = isPendingOperationalConfirmation || (isTransportDegraded && !isHealthy);
 
   // Default: all items are selected (kitchen accepts the full order unless they deselect)
   const [selectedItems, setSelectedItems]     = useState(() => items.map(i => i.id));
@@ -129,7 +131,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
     try {
       if (status === 'pending') {
         await markPreparing(order, selectedItems);
-      } else if (status === 'cooking') {
+      } else if (status === 'preparing' || status === 'accepted') {
         await markReady(order);
       } else if (status === 'ready') {
         await bumpOrder(order);
@@ -180,6 +182,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
         overflow:     'hidden',
         display:      'flex',
         flexDirection:'column',
+        flexShrink:   0,
         /* Ghost border — 15 % opacity as per spec */
         outline:      `1px solid ${cfg.outlineColor}`,
         /* Ambient shadow — marble-countertop diffuse */
@@ -324,6 +327,11 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
         flex: 1, 
         overflowY: 'auto' 
       }}>
+        {items.length === 0 && (
+          <p style={{ color: '#9CA3AF', fontSize: '13px', fontStyle: 'italic', textAlign: 'center', marginTop: '24px' }}>
+            No items in order
+          </p>
+        )}
         {items.map((item, idx) => {
           const isPending  = status === 'pending';
           const isSelected = selectedItems.includes(item.id);
@@ -337,7 +345,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
           /* dim unselected pending items, rejected items, done cooking items */
           const rowOpacity = (isPending && !isSelected) ? 0.35
                            : isRejected ? 0.4
-                           : (isItemDone && status === 'cooking') ? 0.6
+                           : (isItemDone && status === 'preparing') ? 0.6
                            : 1;
 
           return (
@@ -345,7 +353,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
               key={item.id || idx}
               onClick={() => {
                 if (isPending) toggleSelection(item.id);
-                else if (status === 'cooking' && !isRejected && !isItemDone) {
+                else if (status === 'preparing' && !isRejected && !isItemDone) {
                   // If we wanted to allow ticking in cooking, we could.
                   // But user said "should always be marked tick ... and cant be unticked"
                   // So we effectively disable interaction here.
@@ -377,7 +385,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
                   className="material-symbols-outlined"
                   style={{
                     fontSize: '20px',
-                    color:    status === 'cooking' ? '#2D5FA3' : '#006948',
+                    color:    status === 'preparing' ? '#2D5FA3' : '#006948',
                     flexShrink: 0,
                     fontVariationSettings: "'FILL' 1",
                   }}
@@ -413,8 +421,8 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
                     fontWeight:     700,
                     letterSpacing:  '-0.01em',
                     lineHeight:     1.3,
-                    color:          isItemDone && status !== 'cooking' ? '#6C757D' : '#1A1C1E',
-                    textDecoration: isItemDone && status === 'cooking' ? 'line-through' : 'none',
+                    color:          isItemDone && status !== 'preparing' ? '#6C757D' : '#1A1C1E',
+                    textDecoration: isItemDone && status === 'preparing' ? 'line-through' : 'none',
                     transition:     'color 0.2s cubic-bezier(0.2,0,0,1)',
                   }}>
                     {item.qty > 1 && (
@@ -527,7 +535,7 @@ const OrderCard = ({ order, isHistory = false, setConfirmModal }) => {
         )}
 
         {/* COOKING → BUMP + MARK READY */}
-        {status === 'cooking' && (
+        {status === 'preparing' && (
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
               onClick={(e) => { e.stopPropagation(); handleCancel(); }}

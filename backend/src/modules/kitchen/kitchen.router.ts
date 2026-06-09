@@ -15,7 +15,8 @@ import {
   getWaiterDashboard,
   getCustomerTracking,
   reconcileRealtimeState,
-  evaluateQueueSLA
+  evaluateQueueSLA,
+  getOperationalMetrics
 } from './kitchen.controller';
 
 const router: Router = Router({ mergeParams: true });
@@ -28,6 +29,7 @@ router.post('/route', routeToKitchen);
 
 // KDS Queue operations
 router.get('/', listKitchenQueue);
+router.get('/metrics', getOperationalMetrics);
 router.get('/:id', getTicketDetails);
 router.patch('/:id/status', transitionTicketStatus);
 

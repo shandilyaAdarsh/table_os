@@ -10,6 +10,7 @@ import { useRuntimeAuthStore } from '../../../store/runtimeAuthStore.js';
 import { clearAllRuntimeState } from '../../../lib/idbStorage.js';
 import OrderCard from '../components/OrderCard.jsx';
 import { Loader2 } from 'lucide-react';
+import { runtime } from '../../../runtime/index.js';
 
 /* ═══════════════════════════════════════════════════
    KDSBoard — connects to Supabase realtime
@@ -29,7 +30,7 @@ const KDSBoard = () => {
   const liveOrders = getOptimisticOrders(queue);
 
   // Identity
-  const { stationId } = useKdsIdentityStore();
+  const { stationId, runtimeSessionId } = useKdsIdentityStore();
   const { branchId } = useRuntimeIdentityStore();
   
   // Leadership Election removed as per user request
@@ -76,6 +77,22 @@ const KDSBoard = () => {
   useEffect(() => {
     if (!effectiveTenantId || !branchId) return;
     
+    // Debug: Check if we have auth before initializing
+    const authState = useRuntimeAuthStore.getState();
+    console.log('[KDSBoard] Initialization check:', {
+      hasRuntimeToken: !!authState.runtimeToken,
+      hasSessionId: !!authState.sessionId,
+      sessionId: authState.sessionId,
+      runtimeSessionId: runtimeSessionId || 'kds_session_default',
+      branchId,
+      tenantId: effectiveTenantId
+    });
+    
+    // Initialize MutationGateway for replay isolation using session_id from JWT
+    const sessionId = authState.sessionId || runtimeSessionId || 'kds_session_default';
+    runtime.mutation.initializeSession(sessionId, 'kds_board');
+    console.log('[KDSBoard] MutationGateway session initialized:', sessionId);
+
     // Attempt lock acquisition on mount or station change removed
 
     if (activeTab === 'Live Orders') {
@@ -147,14 +164,14 @@ const KDSBoard = () => {
 
   /* ── Derived stats ──────────────────────────────── */
   const pendingCount = liveOrders.filter(o => o.status === 'pending').length;
-  const cookingCount = liveOrders.filter(o => o.status === 'cooking').length;
+  const preparingCount = liveOrders.filter(o => o.status === 'preparing' || o.status === 'accepted').length;
   const readyCount   = liveOrders.filter(o => o.status === 'ready').length;
 
   /* ── Column definitions ─────────────────────────── */
   const columns = [
-    { status: 'pending', title: 'PENDING ORDERS',    count: pendingCount, badgeBg: '#E31E24', emptyIcon: 'hourglass_empty' },
-    { status: 'cooking', title: 'CURRENTLY COOKING', count: cookingCount, badgeBg: '#2D5FA3', emptyIcon: 'whatshot'        },
-    { status: 'ready',   title: 'READY TO SERVE',    count: readyCount,   badgeBg: '#006948', emptyIcon: 'check_circle'    },
+    { status: ['pending'], title: 'PENDING ORDERS',    count: pendingCount, badgeBg: '#E31E24', emptyIcon: 'hourglass_empty' },
+    { status: ['accepted', 'preparing'], title: 'CURRENTLY PREPARING', count: preparingCount, badgeBg: '#2D5FA3', emptyIcon: 'whatshot'        },
+    { status: ['ready'],   title: 'READY TO SERVE',    count: readyCount,   badgeBg: '#006948', emptyIcon: 'check_circle'    },
   ];
 
   /* ── Realtime dot colour ────────────────────────── */
@@ -365,7 +382,7 @@ const KDSBoard = () => {
       </aside>
 
       {/* ━━━ MAIN BOARD ━━━ */}
-      <main style={{ marginLeft: '232px', paddingTop: '64px', height: '100vh', display: 'flex', flexDirection: 'column', background: '#F8F9FA' }}>
+      <main style={{ marginLeft: '232px', marginTop: '64px', height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column', background: '#F8F9FA', overflow: 'hidden' }}>
         {activeTab === 'Live Orders' ? (
           <div style={{
             flex: 1,
@@ -373,20 +390,22 @@ const KDSBoard = () => {
             gridTemplateColumns: '1fr 1fr 1fr',
             overflow: 'hidden',
             marginBottom: '0px',
+            minHeight: 0,
           }}>
             {columns.map(({ status, title, count, badgeBg, emptyIcon }, colIdx) => {
-              const colOrders = liveOrders.filter(o => o.status === status);
-              const isActive  = mobileCol === status;
+              const colOrders = liveOrders.filter(o => status.includes(o.status));
+              const isActive  = mobileCol === status[0];
               const colBg = colIdx === 1 ? '#F8F9FA' : '#F8F9FA';
 
               return (
                 <section
-                  key={status}
+                  key={status[0]}
                   className={isActive ? '' : 'hidden-mobile'}
                   style={{
                     display:       'flex',
                     flexDirection: 'column',
                     height:        '100%',
+                    minHeight:     0,
                     overflow:      'hidden',
                     background:    colBg,
                     borderRight:   colIdx < 2 ? '1px solid #E6E8EA' : 'none',
@@ -414,8 +433,7 @@ const KDSBoard = () => {
 
                   {/* Scrollable order list */}
                   <div
-                    className="hide-scrollbar"
-                    style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}
+                    style={{ flex: '1 1 0', overflowY: 'auto', overflowX: 'hidden', padding: '16px', paddingBottom: '32px', display: 'flex', flexDirection: 'column', gap: '16px', minHeight: 0 }}
                   >
                     {colOrders.length === 0 ? (
                       <div style={{
@@ -431,7 +449,7 @@ const KDSBoard = () => {
                         </span>
                       </div>
                     ) : (
-                      colOrders.map(order => <OrderCard key={order.id} order={order} setConfirmModal={setConfirmModal} />)
+                      colOrders.map(order => <OrderCard key={order.ticketId || order.id} order={order} setConfirmModal={setConfirmModal} />)
                     )}
                   </div>
                 </section>
@@ -597,7 +615,7 @@ const KDSBoard = () => {
                     }}>
                       {orders.map(order => (
                         <OrderCard 
-                          key={order.id}
+                          key={order.ticketId || order.id}
                           order={order} 
                           isHistory={true} 
                           setConfirmModal={setConfirmModal}
@@ -623,19 +641,19 @@ const KDSBoard = () => {
         justifyContent: 'space-around', alignItems: 'center',
       }}>
         {columns.map(({ status, title, emptyIcon }) => {
-          const active = mobileCol === status;
-          const icons  = { pending: 'pause_circle', cooking: 'local_fire_department', ready: 'check_circle' };
+          const active = mobileCol === status[0];
+          const icons  = { pending: 'pause_circle', accepted: 'local_fire_department', preparing: 'local_fire_department', ready: 'check_circle' };
           return (
-            <div key={status} onClick={() => setMobileCol(status)} style={{
+            <div key={status[0]} onClick={() => setMobileCol(status[0])} style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center',
               padding: '8px 20px',
               background: active ? '#FEE2E2' : 'transparent',
               color: active ? '#E31E24' : '#6C757D',
               borderRadius: '10px', cursor: 'pointer',
             }}>
-              <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>{icons[status]}</span>
+              <span className="material-symbols-outlined" style={{ fontSize: '22px' }}>{icons[status[0]]}</span>
               <span style={{ fontSize: '9px', fontWeight: 900, letterSpacing: '0.15em', textTransform: 'uppercase', marginTop: '2px' }}>
-                {status.charAt(0).toUpperCase() + status.slice(1)}
+                {status[0].charAt(0).toUpperCase() + status[0].slice(1)}
               </span>
             </div>
           );

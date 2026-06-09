@@ -7,7 +7,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCartStore, useSessionStore } from '../../../store/index'
-import { submitMutation } from '../../../lib/apiClient'
+import { fetchPublicApi } from '../../../lib/apiClient'
 import { supabase } from '../../../lib/supabase'
 import { AnimatePresence, motion } from 'framer-motion'
 import { getTableNum } from '../utils/tableNum'
@@ -81,34 +81,58 @@ export default function CartDrawer({ open, onClose }) {
 
       const orderNotes = note || `Order by ${guestSession.name || 'Guest'} · Party of ${guestSession.guestCount || 1}`
 
-      const rawRes = await submitMutation('/api/v1/orders/direct', {
-        mutation_id: crypto.randomUUID(), // MUST be UUID for MutationAudit
-        idempotency_key: crypto.randomUUID(),
-        payload: {
-          tableId: tableId || '00000000-0000-0000-0000-000000000000', // fallback if needed
+      const qrToken = sessionStorage.getItem('qr_session_token') || ''
+      const rawRes = await fetchPublicApi('/public/orders', {
+        method: 'POST',
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          'x-qr-session-token': qrToken
+        },
+        body: JSON.stringify({
           items,
-          orderNotes
-        }
+          order_notes: orderNotes
+        })
       })
 
       const res = await rawRes.json()
 
-      if (!res.success) {
-        throw new Error(res.error?.message || 'Failed to place order.')
+      console.log('[CartDrawer] raw response:', JSON.stringify(res));
+
+      if (res.success === false) {
+        if (res.error?.code === 'CART_ALREADY_CHECKED_OUT' || res.error?.message?.includes('already checked out or locked')) {
+          clear()
+          onClose()
+          navigate('/menu/orders')
+          return
+        }
+        const error = new Error(res.error?.message || 'Failed to place order.')
+        error.code = res.error?.code
+        throw error
       }
 
-      // Important: Only clear the cart if the order was successfully created and an ID is returned
-      if (res.data?.order?.id) {
-        const newOrderId = res.data.order.id
+      if (res?.success === true) {
         clear()
         onClose()
-        navigate(`/menu/confirmed/${newOrderId}`, { state: { orderId: newOrderId } })
-      } else {
-        throw new Error('Order placed but no ID returned.')
+        const orderData = res?.order || res?.data?.order || res?.data || res;
+        const orderId = orderData?.id || res?.id;
+        navigate(orderId ? `/menu/confirmed/${orderId}` : '/menu/orders', {
+          state: orderId ? {
+            orderId,
+            orderNumber: orderData?.order_number,
+            tableId: orderData?.table_id,
+            tableName: resolvedTableNum,
+            subtotal: subtotal,
+            tax: 0,
+            total: subtotal,
+            items: cartItems,
+          } : undefined
+        })
+        return;
       }
 
     } catch (err) {
       console.error('[CartDrawer] placeOrder failed:', err)
+      // CART_ALREADY_CHECKED_OUT is now handled directly in the response parsing block above
       alert(err.message || 'Could not place order. Please try again.')
     } finally {
       setIsPlacing(false)

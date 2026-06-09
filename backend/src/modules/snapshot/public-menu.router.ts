@@ -11,6 +11,7 @@ import { checkoutPublicOrder, getPublicOrderStatus } from '../orders/public-orde
 import { createCall } from '../waiter-call/waiter-call.controller';
 import { requireQrSession } from '../tables/qr/qr.middleware';
 import { requestIdempotency } from '../../middleware/idempotency.middleware';
+import { publicOrderLimiter } from '../../middleware/public-rate-limit.middleware';
 
 const publicMenuRouter: Router = Router();
 
@@ -31,6 +32,7 @@ publicMenuRouter.get('/menu/snapshot', getPublicMenuSnapshot);
 publicMenuRouter.post(
   '/orders',
   requireQrSession,
+  publicOrderLimiter,
   initPublicContext,
   requestIdempotency(),
   checkoutPublicOrder
