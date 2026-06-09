@@ -42,11 +42,7 @@ import {
   StaffTableDetail 
 } from './apps/staff/index'
 
-// POS Runtime
-import {
-  POSTableOverview,
-  POSTableDetail
-} from './apps/pos/index'
+// POS Runtime — now runs as standalone app (Orderlli/pos submodule)
 
 // Runtime Observability Panel — DEV / QA / INTERNAL_PILOT only
 // Stripped from production builds via import.meta.env.DEV guard at route level.
@@ -195,17 +191,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 </ProtectedRoute>
               } />
 
-              {/* POS Runtime */}
-              <Route path="/pos/tables" element={
-                <ProtectedRoute allowedRoles={['waiter', 'manager', 'owner']} redirectTo="/staff/login">
-                  <POSTableOverview />
-                </ProtectedRoute>
-              } />
-              <Route path="/pos/table/:id" element={
-                <ProtectedRoute allowedRoles={['waiter', 'manager', 'owner']} redirectTo="/staff/login">
-                  <POSTableDetail />
-                </ProtectedRoute>
-              } />
+              {/* POS Runtime — now runs as standalone app (Orderlli/pos submodule) */}
 
               {/* Runtime Observability — DEV / QA / INTERNAL_PILOT only */}
               {import.meta.env.DEV && (

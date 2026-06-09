@@ -301,39 +301,41 @@ export function KDSLogin() {
       `}</style>
 
       {/* Left Column: Welcome Showcase */}
-      <div className="w-full lg:w-1/2 bg-[#f8f9fa] border-r border-[#edeeef] flex flex-col justify-between p-6 sm:p-10 lg:p-12 min-h-[50vh] lg:min-h-screen">
+      <div className="w-full lg:w-1/2 bg-[#f8f9fa] border-r border-[#edeeef] flex flex-col p-6 sm:p-8 lg:p-10 min-h-[50vh] lg:min-h-screen">
         {/* Top Branding logo */}
-        <div className="flex items-center gap-2 mb-8">
+        <div className="flex items-center gap-2 mb-4">
           <div className="w-8 h-8 bg-[#e31e24] rounded-lg flex items-center justify-center text-white shadow-sm">
             <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>point_of_sale</span>
           </div>
           <span className="text-[15px] font-bold tracking-tight text-[#191c1d]">Orderlyy KDS</span>
         </div>
 
-        {/* Title and Mockup showcase */}
-        <div className="flex-1 flex flex-col items-center justify-center -mt-8 space-y-8">
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-center max-w-xl leading-tight tracking-tight text-[#1a1a1a]">
+        {/* Title text - positioned near top */}
+        <div className="text-center mt-2 space-y-2">
+          <h1 className="text-xl sm:text-2xl lg:text-[1.65rem] font-black leading-tight tracking-tight text-[#1a1a1a]">
             Welcome to Orderlyy KDS – <br/>
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#e31e24] to-[#ff4b4b]">Your Smart Kitchen Companion</span>
           </h1>
           
-          <p className="text-base sm:text-lg text-[#5d5e61] text-center max-w-md font-medium leading-relaxed">
+          <p className="text-xs sm:text-sm text-[#5d5e61] font-medium leading-relaxed max-w-sm mx-auto">
             Cook faster, prep smarter, and deliver exceptional culinary experiences.
           </p>
+        </div>
 
-          <div className="w-full max-w-sm sm:max-w-md mx-auto relative pt-4">
-            {/* Subtle glow behind image */}
+        {/* Device Mockup Image - centered in remaining space */}
+        <div className="flex-1 flex items-center justify-center py-4">
+          <div className="w-full max-w-md relative">
             <div className="absolute inset-0 bg-[#e31e24]/5 blur-[60px] rounded-full z-0"></div>
             <img 
-              src="/mobile-mockup.png" 
-              alt="Mobile Mockup" 
-              className="w-full h-auto object-contain relative z-10 drop-shadow-2xl transition-transform duration-700 hover:scale-[1.03]"
+              src="/device-mockup.png" 
+              alt="Orderlyy Device Mockup" 
+              className="w-full h-auto max-h-[45vh] object-contain relative z-10 drop-shadow-2xl transition-transform duration-700 hover:scale-[1.02]"
             />
           </div>
         </div>
 
-        {/* Features list/grid (Compact) */}
-        <div className="mt-8">
+        {/* Features list/grid (Compact) - near bottom */}
+        <div className="mt-auto">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 lg:gap-3">
             <div className="kds-glass-card rounded-lg p-2.5 flex flex-col items-center text-center gap-1.5 transition-all duration-300">
               <span className="material-symbols-outlined text-[#e31e24] text-lg">receipt_long</span>
