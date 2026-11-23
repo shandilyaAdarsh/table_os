@@ -222,15 +222,34 @@ export class TableQRService {
     // 3. Create or Rehydrate Guest Session via GuestSessionService
     const customerIdentityId = crypto.randomUUID(); // Anonymous identity generated for bootstrap
 
-    const guestSession = await GuestSessionService.resolveOrCreateSession({
-      tenant_id: tokenData.tenant_id,
-      branch_id: tableData.branch_id,
-      table_id: tokenData.table_id,
-      device_fingerprint: deviceFingerprint || `anonymous-${requestIp}`,
-      snapshot_id: branchData?.active_published_snapshot_id ?? undefined,
-      customer_identity_id: customerIdentityId,
-      qr_code_id: tokenData.id,
-    });
+    let guestSession;
+    try {
+      guestSession = await GuestSessionService.resolveOrCreateSession({
+        tenant_id: tokenData.tenant_id,
+        branch_id: tableData.branch_id,
+        table_id: tokenData.table_id,
+        device_fingerprint: deviceFingerprint || `anonymous-${requestIp}`,
+        snapshot_id: branchData?.active_published_snapshot_id ?? undefined,
+        customer_identity_id: customerIdentityId,
+        qr_code_id: tokenData.id,
+      });
+    } catch (sessionErr: any) {
+      // Fallback for legacy foreign key constraint mismatch on guest_sessions.qr_code_id
+      if (sessionErr.message?.includes('violates foreign key constraint') && tokenData.id) {
+        logger.warn({ error: sessionErr }, 'Retrying guest session creation without qr_code_id due to legacy foreign key constraint');
+        guestSession = await GuestSessionService.resolveOrCreateSession({
+          tenant_id: tokenData.tenant_id,
+          branch_id: tableData.branch_id,
+          table_id: tokenData.table_id,
+          device_fingerprint: deviceFingerprint || `anonymous-${requestIp}`,
+          snapshot_id: branchData?.active_published_snapshot_id ?? undefined,
+          customer_identity_id: customerIdentityId,
+          qr_code_id: undefined,
+        });
+      } else {
+        throw sessionErr;
+      }
+    }
 
     // 4. Audit Logging for Security (best-effort, non-blocking)
     try {
