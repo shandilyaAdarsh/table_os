@@ -33,6 +33,7 @@ import {
 import {
   linkModifierGroupsToItem,
   setBranchItemOverride,
+  getBranchItemOverrides,
   setBranchModifierOptionOverride,
   setBranchModifierGroupOverride,
   getEffectiveMenuForBranch,
@@ -161,6 +162,20 @@ router.get('/branch/:branchId',
   }
 );
 
+/** GET /api/tenants/:tenantId/menu/branch/:branchId/overrides */
+router.get('/branch/:branchId/overrides',
+  requireBranchAccess('branchId'),
+  requirePermissions('ANY', PERMISSIONS.MANAGE_MENU, PERMISSIONS.VIEW_MENU),
+  async (req: Request<{ tenantId: string; branchId: string }>, res, next) => {
+    try {
+      const tenantId = String(req.params.tenantId);
+      const branchId = String(req.params.branchId);
+      const overrides = await getBranchItemOverrides(tenantId, branchId);
+      res.json(formatSuccess(overrides));
+    } catch (err) { next(err); }
+  }
+);
+
 /** PUT /api/tenants/:tenantId/menu/branch/:branchId/items/:itemId/override */
 router.put('/branch/:branchId/items/:itemId/override',
   requireBranchAccess('branchId'),
@@ -173,6 +188,22 @@ router.put('/branch/:branchId/items/:itemId/override',
       const itemId   = String(req.params.itemId);
       const dto      = validate(SetBranchItemOverrideSchema, req.body);
       await setBranchItemOverride(tenantId, branchId, itemId, dto);
+      res.status(204).send();
+    } catch (err) { next(err); }
+  }
+);
+
+/** DELETE /api/tenants/:tenantId/menu/branch/:branchId/items/:itemId/override */
+router.delete('/branch/:branchId/items/:itemId/override',
+  requireBranchAccess('branchId'),
+  requireMinRole(ROLES.MANAGER),
+  requirePermissions('ANY', PERMISSIONS.MANAGE_MENU),
+  async (req: Request<{ tenantId: string; branchId: string; itemId: string }>, res, next) => {
+    try {
+      const tenantId = String(req.params.tenantId);
+      const branchId = String(req.params.branchId);
+      const itemId   = String(req.params.itemId);
+      await setBranchItemOverride(tenantId, branchId, itemId, {});
       res.status(204).send();
     } catch (err) { next(err); }
   }

@@ -233,12 +233,17 @@ export async function findAllBranchItemOverrides(
     .from('branch_menu_item_overrides')
     .select('*')
     .eq('tenant_id', tenantId)
-    .eq('branch_id', branchId);
+    .eq('branch_id', branchId)
+    .is('deleted_at', null);
 
   if (error) {
     throw new Error(`[MenuItemRepo] findAllBranchItemOverrides: ${error.message}`);
   }
-  return data ?? [];
+  return (data ?? []).map((r: any) => ({
+    ...r,
+    item_id: r.menu_item_id ?? r.item_id,
+    is_available: r.is_visible ?? r.is_available ?? true,
+  }));
 }
 
 // ─── Mutations ────────────────────────────────────────────────
@@ -404,19 +409,49 @@ export async function upsertBranchItemOverride(
     tax_group_id:   string | null;
   }>
 ): Promise<BranchMenuItemOverride> {
-  const { data, error } = await supabaseAdmin
-    .from('branch_menu_item_overrides')
-    .upsert(
-      { tenant_id: tenantId, branch_id: branchId, item_id: itemId, ...overrides },
-      { onConflict: 'tenant_id,branch_id,item_id' }
-    )
-    .select()
-    .single();
+  const isVisible = overrides.is_available ?? (overrides as any).is_visible ?? true;
 
-  if (error) {
-    throw new Error(`[MenuItemRepo] upsertBranchItemOverride: ${error.message}`);
+  const { data: existing } = await supabaseAdmin
+    .from('branch_menu_item_overrides')
+    .select('id')
+    .eq('tenant_id', tenantId)
+    .eq('branch_id', branchId)
+    .eq('menu_item_id', itemId)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (existing) {
+    const { data, error } = await supabaseAdmin
+      .from('branch_menu_item_overrides')
+      .update({
+        is_visible: isVisible,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', existing.id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`[MenuItemRepo] upsertBranchItemOverride: ${error.message}`);
+    }
+    return { ...data, item_id: data.menu_item_id, is_available: data.is_visible };
+  } else {
+    const { data, error } = await supabaseAdmin
+      .from('branch_menu_item_overrides')
+      .insert({
+        tenant_id: tenantId,
+        branch_id: branchId,
+        menu_item_id: itemId,
+        is_visible: isVisible,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`[MenuItemRepo] upsertBranchItemOverride: ${error.message}`);
+    }
+    return { ...data, item_id: data.menu_item_id, is_available: data.is_visible };
   }
-  return data;
 }
 
 export async function deleteBranchItemOverride(
@@ -429,7 +464,7 @@ export async function deleteBranchItemOverride(
     .delete()
     .eq('tenant_id', tenantId)
     .eq('branch_id', branchId)
-    .eq('item_id', itemId);
+    .eq('menu_item_id', itemId);
 
   if (error) {
     throw new Error(`[MenuItemRepo] deleteBranchItemOverride: ${error.message}`);

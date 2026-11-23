@@ -353,6 +353,13 @@ export async function linkModifierGroupsToItem(
 
 // ─── Branch Override Service ──────────────────────────────────
 
+export async function getBranchItemOverrides(
+  tenantId: string,
+  branchId: string
+) {
+  return findAllBranchItemOverrides(tenantId, branchId);
+}
+
 export async function setBranchItemOverride(
   tenantId: string,
   branchId: string,
@@ -365,10 +372,12 @@ export async function setBranchItemOverride(
   if (Object.keys(dto).length === 0) {
     // Empty override = clear override (reset to tenant defaults)
     await deleteBranchItemOverride(tenantId, branchId, itemId);
+    invalidateMenuCache(tenantId);
     return;
   }
 
   await upsertBranchItemOverride(tenantId, branchId, itemId, dto);
+  invalidateMenuCache(tenantId);
 }
 
 export async function setBranchModifierOptionOverride(

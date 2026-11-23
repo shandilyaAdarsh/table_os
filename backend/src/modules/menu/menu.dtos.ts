@@ -170,6 +170,7 @@ export interface LinkModifierGroupsDto {
 export interface SetBranchItemOverrideDto {
   override_price?:  number | null;
   is_available?:    boolean | null;
+  is_visible?:      boolean | null;
   sort_order?:      number | null;
   tax_group_id?:    string | null;
 }

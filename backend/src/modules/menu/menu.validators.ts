@@ -188,6 +188,7 @@ export const LinkModifierGroupsSchema = z.object({
 export const SetBranchItemOverrideSchema = z.object({
   override_price: z.number().min(0).nullable().optional(),
   is_available:   z.boolean().nullable().optional(),
+  is_visible:     z.boolean().nullable().optional(),
   sort_order:     z.number().int().min(0).nullable().optional(),
   tax_group_id:   uuid.nullable().optional(),
 });
